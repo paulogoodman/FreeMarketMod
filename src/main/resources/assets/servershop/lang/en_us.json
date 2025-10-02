@@ -1,0 +1,19 @@
+{
+  "itemGroup.servershop": "Example Mod Tab",
+  "block.servershop.example_block": "Example Block",
+  "item.servershop.example_item": "Example Item",
+
+  "servershop.configuration.title": "ServerShop Configs",
+  "servershop.configuration.section.servershop.common.toml": "ServerShop Configs",
+  "servershop.configuration.section.servershop.common.toml.title": "ServerShop Configs",
+  "servershop.configuration.items": "Item List",
+  "servershop.configuration.logDirtBlock": "Log Dirt Block",
+  "servershop.configuration.magicNumberIntroduction": "Magic Number Text",
+  "servershop.configuration.magicNumber": "Magic Number",
+
+  "gui.servershop.shop.title": "Server Shop",
+  "gui.servershop.shop.instruction": "Press ESC to close",
+
+  "key.servershop.open_shop": "Open Server Shop",
+  "key.categories.servershop": "ServerShop"
+}

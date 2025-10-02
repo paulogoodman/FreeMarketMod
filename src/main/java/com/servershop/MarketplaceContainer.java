@@ -27,6 +27,9 @@ public class MarketplaceContainer implements Renderable {
     private int itemHeight = 60;
     private int itemsPerRow = 3;
     private int itemSpacing = 120;
+    private boolean isClosing = false;
+    private int hoveredEditButton = -1;
+    private int hoveredCloseButton = -1;
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items) {
         this.x = x;
@@ -42,7 +45,7 @@ public class MarketplaceContainer implements Renderable {
         // Create search box
         this.searchBox = new EditBox(
             net.minecraft.client.Minecraft.getInstance().font,
-            x + 10, y + 10, width - 20, 20,
+            x + 10, y + 15, width - 40, 20, // Moved down and made room for close button
             Component.translatable("gui.servershop.marketplace.search")
         );
         this.searchBox.setResponder(this::onSearchChanged);
@@ -88,31 +91,33 @@ public class MarketplaceContainer implements Renderable {
         scrollOffset = maxScroll;
     }
     
-    @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw container background
-        guiGraphics.fill(x, y, x + width, y + height, 0x80000000);
-        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0x80404040);
+        // Draw modern container background with gradient effect
+        guiGraphics.fill(x, y, x + width, y + height, 0xFF1E1E1E);
+        guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0xFF2A2A2A);
         
-        // Draw border
-        guiGraphics.fill(x, y, x + width, y + 1, 0xFF808080);
-        guiGraphics.fill(x, y, x + 1, y + height, 0xFF808080);
-        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0xFF808080);
-        guiGraphics.fill(x, y + height - 1, x + width, y + height, 0xFF808080);
+        // Draw subtle border with rounded corners effect
+        guiGraphics.fill(x, y, x + width, y + 2, 0xFF404040);
+        guiGraphics.fill(x, y, x + 2, y + height, 0xFF404040);
+        guiGraphics.fill(x + width - 2, y, x + width, y + height, 0xFF404040);
+        guiGraphics.fill(x, y + height - 2, x + width, y + height, 0xFF404040);
         
-        // Draw title
+        // Draw title with better styling
         Component title = Component.translatable("gui.servershop.marketplace.title");
         int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
         int titleX = x + (width - titleWidth) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, y + 2, 0xFFFFFF);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, y + 8, 0xFFE0E0E0);
         
         // Render search box
         if (searchBox != null) {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
         
-        // Draw items
-        int startY = y + 45; // Increased from 40 to give more space
+        // Draw modern close button
+        renderCloseButton(guiGraphics, mouseX, mouseY);
+        
+        // Draw items with modern styling
+        int startY = y + 50;
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
         
@@ -122,7 +127,7 @@ public class MarketplaceContainer implements Renderable {
                 int itemX = x + 10 + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
-                renderItemCard(guiGraphics, item, itemX, itemY, mouseX, mouseY);
+                renderModernItemCard(guiGraphics, item, itemX, itemY, mouseX, mouseY, i + j);
                 itemsRendered++;
             }
         }
@@ -135,34 +140,126 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + 10, y + height - 15, 0xCCCCCC);
     }
     
-    private void renderItemCard(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
-        // Draw item background
-        guiGraphics.fill(itemX - 2, itemY - 2, itemX + 110, itemY + 50, 0x80000000);
-        guiGraphics.fill(itemX - 1, itemY - 1, itemX + 109, itemY + 49, 0x80404040);
+    private void renderCloseButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int closeButtonX = x + width - 30;
+        int closeButtonY = y + 10;
+        int closeButtonSize = 24;
         
-        // Draw item icon
-        guiGraphics.renderItem(item.getItemStack(), itemX, itemY);
-        guiGraphics.renderItemDecorations(net.minecraft.client.Minecraft.getInstance().font, item.getItemStack(), itemX, itemY);
+        boolean isHovered = mouseX >= closeButtonX && mouseX <= closeButtonX + closeButtonSize &&
+                           mouseY >= closeButtonY && mouseY <= closeButtonY + closeButtonSize;
         
-        // Draw item name
-        String itemName = item.getItemName();
-        if (itemName.length() > 10) {
-            itemName = itemName.substring(0, 10) + "...";
+        // Modern close button with hover effect
+        if (isHovered) {
+            // Hover state - brighter background
+            guiGraphics.fill(closeButtonX, closeButtonY, closeButtonX + closeButtonSize, closeButtonY + closeButtonSize, 0xFF4A4A4A);
+            guiGraphics.fill(closeButtonX + 1, closeButtonY + 1, closeButtonX + closeButtonSize - 1, closeButtonY + closeButtonSize - 1, 0xFF5A5A5A);
+        } else {
+            // Normal state
+            guiGraphics.fill(closeButtonX, closeButtonY, closeButtonX + closeButtonSize, closeButtonY + closeButtonSize, 0xFF3A3A3A);
+            guiGraphics.fill(closeButtonX + 1, closeButtonY + 1, closeButtonX + closeButtonSize - 1, closeButtonY + closeButtonSize - 1, 0xFF4A4A4A);
         }
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, itemName, itemX, itemY + 18, 0xFFFFFF);
         
-        // Draw buy price
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy: " + item.getBuyPrice(), itemX, itemY + 30, 0x00FF00);
+        // Draw modern X icon
+        int centerX = closeButtonX + closeButtonSize / 2;
+        int centerY = closeButtonY + closeButtonSize / 2;
+        int xColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
         
-        // Draw sell price
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell: " + item.getSellPrice(), itemX, itemY + 40, 0xFF6600);
+        // Draw X lines
+        guiGraphics.fill(centerX - 6, centerY - 1, centerX + 6, centerY + 1, xColor);
+        guiGraphics.fill(centerX - 1, centerY - 6, centerX + 1, centerY + 6, xColor);
+    }
+    
+    private void renderModernItemCard(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
+        // Modern card background with subtle shadow
+        guiGraphics.fill(itemX - 3, itemY - 3, itemX + 115, itemY + 55, 0xFF1A1A1A);
+        guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 54, 0xFF2D2D2D);
+        guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 53, 0xFF3A3A3A);
         
-        // Draw buy/sell buttons (simplified as text for now)
+        // Draw modern edit button
+        renderModernEditButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
+        
+        // Draw item icon with better positioning
+        guiGraphics.renderItem(item.getItemStack(), itemX + 2, itemY + 2);
+        guiGraphics.renderItemDecorations(net.minecraft.client.Minecraft.getInstance().font, item.getItemStack(), itemX + 2, itemY + 2);
+        
+        // Draw item name with better styling
+        String itemName = item.getItemName();
+        if (itemName.length() > 12) {
+            itemName = itemName.substring(0, 12) + "...";
+        }
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, itemName, itemX + 20, itemY + 5, 0xFFE0E0E0);
+        
+        // Draw prices with better formatting
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy: $" + item.getBuyPrice(), itemX + 20, itemY + 18, 0xFF4CAF50);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell: $" + item.getSellPrice(), itemX + 20, itemY + 28, 0xFFFF9800);
+        
+        // Draw modern action buttons
+        renderActionButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
+    }
+    
+    private void renderModernEditButton(GuiGraphics guiGraphics, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
+        int editButtonX = itemX + 90;
+        int editButtonY = itemY + 2;
+        int editButtonSize = 20;
+        
+        boolean isHovered = mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
+                           mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize;
+        
+        if (isHovered) {
+            hoveredEditButton = itemIndex;
+            // Hover state
+            guiGraphics.fill(editButtonX, editButtonY, editButtonX + editButtonSize, editButtonY + editButtonSize, 0xFF4A4A4A);
+            guiGraphics.fill(editButtonX + 1, editButtonY + 1, editButtonX + editButtonSize - 1, editButtonY + editButtonSize - 1, 0xFF5A5A5A);
+        } else {
+            // Normal state
+            guiGraphics.fill(editButtonX, editButtonY, editButtonX + editButtonSize, editButtonY + editButtonSize, 0xFF3A3A3A);
+            guiGraphics.fill(editButtonX + 1, editButtonY + 1, editButtonX + editButtonSize - 1, editButtonY + editButtonSize - 1, 0xFF4A4A4A);
+        }
+        
+        // Draw modern edit icon (pencil)
+        int iconColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "✏", editButtonX + 5, editButtonY + 3, iconColor);
+    }
+    
+    private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
-        boolean canSell = true; // Assume player has items to sell
+        boolean canSell = true;
         
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "[Buy]", itemX + 60, itemY + 30, canBuy ? 0x00FF00 : 0x666666);
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "[Sell]", itemX + 60, itemY + 40, canSell ? 0xFF6600 : 0x666666);
+        // Buy button
+        int buyButtonX = itemX + 20;
+        int buyButtonY = itemY + 38;
+        int buyButtonWidth = 35;
+        int buyButtonHeight = 12;
+        
+        boolean buyHovered = mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
+                            mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight;
+        
+        if (canBuy) {
+            int buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
+            guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
+            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy", buyButtonX + 10, buyButtonY + 2, 0xFFFFFFFF);
+        } else {
+            guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, 0xFF666666);
+            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy", buyButtonX + 10, buyButtonY + 2, 0xFF999999);
+        }
+        
+        // Sell button
+        int sellButtonX = itemX + 60;
+        int sellButtonY = itemY + 38;
+        int sellButtonWidth = 35;
+        int sellButtonHeight = 12;
+        
+        boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
+                             mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
+        
+        if (canSell) {
+            int sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
+            guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
+            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell", sellButtonX + 10, sellButtonY + 2, 0xFFFFFFFF);
+        } else {
+            guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, 0xFF666666);
+            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell", sellButtonX + 10, sellButtonY + 2, 0xFF999999);
+        }
     }
     
     private void drawScrollBar(GuiGraphics guiGraphics) {
@@ -207,6 +304,67 @@ public class MarketplaceContainer implements Renderable {
             return true;
         }
         
+        // Handle close button click
+        int closeButtonX = x + width - 30;
+        int closeButtonY = y + 10;
+        int closeButtonSize = 24;
+        
+        if (mouseX >= closeButtonX && mouseX <= closeButtonX + closeButtonSize &&
+            mouseY >= closeButtonY && mouseY <= closeButtonY + closeButtonSize) {
+            isClosing = true;
+            return true;
+        }
+        
+        // Handle edit button clicks on items
+        int startY = y + 50;
+        int itemsRendered = 0;
+        int maxItemsToRender = maxVisibleItems;
+        
+        for (int i = scrollOffset * itemsPerRow; i < filteredItems.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
+            for (int j = 0; j < itemsPerRow && i + j < filteredItems.size() && itemsRendered < maxItemsToRender; j++) {
+                MarketplaceItem item = filteredItems.get(i + j);
+                int itemX = x + 10 + j * itemSpacing;
+                int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
+                
+                // Check edit button click
+                int editButtonX = itemX + 90;
+                int editButtonY = itemY + 2;
+                int editButtonSize = 20;
+                
+                if (mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
+                    mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize) {
+                    // TODO: Open edit dialog for this item
+                    System.out.println("Edit button clicked for: " + item.getItemName());
+                    return true;
+                }
+                
+                // Check buy/sell button clicks
+                int buyButtonX = itemX + 20;
+                int buyButtonY = itemY + 38;
+                int buyButtonWidth = 35;
+                int buyButtonHeight = 12;
+                
+                if (mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
+                    mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight) {
+                    System.out.println("Buy button clicked for: " + item.getItemName());
+                    return true;
+                }
+                
+                int sellButtonX = itemX + 60;
+                int sellButtonY = itemY + 38;
+                int sellButtonWidth = 35;
+                int sellButtonHeight = 12;
+                
+                if (mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
+                    mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight) {
+                    System.out.println("Sell button clicked for: " + item.getItemName());
+                    return true;
+                }
+                
+                itemsRendered++;
+            }
+        }
+        
         // Handle scroll bar clicks
         int maxScroll = getMaxScroll();
         if (maxScroll > 0) {
@@ -228,7 +386,6 @@ public class MarketplaceContainer implements Renderable {
         
         // Check if click is within container bounds
         if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
-            // Handle item clicks here if needed
             return true;
         }
         
@@ -261,5 +418,13 @@ public class MarketplaceContainer implements Renderable {
     
     public void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         // Narration support
+    }
+    
+    public boolean isClosing() {
+        return isClosing;
+    }
+    
+    public void resetClosing() {
+        isClosing = false;
     }
 }

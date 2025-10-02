@@ -49,7 +49,7 @@ public class ShopGuiScreen extends Screen {
     protected void init() {
         super.init();
         
-        // Create the '+' button
+        // Create the '+' button (moved to top left)
         this.plusButton = Button.builder(
             Component.literal("+"),
             button -> {
@@ -57,7 +57,7 @@ public class ShopGuiScreen extends Screen {
                 this.minecraft.setScreen(new AddItemPopupScreen(this));
             }
         )
-        .bounds(this.width / 2 + 100, this.height / 2 - 50, 20, 20)
+        .bounds(20, 20, 30, 30) // Top left position
         .build();
         
         // Only add the button if admin mode is enabled
@@ -193,6 +193,11 @@ public class ShopGuiScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (marketplaceContainer != null && marketplaceContainer.mouseClicked(mouseX, mouseY, button)) {
+            // Check if the marketplace container is closing
+            if (marketplaceContainer.isClosing()) {
+                this.onClose();
+                return true;
+            }
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);

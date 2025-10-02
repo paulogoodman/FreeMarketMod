@@ -13,7 +13,11 @@
 
   "gui.servershop.shop.title": "Server Shop",
   "gui.servershop.shop.instruction": "Press ESC to close",
+  "gui.servershop.admin_mode": "Admin Mode Active",
 
   "key.servershop.open_shop": "Open Server Shop",
-  "key.categories.servershop": "ServerShop"
+  "key.categories.servershop": "ServerShop",
+
+  "command.servershop.adminmode.set": "Admin mode %s",
+  "command.servershop.adminmode.toggle": "Admin mode %s"
 }

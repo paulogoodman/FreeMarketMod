@@ -16,14 +16,14 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Render semi-transparent dark background overlay
-        renderBackground(guiGraphics, mouseX, mouseY, partialTick);
-        
-        // Draw a semi-transparent dark rectangle covering most of the screen
+        // Draw a semi-transparent dark rectangle covering the entire screen
         int overlayAlpha = 150; // Semi-transparent (0-255)
         guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
         
-        // Draw title at the top center
+        // Call super.render() first to handle any background elements
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        
+        // Draw title at the top center (after super.render to ensure it's on top)
         int titleWidth = this.font.width(this.title);
         int titleX = (this.width - titleWidth) / 2;
         int titleY = 20;
@@ -35,8 +35,6 @@ public class ShopGuiScreen extends Screen {
         int instructionX = (this.width - instructionWidth) / 2;
         int instructionY = titleY + 30;
         guiGraphics.drawString(this.font, instruction, instructionX, instructionY, 0xCCCCCC);
-        
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
     }
     
     @Override

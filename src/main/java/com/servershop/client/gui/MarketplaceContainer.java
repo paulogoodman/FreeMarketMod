@@ -18,6 +18,11 @@ import com.servershop.common.handlers.AdminModeHandler;
 import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.managers.ItemCategoryManager;
 import com.servershop.client.data.ClientMarketplaceDataManager;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.Level;
 
 /**
  * A scrollable container for displaying marketplace items with search functionality.
@@ -34,6 +39,11 @@ public class MarketplaceContainer implements Renderable {
     private int itemsPerRow = 3;
     private int itemSpacing = 120;
     private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
+    
+    // Buy button state tracking
+    private String buyingItemGuid = null;
+    private long buyButtonCooldown = 0;
+    private static final long BUY_COOLDOWN_MS = 1000; // 1 second cooldown
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
@@ -297,6 +307,8 @@ public class MarketplaceContainer implements Renderable {
     private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
         boolean canSell = true;
+        boolean isBuying = isItemBeingBought(item);
+        boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
         // Buy button
         int buyButtonX = itemX + 20;
@@ -307,14 +319,33 @@ public class MarketplaceContainer implements Renderable {
         boolean buyHovered = mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
                             mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight;
         
-        if (canBuy) {
-            int buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
-            guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
-            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy", buyButtonX + 10, buyButtonY + 2, 0xFFFFFFFF);
+        // Determine buy button state and color
+        int buyColor;
+        String buyText;
+        
+        if (isBuying) {
+            // Currently processing purchase
+            buyColor = 0xFF2196F3; // Blue for processing
+            buyText = "...";
+        } else if (isBuyCooldown) {
+            // In cooldown period
+            buyColor = 0xFF9E9E9E; // Gray for cooldown
+            buyText = "Wait";
+        } else if (canBuy) {
+            // Can buy
+            buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
+            buyText = "Buy";
         } else {
-            guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, 0xFF666666);
-            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy", buyButtonX + 10, buyButtonY + 2, 0xFF999999);
+            // Cannot buy (insufficient funds)
+            buyColor = 0xFF666666;
+            buyText = "Buy";
         }
+        
+        guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
+        
+        // Draw text with appropriate color
+        int textColor = (isBuying || isBuyCooldown) ? 0xFFFFFFFF : (canBuy ? 0xFFFFFFFF : 0xFF999999);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, buyText, buyButtonX + 10, buyButtonY + 2, textColor);
         
         // Sell button
         int sellButtonX = itemX + 60;
@@ -460,8 +491,12 @@ public class MarketplaceContainer implements Renderable {
                 
                 if (mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
                     mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight) {
-                    System.out.println("Buy button clicked for: " + item.getItemName());
-                    return true;
+                    // Handle buy button click (only if not in cooldown)
+                    if (!isBuyButtonInCooldown(item) && buyItem(item)) {
+                        // Success - item was bought
+                        return true;
+                    }
+                    return true; // Still return true to consume the click
                 }
                 
                 int sellButtonX = itemX + 60;
@@ -511,6 +546,86 @@ public class MarketplaceContainer implements Renderable {
             return true;
         }
         return false;
+    }
+    
+    /**
+     * Handles buying an item from the marketplace.
+     * Validates balance, deducts money, and spawns item in inventory or on ground.
+     */
+    private boolean buyItem(MarketplaceItem item) {
+        // Check cooldown
+        long currentTime = System.currentTimeMillis();
+        if (currentTime < buyButtonCooldown) {
+            return false; // Still in cooldown
+        }
+        
+        // Check if player has enough money
+        if (!WalletHandler.hasEnoughMoney(item.getBuyPrice())) {
+            // TODO: Show error message to player
+            return false;
+        }
+        
+        // Set cooldown and buying state
+        buyButtonCooldown = currentTime + BUY_COOLDOWN_MS;
+        buyingItemGuid = item.getGuid();
+        
+        // Get the player
+        Minecraft minecraft = Minecraft.getInstance();
+        Player clientPlayer = minecraft.player;
+        if (clientPlayer == null) {
+            buyingItemGuid = null;
+            return false;
+        }
+        
+        // Try to add item to inventory first
+        ItemStack itemToGive = item.getItemStack().copy();
+        boolean addedToInventory = clientPlayer.getInventory().add(itemToGive);
+        
+        if (!addedToInventory) {
+            // Inventory full - drop item at player's feet
+            BlockPos playerPos = clientPlayer.blockPosition();
+            Level level = clientPlayer.level();
+            
+            // Drop the item at player's feet
+            clientPlayer.drop(itemToGive, false);
+        }
+        
+        // Deduct money from wallet - use server player if available
+        Player playerForMoney = clientPlayer;
+        if (minecraft.getSingleplayerServer() != null) {
+            // In singleplayer, get the server player for money operations
+            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForMoney = serverPlayer;
+            }
+        }
+        
+        WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
+        
+        // Clear buying state
+        buyingItemGuid = null;
+        
+        // Refresh wallet display
+        if (parentScreen != null) {
+            parentScreen.refreshMarketplace();
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Checks if an item is currently being bought (for visual feedback).
+     */
+    private boolean isItemBeingBought(MarketplaceItem item) {
+        return buyingItemGuid != null && buyingItemGuid.equals(item.getGuid());
+    }
+    
+    /**
+     * Checks if buy button is in cooldown for an item.
+     */
+    private boolean isBuyButtonInCooldown(MarketplaceItem item) {
+        long currentTime = System.currentTimeMillis();
+        return currentTime < buyButtonCooldown && buyingItemGuid != null && buyingItemGuid.equals(item.getGuid());
     }
     
     public boolean charTyped(char codePoint, int modifiers) {

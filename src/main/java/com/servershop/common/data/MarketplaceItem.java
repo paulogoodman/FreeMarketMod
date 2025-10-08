@@ -7,13 +7,13 @@ import net.minecraft.world.item.ItemStack;
  */
 public class MarketplaceItem {
     private final ItemStack itemStack;
-    private final int buyPrice;
-    private final int sellPrice;
+    private final long buyPrice;
+    private final long sellPrice;
     private final int quantity;
     private final String seller;
     private final String guid; // Unique identifier for this marketplace entry
     
-    public MarketplaceItem(ItemStack itemStack, int buyPrice, int sellPrice, int quantity, String seller) {
+    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
@@ -22,7 +22,7 @@ public class MarketplaceItem {
         this.guid = generateRandomGuid();
     }
     
-    public MarketplaceItem(ItemStack itemStack, int buyPrice, int sellPrice, int quantity, String seller, String guid) {
+    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
@@ -43,11 +43,11 @@ public class MarketplaceItem {
         return itemStack;
     }
     
-    public int getBuyPrice() {
+    public long getBuyPrice() {
         return buyPrice;
     }
     
-    public int getSellPrice() {
+    public long getSellPrice() {
         return sellPrice;
     }
     

@@ -16,7 +16,7 @@ public class WalletHandler {
      * @param player the player to get money for
      * @return current money amount
      */
-    public static int getPlayerMoney(Player player) {
+    public static long getPlayerMoney(Player player) {
         if (player == null) {
             ServerShop.LOGGER.warn("Cannot get money for null player");
             return 0;
@@ -25,7 +25,7 @@ public class WalletHandler {
         CompoundTag playerData = player.getPersistentData();
         
         if (playerData.contains(WALLET_NBT_KEY)) {
-            int balance = playerData.getInt(WALLET_NBT_KEY);
+            long balance = playerData.getLong(WALLET_NBT_KEY);
             return balance;
         }
         
@@ -40,14 +40,14 @@ public class WalletHandler {
      * @param player the player to set money for
      * @param amount the new money amount
      */
-    public static void setPlayerMoney(Player player, int amount) {
+    public static void setPlayerMoney(Player player, long amount) {
         if (player == null) {
             ServerShop.LOGGER.warn("Cannot set money for null player");
             return;
         }
         
         CompoundTag playerData = player.getPersistentData();
-        playerData.putInt(WALLET_NBT_KEY, amount);
+        playerData.putLong(WALLET_NBT_KEY, amount);
         
         ServerShop.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
@@ -57,14 +57,14 @@ public class WalletHandler {
      * @param player the player to add money to
      * @param amount the amount to add
      */
-    public static void addMoney(Player player, int amount) {
+    public static void addMoney(Player player, long amount) {
         if (player == null) {
             ServerShop.LOGGER.warn("Cannot add money for null player");
             return;
         }
         
-        int currentMoney = getPlayerMoney(player);
-        int newAmount = currentMoney + amount;
+        long currentMoney = getPlayerMoney(player);
+        long newAmount = currentMoney + amount;
         setPlayerMoney(player, newAmount);
         
         ServerShop.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), newAmount);
@@ -76,15 +76,15 @@ public class WalletHandler {
      * @param amount the amount to remove
      * @return true if successful, false if insufficient funds
      */
-    public static boolean removeMoney(Player player, int amount) {
+    public static boolean removeMoney(Player player, long amount) {
         if (player == null) {
             ServerShop.LOGGER.warn("Cannot remove money for null player");
             return false;
         }
         
-        int currentMoney = getPlayerMoney(player);
+        long currentMoney = getPlayerMoney(player);
         if (currentMoney >= amount) {
-            int newAmount = currentMoney - amount;
+            long newAmount = currentMoney - amount;
             setPlayerMoney(player, newAmount);
             ServerShop.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), newAmount);
             return true;
@@ -100,7 +100,7 @@ public class WalletHandler {
      * @param amount the amount to check
      * @return true if player has enough money
      */
-    public static boolean hasEnoughMoney(Player player, int amount) {
+    public static boolean hasEnoughMoney(Player player, long amount) {
         return getPlayerMoney(player) >= amount;
     }
     
@@ -109,7 +109,7 @@ public class WalletHandler {
      * This is used by the GUI when we don't have direct access to the player object.
      * @return current money amount for the client player
      */
-    public static int getPlayerMoney() {
+    public static long getPlayerMoney() {
         try {
             // Try to get the client player
             net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
@@ -121,13 +121,13 @@ public class WalletHandler {
                     // We're in singleplayer - get the server player
                     var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
                     if (serverPlayer != null) {
-                        int balance = getPlayerMoney(serverPlayer);
+                        long balance = getPlayerMoney(serverPlayer);
                         return balance;
                     }
                 }
                 
                 // Fallback to client player
-                int balance = getPlayerMoney(clientPlayer);
+                long balance = getPlayerMoney(clientPlayer);
                 return balance;
             } else {
                 ServerShop.LOGGER.warn("Client player is null");
@@ -148,7 +148,7 @@ public class WalletHandler {
      * @param amount the amount to check
      * @return true if player has enough money
      */
-    public static boolean hasEnoughMoney(int amount) {
+    public static boolean hasEnoughMoney(long amount) {
         return getPlayerMoney() >= amount;
     }
 }

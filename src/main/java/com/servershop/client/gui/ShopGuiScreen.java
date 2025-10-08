@@ -45,11 +45,11 @@ public class ShopGuiScreen extends Screen {
         
         // Plus button is now handled inside the marketplace container
         
-        // Create the marketplace container with proper positioning
-        int containerWidth = Math.min(600, this.width - 100);
-        int containerHeight = Math.min(400, this.height - 150);
-        int containerX = (this.width - containerWidth) / 2;
-        int containerY = (this.height - containerHeight) / 2;
+        // Create the marketplace container with responsive positioning
+        int containerWidth = GuiScalingHelper.responsiveWidth(600, 400, 800);
+        int containerHeight = GuiScalingHelper.responsiveHeight(400, 300, 600);
+        int containerX = GuiScalingHelper.centerX(containerWidth);
+        int containerY = GuiScalingHelper.centerY(containerHeight);
         
         this.marketplaceContainer = new MarketplaceContainer(containerX, containerY, containerWidth, containerHeight, marketplaceItems, this);
         this.marketplaceContainer.init();
@@ -57,19 +57,16 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw a semi-transparent dark rectangle covering the entire screen
-        int overlayAlpha = 150; // Semi-transparent (0-255)
-        guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
+        // Don't draw a full-screen overlay - let EMI/JEI panels show through
+        // Only draw background behind our marketplace container
         
-            // Call super.render() first to handle any background elements
-            super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Call super.render() first to handle any background elements
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
 
-            // Draw wallet display in top right of screen
+        // Draw wallet display in top right of screen
         renderWalletDisplay(guiGraphics);
         
-        // Wallet display is now handled inside the marketplace container
-        
-        // Render marketplace container
+        // Render marketplace container (it will draw its own background)
         if (marketplaceContainer != null) {
             marketplaceContainer.render(guiGraphics, mouseX, mouseY, partialTick);
         }
@@ -77,7 +74,7 @@ public class ShopGuiScreen extends Screen {
     
     private void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
-        int money = WalletHandler.getPlayerMoney();
+        long money = WalletHandler.getPlayerMoney();
         String formattedMoney = String.format("$%,d", money);
         
         // Create title and money components
@@ -89,20 +86,29 @@ public class ShopGuiScreen extends Screen {
         int moneyWidth = this.font.width(walletText);
         int totalWidth = Math.max(titleWidth, moneyWidth);
         
-        int walletX = this.width - totalWidth - 20;
-        int titleY = 15;
-        int moneyY = 25;
+        int walletX = GuiScalingHelper.percentageX(0.85f) - totalWidth; // 85% from left, minus width
+        int titleY = GuiScalingHelper.responsiveHeight(15, 10, 25);
+        int moneyY = GuiScalingHelper.responsiveHeight(25, 20, 35);
         
-        // Draw background box behind wallet with extra margin (adjusted for title)
-        guiGraphics.fill(walletX - 10, titleY - 4, walletX + totalWidth + 10, moneyY + 12, 0xFF1A1A1A);
-        guiGraphics.fill(walletX - 9, titleY - 3, walletX + totalWidth + 9, moneyY + 11, 0xFF2D2D2D);
+        // Draw background box behind wallet with responsive margins
+        int marginX = GuiScalingHelper.responsiveWidth(15, 10, 20);
+        int marginY = GuiScalingHelper.responsiveHeight(8, 6, 12);
         
-        // Draw title (centered)
-        int titleX = walletX + (totalWidth - titleWidth) / 2;
+        // Calculate background box dimensions
+        int backgroundX = walletX - marginX;
+        int backgroundY = titleY - marginY;
+        int backgroundWidth = totalWidth + (marginX * 2);
+        int backgroundHeight = (moneyY + GuiScalingHelper.responsiveHeight(12, 8, 18)) - backgroundY;
+        
+        guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0xFF1A1A1A);
+        guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0xFF2D2D2D);
+        
+        // Draw title (centered within background box)
+        int titleX = backgroundX + (backgroundWidth - titleWidth) / 2;
         guiGraphics.drawString(this.font, titleText, titleX, titleY, 0xFFFFFFFF);
         
-        // Draw wallet text (centered)
-        int moneyX = walletX + (totalWidth - moneyWidth) / 2;
+        // Draw wallet text (centered within background box)
+        int moneyX = backgroundX + (backgroundWidth - moneyWidth) / 2;
         guiGraphics.drawString(this.font, walletText, moneyX, moneyY, 0xFF4CAF50);
     }
     

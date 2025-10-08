@@ -26,6 +26,7 @@
   "gui.servershop.add_item.buy_price": "Buy Price",
   "gui.servershop.add_item.sell_price": "Sell Price",
   "gui.servershop.add_item.quantity": "Quantity",
+  "gui.servershop.add_item.nbt": "NBT Data (Optional)",
   "gui.servershop.add_item.add": "Add Item",
   "gui.servershop.add_item.cancel": "Cancel",
 

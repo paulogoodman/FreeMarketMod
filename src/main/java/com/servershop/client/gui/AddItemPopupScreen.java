@@ -27,12 +27,14 @@ public class AddItemPopupScreen extends Screen {
     private EditBox buyPriceBox;
     private EditBox sellPriceBox;
     private EditBox quantityBox;
+    private EditBox nbtBox;
     private Button addButton;
     private Button cancelButton;
     
     // Current selected item
     private ItemStack selectedItem = null;
     private String itemIdError = null;
+    private String nbtError = null;
     
     public AddItemPopupScreen(ShopGuiScreen parent) {
         super(Component.translatable("gui.servershop.add_item.title"));
@@ -43,49 +45,65 @@ public class AddItemPopupScreen extends Screen {
     protected void init() {
         super.init();
         
-        // Calculate popup dimensions and position (centered)
-        int popupWidth = 350;
-        int popupHeight = 280;
-        int popupX = (this.width - popupWidth) / 2;
-        int popupY = (this.height - popupHeight) / 2;
+        // Calculate popup dimensions and position (centered) with responsive scaling
+        int popupWidth = GuiScalingHelper.responsiveWidth(500, 400, 600);
+        int popupHeight = GuiScalingHelper.responsiveHeight(320, 260, 400);
+        int popupX = GuiScalingHelper.centerX(popupWidth);
+        int popupY = GuiScalingHelper.centerY(popupHeight);
         
         // Item ID input
-        this.itemIdBox = new EditBox(this.font, popupX + 20, popupY + 50, 200, 20, 
+        this.itemIdBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 
+            GuiScalingHelper.responsiveWidth(200, 160, 250), GuiScalingHelper.responsiveHeight(20, 16, 26), 
             Component.translatable("gui.servershop.add_item.item_id"));
         this.itemIdBox.setValue("minecraft:diamond");
         this.itemIdBox.setResponder(this::onItemIdChanged);
         this.addRenderableWidget(this.itemIdBox);
         
         // Buy price input
-        this.buyPriceBox = new EditBox(this.font, popupX + 20, popupY + 90, 120, 20, 
+        this.buyPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(90, 75, 110), 
+            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
             Component.translatable("gui.servershop.add_item.buy_price"));
         this.buyPriceBox.setValue("100");
         this.addRenderableWidget(this.buyPriceBox);
         
         // Sell price input
-        this.sellPriceBox = new EditBox(this.font, popupX + 20, popupY + 130, 120, 20, 
+        this.sellPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(130, 110, 150), 
+            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
             Component.translatable("gui.servershop.add_item.sell_price"));
         this.sellPriceBox.setValue("80");
         this.addRenderableWidget(this.sellPriceBox);
         
         // Quantity input
-        this.quantityBox = new EditBox(this.font, popupX + 20, popupY + 170, 120, 20, 
+        this.quantityBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(170, 145, 190), 
+            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
             Component.translatable("gui.servershop.add_item.quantity"));
         this.quantityBox.setValue("1");
         this.addRenderableWidget(this.quantityBox);
+        
+        // NBT input (optional) - much wider for long NBT strings
+        this.nbtBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(210, 175, 230), 
+            GuiScalingHelper.responsiveWidth(450, 360, 550), GuiScalingHelper.responsiveHeight(20, 16, 26), 
+            Component.translatable("gui.servershop.add_item.nbt"));
+        this.nbtBox.setValue("");
+        this.nbtBox.setResponder(this::onNbtChanged);
+        // Remove character limit for NBT field to allow long strings
+        this.nbtBox.setMaxLength(Integer.MAX_VALUE);
+        this.addRenderableWidget(this.nbtBox);
         
         // Add button
         this.addButton = Button.builder(
             Component.translatable("gui.servershop.add_item.add"),
             button -> addItemToList()
-        ).bounds(popupX + 20, popupY + 220, 80, 20).build();
+        ).bounds(popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
+            GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
         this.addRenderableWidget(this.addButton);
         
         // Cancel button
         this.cancelButton = Button.builder(
             Component.translatable("gui.servershop.add_item.cancel"),
             button -> onClose()
-        ).bounds(popupX + 120, popupY + 220, 80, 20).build();
+        ).bounds(popupX + GuiScalingHelper.responsiveWidth(120, 100, 150), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
+            GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
         this.addRenderableWidget(this.cancelButton);
     }
     
@@ -109,6 +127,33 @@ public class AddItemPopupScreen extends Screen {
         } catch (Exception e) {
             itemIdError = "Invalid format: " + itemId;
         }
+    }
+    
+    private void onNbtChanged(String nbtString) {
+        nbtError = null;
+        
+        if (nbtString.trim().isEmpty()) {
+            return;
+        }
+        
+        try {
+            // Validate NBT string format
+            net.minecraft.nbt.TagParser.parseTag(nbtString.trim());
+        } catch (Exception e) {
+            nbtError = "Invalid NBT format";
+        }
+    }
+    
+    private ItemStack createItemWithNbt(Item item, int count, String nbtString) {
+        ItemStack itemStack = new ItemStack(item, count);
+        
+        if (nbtString != null && !nbtString.trim().isEmpty()) {
+            // TODO: Implement NBT application for NeoForge 1.21
+            // The NBT methods have changed in NeoForge 1.21 and need to be researched
+            ServerShop.LOGGER.info("NBT data provided but not yet implemented: {}", nbtString);
+        }
+        
+        return itemStack;
     }
     
     private void addItemToList() {
@@ -140,8 +185,15 @@ public class AddItemPopupScreen extends Screen {
                 return;
             }
             
-            // Get the selected item stack
-            ItemStack itemStack = selectedItem.copy();
+            // Validate NBT if provided
+            String nbtString = this.nbtBox.getValue().trim();
+            if (!nbtString.isEmpty() && nbtError != null) {
+                ServerShop.LOGGER.warn("Invalid NBT format");
+                return;
+            }
+            
+            // Get the selected item stack with NBT applied
+            ItemStack itemStack = createItemWithNbt(selectedItem.getItem(), quantity, nbtString);
             
             // Create marketplace item
             MarketplaceItem marketplaceItem = new MarketplaceItem(
@@ -168,11 +220,11 @@ public class AddItemPopupScreen extends Screen {
     
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Calculate popup dimensions and position
-        int popupWidth = 350;
-        int popupHeight = 280;
-        int popupX = (this.width - popupWidth) / 2;
-        int popupY = (this.height - popupHeight) / 2;
+        // Calculate popup dimensions and position with responsive scaling
+        int popupWidth = GuiScalingHelper.responsiveWidth(500, 400, 600);
+        int popupHeight = GuiScalingHelper.responsiveHeight(320, 260, 400);
+        int popupX = GuiScalingHelper.centerX(popupWidth);
+        int popupY = GuiScalingHelper.centerY(popupHeight);
         
         // Draw semi-transparent background FIRST (behind everything)
         int overlayAlpha = 200; // More opaque than main screen
@@ -194,33 +246,35 @@ public class AddItemPopupScreen extends Screen {
         // Draw title (after widgets to ensure it's on top)
         int titleWidth = this.font.width(this.title);
         int titleX = popupX + (popupWidth - titleWidth) / 2;
-        guiGraphics.drawString(this.font, this.title, titleX, popupY + 10, 0xFFFFFF);
+        guiGraphics.drawString(this.font, this.title, titleX, popupY + GuiScalingHelper.responsiveHeight(10, 8, 15), 0xFFFFFF);
         
         // Draw labels (after widgets to ensure they're on top)
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.item_id"), 
-            popupX + 20, popupY + 40, 0xCCCCCC);
+            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(40, 32, 50), 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.buy_price"), 
-            popupX + 20, popupY + 80, 0xCCCCCC);
+            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(80, 65, 95), 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.sell_price"), 
-            popupX + 20, popupY + 120, 0xCCCCCC);
+            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(120, 95, 140), 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.quantity"), 
-            popupX + 20, popupY + 160, 0xCCCCCC);
+            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(160, 130, 180), 0xCCCCCC);
+        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.nbt"), 
+            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(200, 165, 200), 0xCCCCCC);
         
         // Draw item preview and error messages
         if (selectedItem != null) {
             // Draw item icon
-            guiGraphics.renderItem(selectedItem, popupX + 250, popupY + 50);
-            guiGraphics.renderItemDecorations(this.font, selectedItem, popupX + 250, popupY + 50);
+            guiGraphics.renderItem(selectedItem, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65));
+            guiGraphics.renderItemDecorations(this.font, selectedItem, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65));
             
             // Draw item name
             String itemName = selectedItem.getItem().getDescription().getString();
             if (itemName.length() > 15) {
                 itemName = itemName.substring(0, 15) + "...";
             }
-            guiGraphics.drawString(this.font, itemName, popupX + 250, popupY + 70, 0xFFFFFF);
+            guiGraphics.drawString(this.font, itemName, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(70, 55, 85), 0xFFFFFF);
         } else if (itemIdError != null) {
             // Draw error message
-            guiGraphics.drawString(this.font, itemIdError, popupX + 250, popupY + 50, 0xFF6666);
+            guiGraphics.drawString(this.font, itemIdError, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 0xFF6666);
         }
     }
     

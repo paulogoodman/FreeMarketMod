@@ -48,7 +48,7 @@ public class EconomyCommands {
         CommandSourceStack source = context.getSource();
         
         if (source.getEntity() instanceof ServerPlayer player) {
-            int balance = WalletHandler.getPlayerMoney(player);
+            long balance = WalletHandler.getPlayerMoney(player);
             Component message = Component.translatable("command.servershop.economy.balance", 
                 player.getName().getString(), balance);
             source.sendSuccess(() -> message, false);
@@ -71,7 +71,7 @@ public class EconomyCommands {
         
         if (player != null) {
             // Player found - get balance from NBT
-            int balance = WalletHandler.getPlayerMoney(player);
+            long balance = WalletHandler.getPlayerMoney(player);
             Component message = Component.translatable("command.servershop.economy.balance", 
                 playerName, balance);
             source.sendSuccess(() -> message, false);
@@ -98,7 +98,7 @@ public class EconomyCommands {
         if (player != null) {
             // Player found - update NBT data
             WalletHandler.addMoney(player, amount);
-            int newBalance = WalletHandler.getPlayerMoney(player);
+            long newBalance = WalletHandler.getPlayerMoney(player);
             
             Component message = Component.translatable("command.servershop.economy.add.success", 
                 amount, playerName, newBalance);
@@ -133,7 +133,7 @@ public class EconomyCommands {
             boolean success = WalletHandler.removeMoney(player, amount);
             
             if (success) {
-                int newBalance = WalletHandler.getPlayerMoney(player);
+                long newBalance = WalletHandler.getPlayerMoney(player);
                 
                 Component message = Component.translatable("command.servershop.economy.remove.success", 
                     amount, playerName, newBalance);
@@ -144,7 +144,7 @@ public class EconomyCommands {
                     amount, newBalance);
                 player.sendSystemMessage(playerMessage);
             } else {
-                int currentBalance = WalletHandler.getPlayerMoney(player);
+                long currentBalance = WalletHandler.getPlayerMoney(player);
                 
                 Component message = Component.translatable("command.servershop.economy.remove.insufficient", 
                     amount, playerName, currentBalance);
@@ -172,7 +172,7 @@ public class EconomyCommands {
         
         if (player != null) {
             // Player found - update NBT data
-            int oldBalance = WalletHandler.getPlayerMoney(player);
+            long oldBalance = WalletHandler.getPlayerMoney(player);
             WalletHandler.setPlayerMoney(player, amount);
             
             Component message = Component.translatable("command.servershop.economy.set.success", 

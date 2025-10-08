@@ -56,8 +56,12 @@ public class ServerShopClient {
         
         // Check if the keybind was pressed and we're in-game
         if (OPEN_SHOP_KEY.consumeClick() && minecraft.player != null) {
-            // Open the shop GUI
-            minecraft.setScreen(new ShopGuiScreen());
+            // Toggle the shop GUI - if it's already open, close it; otherwise open it
+            if (minecraft.screen instanceof ShopGuiScreen) {
+                minecraft.setScreen(null); // Close the GUI
+            } else {
+                minecraft.setScreen(new ShopGuiScreen()); // Open the GUI
+            }
         }
     }
 }

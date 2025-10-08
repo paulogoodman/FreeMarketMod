@@ -11,6 +11,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -20,16 +21,15 @@ public class MarketplaceContainer implements Renderable {
     
     private final int x, y, width, height;
     private final List<MarketplaceItem> allItems;
-    private List<MarketplaceItem> filteredItems;
     private EditBox searchBox;
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
     private int itemHeight = 60;
     private int itemsPerRow = 3;
     private int itemSpacing = 120;
-    private boolean isClosing = false;
     private int hoveredEditButton = -1;
-    private int hoveredCloseButton = -1;
+    private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
+    private int hoveredCategory = -1;
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items) {
         this.x = x;
@@ -37,7 +37,6 @@ public class MarketplaceContainer implements Renderable {
         this.width = width;
         this.height = height;
         this.allItems = new ArrayList<>(items);
-        this.filteredItems = new ArrayList<>(allItems);
         calculateMaxVisibleItems();
     }
     
@@ -57,13 +56,6 @@ public class MarketplaceContainer implements Renderable {
     }
     
     private void onSearchChanged(String searchText) {
-        if (searchText.isEmpty()) {
-            filteredItems = new ArrayList<>(allItems);
-        } else {
-            filteredItems = allItems.stream()
-                .filter(item -> item.getItemName().toLowerCase().contains(searchText.toLowerCase()))
-                .collect(Collectors.toList());
-        }
         scrollOffset = 0; // Reset scroll when searching
     }
     
@@ -78,8 +70,7 @@ public class MarketplaceContainer implements Renderable {
     }
     
     public void scroll(int delta) {
-        int maxScroll = Math.max(0, (filteredItems.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
-        scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + delta));
+        scrollOffset = Math.max(0, Math.min(getMaxScroll(), scrollOffset + delta));
     }
     
     public void scrollToTop() {
@@ -87,8 +78,7 @@ public class MarketplaceContainer implements Renderable {
     }
     
     public void scrollToBottom() {
-        int maxScroll = Math.max(0, (filteredItems.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
-        scrollOffset = maxScroll;
+        scrollOffset = getMaxScroll();
     }
     
     public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
@@ -113,18 +103,31 @@ public class MarketplaceContainer implements Renderable {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
         
-        // Draw modern close button
-        renderCloseButton(guiGraphics, mouseX, mouseY);
+        // Draw wallet display inside container
+        renderWalletDisplay(guiGraphics);
         
-        // Draw items with modern styling
+        // Draw add button in top right (only if admin mode)
+        if (AdminModeHandler.isAdminMode()) {
+            renderAddButton(guiGraphics, mouseX, mouseY);
+        }
+        
+        // Draw category sidebar
+        renderCategorySidebar(guiGraphics, mouseX, mouseY);
+        
+        // Get items to render based on selected category and search
+        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        
+        // Draw items with modern styling (adjusted for sidebar)
+        int sidebarWidth = 120;
         int startY = y + 50;
+        int startX = x + sidebarWidth + 20; // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
         
-        for (int i = scrollOffset * itemsPerRow; i < filteredItems.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
-            for (int j = 0; j < itemsPerRow && i + j < filteredItems.size() && itemsRendered < maxItemsToRender; j++) {
-                MarketplaceItem item = filteredItems.get(i + j);
-                int itemX = x + 10 + j * itemSpacing;
+        for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
+            for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
+                MarketplaceItem item = itemsToRender.get(i + j);
+                int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
                 renderModernItemCard(guiGraphics, item, itemX, itemY, mouseX, mouseY, i + j);
@@ -136,37 +139,111 @@ public class MarketplaceContainer implements Renderable {
         drawScrollBar(guiGraphics);
         
         // Draw item count
-        Component countText = Component.translatable("gui.servershop.marketplace.count", filteredItems.size(), allItems.size());
+        Component countText = Component.translatable("gui.servershop.marketplace.count", itemsToRender.size(), allItems.size());
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + 10, y + height - 15, 0xCCCCCC);
     }
     
-    private void renderCloseButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int closeButtonX = x + width - 30;
-        int closeButtonY = y + 10;
-        int closeButtonSize = 24;
+    private void renderWalletDisplay(GuiGraphics guiGraphics) {
+        // Draw wallet display in top left of container
+        Component walletText = Component.translatable("gui.servershop.wallet", WalletHandler.getPlayerMoney());
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, walletText, x + 10, y + 8, 0xFF4CAF50);
+    }
+    
+    private void renderAddButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int addButtonX = x + width - 30;
+        int addButtonY = y + 10;
+        int addButtonSize = 24;
         
-        boolean isHovered = mouseX >= closeButtonX && mouseX <= closeButtonX + closeButtonSize &&
-                           mouseY >= closeButtonY && mouseY <= closeButtonY + closeButtonSize;
+        boolean isHovered = mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
+                           mouseY >= addButtonY && mouseY <= addButtonY + addButtonSize;
         
-        // Modern close button with hover effect
+        // Modern add button with hover effect
         if (isHovered) {
             // Hover state - brighter background
-            guiGraphics.fill(closeButtonX, closeButtonY, closeButtonX + closeButtonSize, closeButtonY + closeButtonSize, 0xFF4A4A4A);
-            guiGraphics.fill(closeButtonX + 1, closeButtonY + 1, closeButtonX + closeButtonSize - 1, closeButtonY + closeButtonSize - 1, 0xFF5A5A5A);
+            guiGraphics.fill(addButtonX, addButtonY, addButtonX + addButtonSize, addButtonY + addButtonSize, 0xFF4A4A4A);
+            guiGraphics.fill(addButtonX + 1, addButtonY + 1, addButtonX + addButtonSize - 1, addButtonY + addButtonSize - 1, 0xFF5A5A5A);
         } else {
             // Normal state
-            guiGraphics.fill(closeButtonX, closeButtonY, closeButtonX + closeButtonSize, closeButtonY + closeButtonSize, 0xFF3A3A3A);
-            guiGraphics.fill(closeButtonX + 1, closeButtonY + 1, closeButtonX + closeButtonSize - 1, closeButtonY + closeButtonSize - 1, 0xFF4A4A4A);
+            guiGraphics.fill(addButtonX, addButtonY, addButtonX + addButtonSize, addButtonY + addButtonSize, 0xFF3A3A3A);
+            guiGraphics.fill(addButtonX + 1, addButtonY + 1, addButtonX + addButtonSize - 1, addButtonY + addButtonSize - 1, 0xFF4A4A4A);
         }
         
-        // Draw modern X icon
-        int centerX = closeButtonX + closeButtonSize / 2;
-        int centerY = closeButtonY + closeButtonSize / 2;
-        int xColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
+        // Draw modern + icon
+        int centerX = addButtonX + addButtonSize / 2;
+        int centerY = addButtonY + addButtonSize / 2;
+        int plusColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
         
-        // Draw X lines
-        guiGraphics.fill(centerX - 6, centerY - 1, centerX + 6, centerY + 1, xColor);
-        guiGraphics.fill(centerX - 1, centerY - 6, centerX + 1, centerY + 6, xColor);
+        // Draw + lines
+        guiGraphics.fill(centerX - 6, centerY - 1, centerX + 6, centerY + 1, plusColor);
+        guiGraphics.fill(centerX - 1, centerY - 6, centerX + 1, centerY + 6, plusColor);
+    }
+    
+    private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int sidebarWidth = 120;
+        int sidebarX = x + 10;
+        int sidebarY = y + 40;
+        int sidebarHeight = height - 80;
+        
+        // Draw sidebar background
+        guiGraphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + sidebarHeight, 0xFF1A1A1A);
+        guiGraphics.fill(sidebarX + 1, sidebarY + 1, sidebarX + sidebarWidth - 1, sidebarY + sidebarHeight - 1, 0xFF2D2D2D);
+        
+        // Draw sidebar title
+        Component sidebarTitle = Component.literal("Categories");
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sidebarTitle, sidebarX + 5, sidebarY + 5, 0xFFE0E0E0);
+        
+        // Draw categories
+        List<ItemCategoryManager.Category> categories = ItemCategoryManager.getAllCategories();
+        Map<ItemCategoryManager.Category, Integer> categoryCounts = ItemCategoryManager.getCategoryCounts(allItems);
+        
+        int categoryY = sidebarY + 20;
+        int categoryHeight = 16;
+        
+        for (int i = 0; i < categories.size(); i++) {
+            ItemCategoryManager.Category category = categories.get(i);
+            int currentCategoryY = categoryY + i * categoryHeight;
+            
+            boolean isSelected = category == selectedCategory;
+            boolean isHovered = mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
+                               mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight;
+            
+            // Update hover state
+            if (isHovered) {
+                hoveredCategory = i;
+            }
+            
+            // Draw category background
+            if (isSelected) {
+                guiGraphics.fill(sidebarX + 2, currentCategoryY, sidebarX + sidebarWidth - 2, currentCategoryY + categoryHeight, 0xFF4CAF50);
+                guiGraphics.fill(sidebarX + 3, currentCategoryY + 1, sidebarX + sidebarWidth - 3, currentCategoryY + categoryHeight - 1, 0xFF66BB6A);
+            } else if (isHovered) {
+                guiGraphics.fill(sidebarX + 2, currentCategoryY, sidebarX + sidebarWidth - 2, currentCategoryY + categoryHeight, 0xFF3A3A3A);
+                guiGraphics.fill(sidebarX + 3, currentCategoryY + 1, sidebarX + sidebarWidth - 3, currentCategoryY + categoryHeight - 1, 0xFF4A4A4A);
+            }
+            
+            // Draw category text
+            int textColor = isSelected ? 0xFFFFFFFF : 0xFFE0E0E0;
+            String categoryText = category.getDisplayName();
+            int count = categoryCounts.getOrDefault(category, 0);
+            String displayText = categoryText + " (" + count + ")";
+            
+            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, displayText, sidebarX + 5, currentCategoryY + 3, textColor);
+        }
+    }
+    
+    private List<MarketplaceItem> getItemsToRender() {
+        // First filter by category
+        List<MarketplaceItem> categoryFiltered = ItemCategoryManager.filterItemsByCategory(allItems, selectedCategory);
+        
+        // Then filter by search text
+        if (searchBox != null && !searchBox.getValue().isEmpty()) {
+            String searchText = searchBox.getValue().toLowerCase();
+            return categoryFiltered.stream()
+                .filter(item -> item.getItemName().toLowerCase().contains(searchText))
+                .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        }
+        
+        return categoryFiltered;
     }
     
     private void renderModernItemCard(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
@@ -175,8 +252,10 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 54, 0xFF2D2D2D);
         guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 53, 0xFF3A3A3A);
         
-        // Draw modern edit button
-        renderModernEditButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
+        // Draw modern edit button (only if admin mode)
+        if (AdminModeHandler.isAdminMode()) {
+            renderModernEditButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
+        }
         
         // Draw item icon with better positioning
         guiGraphics.renderItem(item.getItemStack(), itemX + 2, itemY + 2);
@@ -275,7 +354,8 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0x80000000);
         
         // Calculate thumb position and size
-        int thumbHeight = Math.max(20, (scrollBarHeight * scrollBarHeight) / (maxScroll + scrollBarHeight));
+        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        int thumbHeight = Math.max(20, (scrollBarHeight * scrollBarHeight) / (itemsToRender.size() * itemHeight / itemsPerRow + scrollBarHeight));
         int thumbY = scrollBarY + (scrollBarHeight - thumbHeight) * scrollOffset / maxScroll;
         
         // Draw scroll thumb
@@ -296,7 +376,8 @@ public class MarketplaceContainer implements Renderable {
     }
     
     private int getMaxScroll() {
-        return Math.max(0, (filteredItems.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
+        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        return Math.max(0, (itemsToRender.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
     }
     
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
@@ -304,38 +385,69 @@ public class MarketplaceContainer implements Renderable {
             return true;
         }
         
-        // Handle close button click
-        int closeButtonX = x + width - 30;
-        int closeButtonY = y + 10;
-        int closeButtonSize = 24;
+        // Handle add button click (only if admin mode)
+        if (AdminModeHandler.isAdminMode()) {
+            int addButtonX = x + width - 30;
+            int addButtonY = y + 10;
+            int addButtonSize = 24;
+            
+            if (mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
+                mouseY >= addButtonY && mouseY <= addButtonY + addButtonSize) {
+                // TODO: Open add item dialog
+                System.out.println("Add button clicked!");
+                return true;
+            }
+        }
         
-        if (mouseX >= closeButtonX && mouseX <= closeButtonX + closeButtonSize &&
-            mouseY >= closeButtonY && mouseY <= closeButtonY + closeButtonSize) {
-            isClosing = true;
-            return true;
+        // Handle category sidebar clicks
+        int sidebarWidth = 120;
+        int sidebarX = x + 10;
+        int sidebarY = y + 40;
+        int sidebarHeight = height - 80;
+        
+        if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
+            mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
+            
+            List<ItemCategoryManager.Category> categories = ItemCategoryManager.getAllCategories();
+            int categoryY = sidebarY + 20;
+            int categoryHeight = 16;
+            
+            for (int i = 0; i < categories.size(); i++) {
+                int currentCategoryY = categoryY + i * categoryHeight;
+                
+                if (mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight) {
+                    selectedCategory = categories.get(i);
+                    scrollOffset = 0; // Reset scroll when changing category
+                    return true;
+                }
+            }
         }
         
         // Handle edit button clicks on items
         int startY = y + 50;
+        int startX = x + sidebarWidth + 20; // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
+        List<MarketplaceItem> itemsToRender = getItemsToRender();
         
-        for (int i = scrollOffset * itemsPerRow; i < filteredItems.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
-            for (int j = 0; j < itemsPerRow && i + j < filteredItems.size() && itemsRendered < maxItemsToRender; j++) {
-                MarketplaceItem item = filteredItems.get(i + j);
-                int itemX = x + 10 + j * itemSpacing;
+        for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
+            for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
+                MarketplaceItem item = itemsToRender.get(i + j);
+                int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
-                // Check edit button click
-                int editButtonX = itemX + 90;
-                int editButtonY = itemY + 2;
-                int editButtonSize = 20;
-                
-                if (mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
-                    mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize) {
-                    // TODO: Open edit dialog for this item
-                    System.out.println("Edit button clicked for: " + item.getItemName());
-                    return true;
+                // Check edit button click (only if admin mode)
+                if (AdminModeHandler.isAdminMode()) {
+                    int editButtonX = itemX + 90;
+                    int editButtonY = itemY + 2;
+                    int editButtonSize = 20;
+                    
+                    if (mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
+                        mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize) {
+                        // TODO: Open edit dialog for this item
+                        System.out.println("Edit button clicked for: " + item.getItemName());
+                        return true;
+                    }
                 }
                 
                 // Check buy/sell button clicks
@@ -418,13 +530,5 @@ public class MarketplaceContainer implements Renderable {
     
     public void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         // Narration support
-    }
-    
-    public boolean isClosing() {
-        return isClosing;
-    }
-    
-    public void resetClosing() {
-        isClosing = false;
     }
 }

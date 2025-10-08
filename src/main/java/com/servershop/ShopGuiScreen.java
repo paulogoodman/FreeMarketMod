@@ -23,47 +23,25 @@ public class ShopGuiScreen extends Screen {
     public ShopGuiScreen() {
         super(Component.translatable("gui.servershop.shop.title"));
         this.marketplaceItems = new ArrayList<>();
-        initializeSampleMarketplaceItems();
+        loadMarketplaceItemsFromFile();
     }
     
-    private void initializeSampleMarketplaceItems() {
-        // Add many sample items for demonstration (buyPrice, sellPrice, quantity, seller)
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.DIAMOND, 5), 1000, 800, 5, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.EMERALD, 3), 800, 600, 3, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.GOLD_INGOT, 10), 500, 400, 10, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.IRON_INGOT, 20), 200, 150, 20, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.COAL, 50), 100, 75, 50, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.REDSTONE, 32), 150, 100, 32, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.LAPIS_LAZULI, 16), 300, 200, 16, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.QUARTZ, 8), 400, 300, 8, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.NETHERITE_INGOT, 1), 5000, 4000, 1, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.ENCHANTED_BOOK), 2000, 1500, 1, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.ENDER_PEARL, 16), 800, 600, 16, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.BLAZE_ROD, 8), 600, 450, 8, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.GHAST_TEAR, 4), 1200, 900, 4, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.WITHER_SKELETON_SKULL, 1), 3000, 2500, 1, "Admin"));
-        marketplaceItems.add(new MarketplaceItem(new ItemStack(Items.DRAGON_EGG, 1), 10000, 8000, 1, "Admin"));
+    private void loadMarketplaceItemsFromFile() {
+        // Load marketplace items from JSON file
+        List<MarketplaceItem> loadedItems = ClientMarketplaceDataManager.loadMarketplaceItems();
+        this.marketplaceItems = loadedItems;
+        ServerShop.LOGGER.info("Loaded {} marketplace items from JSON file", loadedItems.size());
     }
+    
     
     @Override
     protected void init() {
         super.init();
         
-        // Create the '+' button (moved to top left)
-        this.plusButton = Button.builder(
-            Component.literal("+"),
-            button -> {
-                // Open the add item popup
-                this.minecraft.setScreen(new AddItemPopupScreen(this));
-            }
-        )
-        .bounds(20, 20, 30, 30) // Top left position
-        .build();
+        // Refresh marketplace items from file in case they were updated
+        loadMarketplaceItemsFromFile();
         
-        // Only add the button if admin mode is enabled
-        if (AdminModeHandler.isAdminMode()) {
-            this.addRenderableWidget(this.plusButton);
-        }
+        // Plus button is now handled inside the marketplace container
         
         // Create the marketplace container with proper positioning
         int containerWidth = Math.min(600, this.width - 100);
@@ -90,9 +68,7 @@ public class ShopGuiScreen extends Screen {
         int titleY = 20;
         guiGraphics.drawString(this.font, this.title, titleX, titleY, 0xFFFFFF);
         
-        // Draw wallet display
-        Component walletText = Component.translatable("gui.servershop.wallet", WalletHandler.getPlayerMoney());
-        guiGraphics.drawString(this.font, walletText, 20, 20, 0x00FF00);
+        // Wallet display is now handled inside the marketplace container
         
         // Draw admin mode status if enabled (smaller, top right)
         if (AdminModeHandler.isAdminMode()) {
@@ -193,11 +169,6 @@ public class ShopGuiScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (marketplaceContainer != null && marketplaceContainer.mouseClicked(mouseX, mouseY, button)) {
-            // Check if the marketplace container is closing
-            if (marketplaceContainer.isClosing()) {
-                this.onClose();
-                return true;
-            }
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);

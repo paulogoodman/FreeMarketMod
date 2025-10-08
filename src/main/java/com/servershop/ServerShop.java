@@ -26,6 +26,7 @@ import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -113,5 +114,15 @@ public class ServerShop {
     public void onServerStarting(ServerStartingEvent event) {
         // Do something when the server starts
         LOGGER.info("HELLO from server starting");
+    }
+    
+    @SubscribeEvent
+    public void onLevelLoad(LevelEvent.Load event) {
+        // Create empty marketplace.json file when a world is loaded for the first time
+        if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+            if (!MarketplaceDataManager.marketplaceFileExists(serverLevel)) {
+                MarketplaceDataManager.createEmptyMarketplaceFile(serverLevel);
+            }
+        }
     }
 }

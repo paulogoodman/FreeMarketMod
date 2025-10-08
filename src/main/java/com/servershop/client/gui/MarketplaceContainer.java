@@ -43,12 +43,12 @@ public class MarketplaceContainer implements Renderable {
     // Buy button state tracking
     private String buyingItemGuid = null;
     private long buyButtonCooldown = 0;
-    private static final long BUY_COOLDOWN_MS = 1000; // 1 second cooldown
+    private static final long BUY_COOLDOWN_MS = 500; // 0.5 second cooldown
     
     // Sell button state tracking
     private String sellingItemGuid = null;
     private long sellButtonCooldown = 0;
-    private static final long SELL_COOLDOWN_MS = 1000; // 1 second cooldown
+    private static final long SELL_COOLDOWN_MS = 500; // 0.5 second cooldown
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
@@ -64,7 +64,7 @@ public class MarketplaceContainer implements Renderable {
         // Create search box
         this.searchBox = new EditBox(
             net.minecraft.client.Minecraft.getInstance().font,
-            x + 10, y + 15, width - 40, 20, // Moved down and made room for close button
+            x + 10, y + 25, width - 40, 20, // Added extra margin from top
             Component.translatable("gui.servershop.marketplace.search")
         );
         this.searchBox.setResponder(this::onSearchChanged);
@@ -118,11 +118,11 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(x + width - 2, y, x + width, y + height, 0xFF404040);
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0xFF404040);
         
-        // Draw title with better styling
+        // Draw title with better styling and extra margin
         Component title = Component.translatable("gui.servershop.marketplace.title");
         int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
         int titleX = x + (width - titleWidth) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, y + 8, 0xFFE0E0E0);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, y + 15, 0xFFE0E0E0);
         
         // Render search box
         if (searchBox != null) {
@@ -144,7 +144,7 @@ public class MarketplaceContainer implements Renderable {
         
         // Draw items with modern styling (adjusted for sidebar)
         int sidebarWidth = 120;
-        int startY = y + 50;
+        int startY = y + 60;
         int startX = x + sidebarWidth + 20; // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
@@ -171,7 +171,7 @@ public class MarketplaceContainer implements Renderable {
     
     private void renderAddButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int addButtonX = x + width - 30;
-        int addButtonY = y + 10;
+        int addButtonY = y + 20;
         int addButtonSize = 24;
         
         boolean isHovered = mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
@@ -201,7 +201,7 @@ public class MarketplaceContainer implements Renderable {
     private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int sidebarWidth = 120;
         int sidebarX = x + 10;
-        int sidebarY = y + 40;
+        int sidebarY = y + 50;
         int sidebarHeight = height - 80;
         
         // Draw sidebar background
@@ -328,9 +328,9 @@ public class MarketplaceContainer implements Renderable {
         String buyText;
         
         if (isBuying) {
-            // Currently processing purchase
+            // Currently processing purchase with animation
             buyColor = 0xFF2196F3; // Blue for processing
-            buyText = "...";
+            buyText = getAnimatedLoadingText();
         } else if (isBuyCooldown) {
             // In cooldown period
             buyColor = 0xFF9E9E9E; // Gray for cooldown
@@ -369,9 +369,9 @@ public class MarketplaceContainer implements Renderable {
         String sellText;
         
         if (isSelling) {
-            // Currently processing sale
+            // Currently processing sale with animation
             sellColor = 0xFF2196F3; // Blue for processing
-            sellText = "...";
+            sellText = getAnimatedLoadingText();
         } else if (isSellCooldown) {
             // In cooldown period
             sellColor = 0xFF9E9E9E; // Gray for cooldown
@@ -440,7 +440,7 @@ public class MarketplaceContainer implements Renderable {
         // Handle add button click (only if admin mode)
         if (AdminModeHandler.isAdminMode()) {
             int addButtonX = x + width - 30;
-            int addButtonY = y + 10;
+            int addButtonY = y + 20;
             int addButtonSize = 24;
             
             if (mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
@@ -456,7 +456,7 @@ public class MarketplaceContainer implements Renderable {
         // Handle category sidebar clicks
         int sidebarWidth = 120;
         int sidebarX = x + 10;
-        int sidebarY = y + 40;
+        int sidebarY = y + 50;
         int sidebarHeight = height - 80;
         
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
@@ -478,7 +478,7 @@ public class MarketplaceContainer implements Renderable {
         }
         
         // Handle edit button clicks on items
-        int startY = y + 50;
+        int startY = y + 60;
         int startX = x + sidebarWidth + 20; // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
@@ -608,17 +608,27 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        // Try to add item to inventory first
+        // Try to add item to inventory first - use server player for persistence
         ItemStack itemToGive = item.getItemStack().copy();
-        boolean addedToInventory = clientPlayer.getInventory().add(itemToGive);
+        Player playerForInventory = clientPlayer;
+        
+        // In singleplayer, use server player for inventory operations to ensure persistence
+        if (minecraft.getSingleplayerServer() != null) {
+            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForInventory = serverPlayer;
+            }
+        }
+        
+        boolean addedToInventory = playerForInventory.getInventory().add(itemToGive);
         
         if (!addedToInventory) {
             // Inventory full - drop item at player's feet
-            BlockPos playerPos = clientPlayer.blockPosition();
-            Level level = clientPlayer.level();
+            BlockPos playerPos = playerForInventory.blockPosition();
+            Level level = playerForInventory.level();
             
             // Drop the item at player's feet
-            clientPlayer.drop(itemToGive, false);
+            playerForInventory.drop(itemToGive, false);
         }
         
         // Deduct money from wallet - use server player if available
@@ -677,9 +687,19 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        // Check if player has the item in inventory
+        // Check if player has the item in inventory - use server player for persistence
         ItemStack itemToSell = item.getItemStack().copy();
-        if (!hasItemInInventory(clientPlayer, itemToSell)) {
+        Player playerForInventory = clientPlayer;
+        
+        // In singleplayer, use server player for inventory operations to ensure persistence
+        if (minecraft.getSingleplayerServer() != null) {
+            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForInventory = serverPlayer;
+            }
+        }
+        
+        if (!hasItemInInventory(playerForInventory, itemToSell)) {
             // TODO: Show error message to player
             return false;
         }
@@ -689,7 +709,7 @@ public class MarketplaceContainer implements Renderable {
         sellingItemGuid = item.getGuid();
         
         // Remove item from inventory
-        removeItemFromInventory(clientPlayer, itemToSell);
+        removeItemFromInventory(playerForInventory, itemToSell);
         
         // Add money to wallet - use server player if available
         Player playerForMoney = clientPlayer;
@@ -775,7 +795,32 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        return hasItemInInventory(clientPlayer, item.getItemStack());
+        // Use server player for inventory check to ensure consistency
+        Player playerForCheck = clientPlayer;
+        if (minecraft.getSingleplayerServer() != null) {
+            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForCheck = serverPlayer;
+            }
+        }
+        
+        return hasItemInInventory(playerForCheck, item.getItemStack());
+    }
+    
+    /**
+     * Gets animated loading text that cycles through different characters.
+     */
+    private String getAnimatedLoadingText() {
+        long currentTime = System.currentTimeMillis();
+        int animationFrame = (int) ((currentTime / 200) % 4); // Change every 200ms
+        
+        switch (animationFrame) {
+            case 0: return "...";
+            case 1: return ".. ";
+            case 2: return ".  ";
+            case 3: return "   ";
+            default: return "...";
+        }
     }
     
     public boolean charTyped(char codePoint, int modifiers) {

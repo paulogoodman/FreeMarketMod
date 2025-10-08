@@ -61,16 +61,10 @@ public class ShopGuiScreen extends Screen {
         int overlayAlpha = 150; // Semi-transparent (0-255)
         guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
         
-        // Call super.render() first to handle any background elements
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
-        
-        // Draw title at the top center (after super.render to ensure it's on top)
-        int titleWidth = this.font.width(this.title);
-        int titleX = (this.width - titleWidth) / 2;
-        int titleY = 20;
-        guiGraphics.drawString(this.font, this.title, titleX, titleY, 0xFFFFFF);
-        
-        // Draw wallet display in top right of screen
+            // Call super.render() first to handle any background elements
+            super.render(guiGraphics, mouseX, mouseY, partialTick);
+
+            // Draw wallet display in top right of screen
         renderWalletDisplay(guiGraphics);
         
         // Wallet display is now handled inside the marketplace container
@@ -83,17 +77,33 @@ public class ShopGuiScreen extends Screen {
     
     private void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
-        Component walletText = Component.translatable("gui.servershop.wallet", WalletHandler.getPlayerMoney());
-        int walletWidth = this.font.width(walletText);
-        int walletX = this.width - walletWidth - 20;
-        int walletY = 20;
+        int money = WalletHandler.getPlayerMoney();
+        String formattedMoney = String.format("$%,d", money);
         
-        // Draw background box behind wallet
-        guiGraphics.fill(walletX - 5, walletY - 2, walletX + walletWidth + 5, walletY + 12, 0xFF1A1A1A);
-        guiGraphics.fill(walletX - 4, walletY - 1, walletX + walletWidth + 4, walletY + 11, 0xFF2D2D2D);
+        // Create title and money components
+        Component titleText = Component.literal("Balance:");
+        Component walletText = Component.literal(formattedMoney);
         
-        // Draw wallet text
-        guiGraphics.drawString(this.font, walletText, walletX, walletY, 0xFF4CAF50);
+        // Calculate widths and positions
+        int titleWidth = this.font.width(titleText);
+        int moneyWidth = this.font.width(walletText);
+        int totalWidth = Math.max(titleWidth, moneyWidth);
+        
+        int walletX = this.width - totalWidth - 20;
+        int titleY = 15;
+        int moneyY = 25;
+        
+        // Draw background box behind wallet with extra margin (adjusted for title)
+        guiGraphics.fill(walletX - 10, titleY - 4, walletX + totalWidth + 10, moneyY + 12, 0xFF1A1A1A);
+        guiGraphics.fill(walletX - 9, titleY - 3, walletX + totalWidth + 9, moneyY + 11, 0xFF2D2D2D);
+        
+        // Draw title (centered)
+        int titleX = walletX + (totalWidth - titleWidth) / 2;
+        guiGraphics.drawString(this.font, titleText, titleX, titleY, 0xFFFFFFFF);
+        
+        // Draw wallet text (centered)
+        int moneyX = walletX + (totalWidth - moneyWidth) / 2;
+        guiGraphics.drawString(this.font, walletText, moneyX, moneyY, 0xFF4CAF50);
     }
     
     /**

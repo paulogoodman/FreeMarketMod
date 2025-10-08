@@ -23,11 +23,9 @@ public class WalletHandler {
         }
         
         CompoundTag playerData = player.getPersistentData();
-        ServerShop.LOGGER.debug("Reading NBT for {} with key: {}", player.getName().getString(), WALLET_NBT_KEY);
         
         if (playerData.contains(WALLET_NBT_KEY)) {
             int balance = playerData.getInt(WALLET_NBT_KEY);
-            ServerShop.LOGGER.debug("Found NBT data for {}: {} coins", player.getName().getString(), balance);
             return balance;
         }
         
@@ -51,15 +49,7 @@ public class WalletHandler {
         CompoundTag playerData = player.getPersistentData();
         playerData.putInt(WALLET_NBT_KEY, amount);
         
-        ServerShop.LOGGER.info("Set {} money to: {} (NBT key: {})", player.getName().getString(), amount, WALLET_NBT_KEY);
-        
-        // Debug: Log the actual NBT data
-        if (playerData.contains(WALLET_NBT_KEY)) {
-            int actualValue = playerData.getInt(WALLET_NBT_KEY);
-            ServerShop.LOGGER.info("NBT verification: {} has {} coins stored", player.getName().getString(), actualValue);
-        } else {
-            ServerShop.LOGGER.warn("NBT verification failed: {} does not have {} key", player.getName().getString(), WALLET_NBT_KEY);
-        }
+        ServerShop.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
     
     /**
@@ -132,14 +122,12 @@ public class WalletHandler {
                     var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
                     if (serverPlayer != null) {
                         int balance = getPlayerMoney(serverPlayer);
-                        ServerShop.LOGGER.debug("Client wallet balance (server player) for {}: {}", serverPlayer.getName().getString(), balance);
                         return balance;
                     }
                 }
                 
                 // Fallback to client player
                 int balance = getPlayerMoney(clientPlayer);
-                ServerShop.LOGGER.debug("Client wallet balance (client player) for {}: {}", clientPlayer.getName().getString(), balance);
                 return balance;
             } else {
                 ServerShop.LOGGER.warn("Client player is null");

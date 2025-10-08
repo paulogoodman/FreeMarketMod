@@ -45,6 +45,11 @@ public class MarketplaceContainer implements Renderable {
     private long buyButtonCooldown = 0;
     private static final long BUY_COOLDOWN_MS = 1000; // 1 second cooldown
     
+    // Sell button state tracking
+    private String sellingItemGuid = null;
+    private long sellButtonCooldown = 0;
+    private static final long SELL_COOLDOWN_MS = 1000; // 1 second cooldown
+    
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
         this.y = y;
@@ -306,7 +311,6 @@ public class MarketplaceContainer implements Renderable {
     
     private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
-        boolean canSell = true;
         boolean isBuying = isItemBeingBought(item);
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
@@ -356,14 +360,37 @@ public class MarketplaceContainer implements Renderable {
         boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
                              mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
         
-        if (canSell) {
-            int sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
-            guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
-            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell", sellButtonX + 10, sellButtonY + 2, 0xFFFFFFFF);
+        boolean isSelling = isItemBeingSold(item);
+        boolean isSellCooldown = isSellButtonInCooldown(item);
+        boolean canSellItem = canSellItem(item);
+        
+        // Determine sell button state and color
+        int sellColor;
+        String sellText;
+        
+        if (isSelling) {
+            // Currently processing sale
+            sellColor = 0xFF2196F3; // Blue for processing
+            sellText = "...";
+        } else if (isSellCooldown) {
+            // In cooldown period
+            sellColor = 0xFF9E9E9E; // Gray for cooldown
+            sellText = "Wait";
+        } else if (canSellItem) {
+            // Can sell
+            sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
+            sellText = "Sell";
         } else {
-            guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, 0xFF666666);
-            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell", sellButtonX + 10, sellButtonY + 2, 0xFF999999);
+            // Cannot sell (don't have item)
+            sellColor = 0xFF666666;
+            sellText = "Sell";
         }
+        
+        guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
+        
+        // Draw text with appropriate color
+        int sellTextColor = (isSelling || isSellCooldown) ? 0xFFFFFFFF : (canSellItem ? 0xFFFFFFFF : 0xFF999999);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sellText, sellButtonX + 10, sellButtonY + 2, sellTextColor);
     }
     
     private void drawScrollBar(GuiGraphics guiGraphics) {
@@ -506,8 +533,12 @@ public class MarketplaceContainer implements Renderable {
                 
                 if (mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
                     mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight) {
-                    System.out.println("Sell button clicked for: " + item.getItemName());
-                    return true;
+                    // Handle sell button click (only if not in cooldown)
+                    if (!isSellButtonInCooldown(item) && sellItem(item)) {
+                        // Success - item was sold
+                        return true;
+                    }
+                    return true; // Still return true to consume the click
                 }
                 
                 itemsRendered++;
@@ -626,6 +657,125 @@ public class MarketplaceContainer implements Renderable {
     private boolean isBuyButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
         return currentTime < buyButtonCooldown && buyingItemGuid != null && buyingItemGuid.equals(item.getGuid());
+    }
+    
+    /**
+     * Handles selling an item to the marketplace.
+     * Validates inventory, removes item, and adds money to wallet.
+     */
+    private boolean sellItem(MarketplaceItem item) {
+        // Check cooldown
+        long currentTime = System.currentTimeMillis();
+        if (currentTime < sellButtonCooldown) {
+            return false; // Still in cooldown
+        }
+        
+        // Get the player
+        Minecraft minecraft = Minecraft.getInstance();
+        Player clientPlayer = minecraft.player;
+        if (clientPlayer == null) {
+            return false;
+        }
+        
+        // Check if player has the item in inventory
+        ItemStack itemToSell = item.getItemStack().copy();
+        if (!hasItemInInventory(clientPlayer, itemToSell)) {
+            // TODO: Show error message to player
+            return false;
+        }
+        
+        // Set cooldown and selling state
+        sellButtonCooldown = currentTime + SELL_COOLDOWN_MS;
+        sellingItemGuid = item.getGuid();
+        
+        // Remove item from inventory
+        removeItemFromInventory(clientPlayer, itemToSell);
+        
+        // Add money to wallet - use server player if available
+        Player playerForMoney = clientPlayer;
+        if (minecraft.getSingleplayerServer() != null) {
+            // In singleplayer, get the server player for money operations
+            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForMoney = serverPlayer;
+            }
+        }
+        
+        WalletHandler.addMoney(playerForMoney, item.getSellPrice());
+        
+        // Clear selling state
+        sellingItemGuid = null;
+        
+        // Refresh wallet display
+        if (parentScreen != null) {
+            parentScreen.refreshMarketplace();
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Checks if the player has the specified item in their inventory.
+     */
+    private boolean hasItemInInventory(Player player, ItemStack itemToCheck) {
+        var inventory = player.getInventory();
+        
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
+                return slotItem.getCount() >= itemToCheck.getCount();
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * Removes the specified item from the player's inventory.
+     */
+    private void removeItemFromInventory(Player player, ItemStack itemToRemove) {
+        var inventory = player.getInventory();
+        int remainingToRemove = itemToRemove.getCount();
+        
+        for (int i = 0; i < inventory.getContainerSize() && remainingToRemove > 0; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToRemove)) {
+                int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
+                slotItem.shrink(removeFromSlot);
+                remainingToRemove -= removeFromSlot;
+                
+                // Update the slot
+                inventory.setItem(i, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
+            }
+        }
+    }
+    
+    /**
+     * Checks if an item is currently being sold (for visual feedback).
+     */
+    private boolean isItemBeingSold(MarketplaceItem item) {
+        return sellingItemGuid != null && sellingItemGuid.equals(item.getGuid());
+    }
+    
+    /**
+     * Checks if sell button is in cooldown for an item.
+     */
+    private boolean isSellButtonInCooldown(MarketplaceItem item) {
+        long currentTime = System.currentTimeMillis();
+        return currentTime < sellButtonCooldown && sellingItemGuid != null && sellingItemGuid.equals(item.getGuid());
+    }
+    
+    /**
+     * Checks if the player can sell the specified item (has it in inventory).
+     */
+    private boolean canSellItem(MarketplaceItem item) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player clientPlayer = minecraft.player;
+        if (clientPlayer == null) {
+            return false;
+        }
+        
+        return hasItemInInventory(clientPlayer, item.getItemStack());
     }
     
     public boolean charTyped(char codePoint, int modifiers) {

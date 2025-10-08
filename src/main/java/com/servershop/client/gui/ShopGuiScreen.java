@@ -1,11 +1,8 @@
 package com.servershop.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -14,7 +11,6 @@ import com.servershop.ServerShop;
 import com.servershop.client.data.ClientMarketplaceDataManager;
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.AdminModeHandler;
-import com.servershop.common.handlers.WalletHandler;
 
 /**
  * Semi-transparent dark overlay GUI for the ServerShop mod.
@@ -22,7 +18,6 @@ import com.servershop.common.handlers.WalletHandler;
  */
 public class ShopGuiScreen extends Screen {
     
-    private Button plusButton;
     private List<MarketplaceItem> marketplaceItems;
     private MarketplaceContainer marketplaceContainer;
     
@@ -90,60 +85,6 @@ public class ShopGuiScreen extends Screen {
         }
     }
     
-    /**
-     * Draws the marketplace section with items for sale.
-     */
-    private void drawMarketplace(GuiGraphics guiGraphics) {
-        int marketplaceY = 60;
-        int marketplaceX = 50;
-        
-        // Draw marketplace title
-        Component marketplaceTitle = Component.translatable("gui.servershop.marketplace.title");
-        guiGraphics.drawString(this.font, marketplaceTitle, marketplaceX, marketplaceY, 0xFFFFFF);
-        
-        // Draw marketplace items
-        int itemY = marketplaceY + 25;
-        int maxItemsPerRow = 3;
-        int itemSpacing = 120;
-        int itemHeight = 80;
-        
-        for (int i = 0; i < marketplaceItems.size(); i++) {
-            MarketplaceItem item = marketplaceItems.get(i);
-            int itemX = marketplaceX + (i % maxItemsPerRow) * itemSpacing;
-            int currentItemY = itemY + (i / maxItemsPerRow) * itemHeight;
-            
-            // Draw item background
-            guiGraphics.fill(itemX - 2, currentItemY - 2, itemX + 110, currentItemY + 70, 0x80000000);
-            guiGraphics.fill(itemX - 1, currentItemY - 1, itemX + 109, currentItemY + 69, 0x80404040);
-            
-            // Draw item icon
-            guiGraphics.renderItem(item.getItemStack(), itemX, currentItemY);
-            guiGraphics.renderItemDecorations(this.font, item.getItemStack(), itemX, currentItemY);
-            
-            // Draw item name
-            String itemName = item.getItemName();
-            if (itemName.length() > 10) {
-                itemName = itemName.substring(0, 10) + "...";
-            }
-            guiGraphics.drawString(this.font, itemName, itemX, currentItemY + 18, 0xFFFFFF);
-            
-            // Draw buy price
-            guiGraphics.drawString(this.font, "Buy: " + item.getBuyPrice(), itemX, currentItemY + 30, 0x00FF00);
-            
-            // Draw sell price
-            guiGraphics.drawString(this.font, "Sell: " + item.getSellPrice(), itemX, currentItemY + 40, 0xFF6600);
-            
-            // Draw quantity
-            guiGraphics.drawString(this.font, "Stock: " + item.getQuantity(), itemX, currentItemY + 50, 0xCCCCCC);
-            
-            // Draw buy/sell buttons (simplified as text for now)
-            boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
-            boolean canSell = true; // Assume player has items to sell
-            
-            guiGraphics.drawString(this.font, "[Buy]", itemX + 60, currentItemY + 30, canBuy ? 0x00FF00 : 0x666666);
-            guiGraphics.drawString(this.font, "[Sell]", itemX + 60, currentItemY + 40, canSell ? 0xFF6600 : 0x666666);
-        }
-    }
     
     /**
      * Refreshes the GUI to update button visibility based on admin mode.

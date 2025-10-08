@@ -1,20 +1,18 @@
 package com.servershop.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
-import net.minecraft.client.gui.components.WidgetSprites;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
+
+import javax.annotation.Nonnull;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
-import com.servershop.ServerShop;
+
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.AdminModeHandler;
 import com.servershop.common.handlers.WalletHandler;
@@ -33,9 +31,7 @@ public class MarketplaceContainer implements Renderable {
     private int itemHeight = 60;
     private int itemsPerRow = 3;
     private int itemSpacing = 120;
-    private int hoveredEditButton = -1;
     private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
-    private int hoveredCategory = -1;
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items) {
         this.x = x;
@@ -87,7 +83,7 @@ public class MarketplaceContainer implements Renderable {
         scrollOffset = getMaxScroll();
     }
     
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw modern container background with gradient effect
         guiGraphics.fill(x, y, x + width, y + height, 0xFF1E1E1E);
         guiGraphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, 0xFF2A2A2A);
@@ -214,9 +210,6 @@ public class MarketplaceContainer implements Renderable {
                                mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight;
             
             // Update hover state
-            if (isHovered) {
-                hoveredCategory = i;
-            }
             
             // Draw category background
             if (isSelected) {
@@ -291,7 +284,6 @@ public class MarketplaceContainer implements Renderable {
                            mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize;
         
         if (isHovered) {
-            hoveredEditButton = itemIndex;
             // Hover state
             guiGraphics.fill(editButtonX, editButtonY, editButtonX + editButtonSize, editButtonY + editButtonSize, 0xFF4A4A4A);
             guiGraphics.fill(editButtonX + 1, editButtonY + 1, editButtonX + editButtonSize - 1, editButtonY + editButtonSize - 1, 0xFF5A5A5A);

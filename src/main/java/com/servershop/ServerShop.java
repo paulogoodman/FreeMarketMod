@@ -26,12 +26,14 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.registries.DeferredBlock;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import com.servershop.server.data.MarketplaceDataManager;
+import com.servershop.server.commands.EconomyCommands;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ServerShop.MODID)
@@ -125,5 +127,11 @@ public class ServerShop {
                 MarketplaceDataManager.createEmptyMarketplaceFile(serverLevel);
             }
         }
+    }
+    
+    @SubscribeEvent
+    public void onRegisterCommands(RegisterCommandsEvent event) {
+        // Register economy commands
+        EconomyCommands.register(event.getDispatcher());
     }
 }

@@ -1,61 +1,166 @@
 package com.servershop.common.handlers;
 
 import com.servershop.ServerShop;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * Handles player wallet/money system for the ServerShop mod.
- * This class manages player money balances.
+ * This class manages player money balances stored in player NBT data.
  */
 public class WalletHandler {
-    private static int playerMoney = 1000; // Starting money for demo
+    private static final String WALLET_NBT_KEY = "servershop_wallet";
     
     /**
-     * Gets the current player money amount.
+     * Gets the current player money amount from their NBT data.
+     * @param player the player to get money for
      * @return current money amount
      */
-    public static int getPlayerMoney() {
-        return playerMoney;
+    public static int getPlayerMoney(Player player) {
+        if (player == null) {
+            ServerShop.LOGGER.warn("Cannot get money for null player");
+            return 0;
+        }
+        
+        CompoundTag playerData = player.getPersistentData();
+        ServerShop.LOGGER.debug("Reading NBT for {} with key: {}", player.getName().getString(), WALLET_NBT_KEY);
+        
+        if (playerData.contains(WALLET_NBT_KEY)) {
+            int balance = playerData.getInt(WALLET_NBT_KEY);
+            ServerShop.LOGGER.debug("Found NBT data for {}: {} coins", player.getName().getString(), balance);
+            return balance;
+        }
+        
+        // If no wallet data exists, initialize with zero
+        ServerShop.LOGGER.info("No NBT data found for {}, initializing with 0", player.getName().getString());
+        setPlayerMoney(player, 0);
+        return 0;
     }
     
     /**
-     * Sets the player money amount.
+     * Sets the player money amount in their NBT data.
+     * @param player the player to set money for
      * @param amount the new money amount
      */
-    public static void setPlayerMoney(int amount) {
-        playerMoney = amount;
-        ServerShop.LOGGER.info("Player money set to: {}", amount);
+    public static void setPlayerMoney(Player player, int amount) {
+        if (player == null) {
+            ServerShop.LOGGER.warn("Cannot set money for null player");
+            return;
+        }
+        
+        CompoundTag playerData = player.getPersistentData();
+        playerData.putInt(WALLET_NBT_KEY, amount);
+        
+        ServerShop.LOGGER.info("Set {} money to: {} (NBT key: {})", player.getName().getString(), amount, WALLET_NBT_KEY);
+        
+        // Debug: Log the actual NBT data
+        if (playerData.contains(WALLET_NBT_KEY)) {
+            int actualValue = playerData.getInt(WALLET_NBT_KEY);
+            ServerShop.LOGGER.info("NBT verification: {} has {} coins stored", player.getName().getString(), actualValue);
+        } else {
+            ServerShop.LOGGER.warn("NBT verification failed: {} does not have {} key", player.getName().getString(), WALLET_NBT_KEY);
+        }
     }
     
     /**
      * Adds money to the player's wallet.
+     * @param player the player to add money to
      * @param amount the amount to add
      */
-    public static void addMoney(int amount) {
-        playerMoney += amount;
-        ServerShop.LOGGER.info("Added {} coins. New balance: {}", amount, playerMoney);
+    public static void addMoney(Player player, int amount) {
+        if (player == null) {
+            ServerShop.LOGGER.warn("Cannot add money for null player");
+            return;
+        }
+        
+        int currentMoney = getPlayerMoney(player);
+        int newAmount = currentMoney + amount;
+        setPlayerMoney(player, newAmount);
+        
+        ServerShop.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), newAmount);
     }
     
     /**
      * Removes money from the player's wallet.
+     * @param player the player to remove money from
      * @param amount the amount to remove
      * @return true if successful, false if insufficient funds
      */
-    public static boolean removeMoney(int amount) {
-        if (playerMoney >= amount) {
-            playerMoney -= amount;
-            ServerShop.LOGGER.info("Removed {} coins. New balance: {}", amount, playerMoney);
+    public static boolean removeMoney(Player player, int amount) {
+        if (player == null) {
+            ServerShop.LOGGER.warn("Cannot remove money for null player");
+            return false;
+        }
+        
+        int currentMoney = getPlayerMoney(player);
+        if (currentMoney >= amount) {
+            int newAmount = currentMoney - amount;
+            setPlayerMoney(player, newAmount);
+            ServerShop.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), newAmount);
             return true;
         }
-        ServerShop.LOGGER.info("Insufficient funds. Required: {}, Available: {}", amount, playerMoney);
+        
+        ServerShop.LOGGER.info("Insufficient funds for {}. Required: {}, Available: {}", player.getName().getString(), amount, currentMoney);
         return false;
     }
     
     /**
      * Checks if the player has enough money.
+     * @param player the player to check
+     * @param amount the amount to check
+     * @return true if player has enough money
+     */
+    public static boolean hasEnoughMoney(Player player, int amount) {
+        return getPlayerMoney(player) >= amount;
+    }
+    
+    /**
+     * Client-side method to get money for the current player.
+     * This is used by the GUI when we don't have direct access to the player object.
+     * @return current money amount for the client player
+     */
+    public static int getPlayerMoney() {
+        try {
+            // Try to get the client player
+            net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+            var clientPlayer = minecraft.player;
+            if (clientPlayer != null) {
+                // In singleplayer, try to get the server player instead of client player
+                var singleplayerServer = minecraft.getSingleplayerServer();
+                if (singleplayerServer != null) {
+                    // We're in singleplayer - get the server player
+                    var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
+                    if (serverPlayer != null) {
+                        int balance = getPlayerMoney(serverPlayer);
+                        ServerShop.LOGGER.debug("Client wallet balance (server player) for {}: {}", serverPlayer.getName().getString(), balance);
+                        return balance;
+                    }
+                }
+                
+                // Fallback to client player
+                int balance = getPlayerMoney(clientPlayer);
+                ServerShop.LOGGER.debug("Client wallet balance (client player) for {}: {}", clientPlayer.getName().getString(), balance);
+                return balance;
+            } else {
+                ServerShop.LOGGER.warn("Client player is null");
+            }
+        } catch (Exception e) {
+            // If we can't get the player, log the error
+            ServerShop.LOGGER.error("Could not get client player money: {}", e.getMessage());
+        }
+        
+        // Never fall back to hardcoded value - return 0 if we can't get the player
+        ServerShop.LOGGER.warn("Could not access client player, returning 0");
+        return 0;
+    }
+    
+    /**
+     * Client-side method to check if player has enough money.
+     * This is used by the GUI when we don't have direct access to the player object.
      * @param amount the amount to check
      * @return true if player has enough money
      */
     public static boolean hasEnoughMoney(int amount) {
-        return playerMoney >= amount;
+        return getPlayerMoney() >= amount;
     }
 }

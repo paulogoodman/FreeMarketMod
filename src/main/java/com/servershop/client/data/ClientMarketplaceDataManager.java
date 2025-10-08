@@ -36,13 +36,41 @@ public class ClientMarketplaceDataManager {
         try {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.level == null || minecraft.level.dimension() == null) {
+                ServerShop.LOGGER.warn("No world loaded - cannot load marketplace data");
                 return items; // No world loaded
             }
             
-            // Get the world data directory
-            Path worldPath = minecraft.gameDirectory.toPath().resolve("saves").resolve(minecraft.getSingleplayerServer() != null ? 
-                minecraft.getSingleplayerServer().getWorldData().getLevelName() : "New World");
-            Path marketplaceFile = worldPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+            ServerShop.LOGGER.debug("Attempting to load marketplace data...");
+            ServerShop.LOGGER.debug("Singleplayer server available: {}", minecraft.getSingleplayerServer() != null);
+            ServerShop.LOGGER.debug("Level server available: {}", minecraft.level.getServer() != null);
+            
+            // Get the world data directory - use integrated server's world path directly
+            Path marketplaceFile = null;
+            
+            // Try to get the marketplace file path directly from the integrated server
+            if (minecraft.getSingleplayerServer() != null) {
+                // Use the server's world path directly - this is the most reliable method
+                Path worldDataPath = minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                ServerShop.LOGGER.info("Using integrated server world path: {}", worldDataPath);
+            } else if (minecraft.level != null && minecraft.level.dimension() != null) {
+                // Fallback: try to get world path from level data
+                try {
+                    Path worldDataPath = minecraft.level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                    marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                    ServerShop.LOGGER.info("Using level server world path: {}", worldDataPath);
+                } catch (Exception e) {
+                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                }
+            }
+            
+            // If we still can't get the world path, we can't proceed
+            if (marketplaceFile == null) {
+                ServerShop.LOGGER.error("Could not determine current world path - cannot load marketplace data");
+                return items;
+            }
+            
+            ServerShop.LOGGER.info("Loading marketplace from: {}", marketplaceFile);
             
             File file = marketplaceFile.toFile();
             
@@ -124,10 +152,29 @@ public class ClientMarketplaceDataManager {
                 return false; // No world loaded
             }
             
-            // Get the world data directory
-            Path worldPath = minecraft.gameDirectory.toPath().resolve("saves").resolve(minecraft.getSingleplayerServer() != null ? 
-                minecraft.getSingleplayerServer().getWorldData().getLevelName() : "New World");
-            Path marketplaceFile = worldPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+            // Get the world data directory - use integrated server's world path directly
+            Path marketplaceFile = null;
+            
+            // Try to get the marketplace file path directly from the integrated server
+            if (minecraft.getSingleplayerServer() != null) {
+                // Use the server's world path directly - this is the most reliable method
+                Path worldDataPath = minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+            } else if (minecraft.level != null && minecraft.level.dimension() != null) {
+                // Fallback: try to get world path from level data
+                try {
+                    Path worldDataPath = minecraft.level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                    marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                } catch (Exception e) {
+                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                }
+            }
+            
+            // If we still can't get the world path, we can't proceed
+            if (marketplaceFile == null) {
+                ServerShop.LOGGER.error("Could not determine current world path - cannot check marketplace file");
+                return false;
+            }
             
             return marketplaceFile.toFile().exists();
             

@@ -613,8 +613,9 @@ public class MarketplaceContainer implements Renderable {
         Player playerForInventory = clientPlayer;
         
         // In singleplayer, use server player for inventory operations to ensure persistence
-        if (minecraft.getSingleplayerServer() != null) {
-            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
             if (serverPlayer != null) {
                 playerForInventory = serverPlayer;
             }
@@ -623,19 +624,15 @@ public class MarketplaceContainer implements Renderable {
         boolean addedToInventory = playerForInventory.getInventory().add(itemToGive);
         
         if (!addedToInventory) {
-            // Inventory full - drop item at player's feet
-            BlockPos playerPos = playerForInventory.blockPosition();
-            Level level = playerForInventory.level();
-            
             // Drop the item at player's feet
             playerForInventory.drop(itemToGive, false);
         }
         
         // Deduct money from wallet - use server player if available
         Player playerForMoney = clientPlayer;
-        if (minecraft.getSingleplayerServer() != null) {
+        if (singleplayerServer != null) {
             // In singleplayer, get the server player for money operations
-            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
             if (serverPlayer != null) {
                 playerForMoney = serverPlayer;
             }
@@ -692,8 +689,9 @@ public class MarketplaceContainer implements Renderable {
         Player playerForInventory = clientPlayer;
         
         // In singleplayer, use server player for inventory operations to ensure persistence
-        if (minecraft.getSingleplayerServer() != null) {
-            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
             if (serverPlayer != null) {
                 playerForInventory = serverPlayer;
             }
@@ -713,9 +711,9 @@ public class MarketplaceContainer implements Renderable {
         
         // Add money to wallet - use server player if available
         Player playerForMoney = clientPlayer;
-        if (minecraft.getSingleplayerServer() != null) {
+        if (singleplayerServer != null) {
             // In singleplayer, get the server player for money operations
-            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
             if (serverPlayer != null) {
                 playerForMoney = serverPlayer;
             }
@@ -797,8 +795,9 @@ public class MarketplaceContainer implements Renderable {
         
         // Use server player for inventory check to ensure consistency
         Player playerForCheck = clientPlayer;
-        if (minecraft.getSingleplayerServer() != null) {
-            var serverPlayer = minecraft.getSingleplayerServer().getPlayerList().getPlayer(clientPlayer.getUUID());
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
             if (serverPlayer != null) {
                 playerForCheck = serverPlayer;
             }

@@ -33,7 +33,7 @@ public class MarketplaceContainer implements Renderable {
     private EditBox searchBox;
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
-    private int itemHeight = 60;
+    private int itemHeight = 90; // Increased to accommodate larger layout
     private int itemsPerRow = 3;
     private int itemSpacing = 120;
     private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
@@ -127,10 +127,7 @@ public class MarketplaceContainer implements Renderable {
         
         // Wallet display is now handled in the main screen
         
-        // Draw add button in top right (only if admin mode)
-        if (AdminModeHandler.isAdminMode()) {
-            renderAddButton(guiGraphics, mouseX, mouseY);
-        }
+        // Add button is now handled as a special marketplace item
         
         // Draw category sidebar
         renderCategorySidebar(guiGraphics, mouseX, mouseY);
@@ -159,40 +156,16 @@ public class MarketplaceContainer implements Renderable {
         // Draw scroll bar
         drawScrollBar(guiGraphics);
         
-        // Draw item count
-        Component countText = Component.translatable("gui.servershop.marketplace.count", itemsToRender.size(), allItems.size());
+        // Draw item count (exclude add item from count)
+        int actualItemCount = itemsToRender.size();
+        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            actualItemCount--; // Subtract 1 for the add item
+        }
+        Component countText = Component.translatable("gui.servershop.marketplace.count", actualItemCount, allItems.size());
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + 10, y + height - 15, 0xCCCCCC);
     }
     
     
-    private void renderAddButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        int addButtonX = x + width - 30;
-        int addButtonY = y + 20;
-        int addButtonSize = 24;
-        
-        boolean isHovered = mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
-                           mouseY >= addButtonY && mouseY <= addButtonY + addButtonSize;
-        
-        // Modern add button with hover effect
-        if (isHovered) {
-            // Hover state - brighter background
-            guiGraphics.fill(addButtonX, addButtonY, addButtonX + addButtonSize, addButtonY + addButtonSize, 0xFF4A4A4A);
-            guiGraphics.fill(addButtonX + 1, addButtonY + 1, addButtonX + addButtonSize - 1, addButtonY + addButtonSize - 1, 0xFF5A5A5A);
-        } else {
-            // Normal state
-            guiGraphics.fill(addButtonX, addButtonY, addButtonX + addButtonSize, addButtonY + addButtonSize, 0xFF3A3A3A);
-            guiGraphics.fill(addButtonX + 1, addButtonY + 1, addButtonX + addButtonSize - 1, addButtonY + addButtonSize - 1, 0xFF4A4A4A);
-        }
-        
-        // Draw modern + icon
-        int centerX = addButtonX + addButtonSize / 2;
-        int centerY = addButtonY + addButtonSize / 2;
-        int plusColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
-        
-        // Draw + lines
-        guiGraphics.fill(centerX - 6, centerY - 1, centerX + 6, centerY + 1, plusColor);
-        guiGraphics.fill(centerX - 1, centerY - 6, centerX + 1, centerY + 6, plusColor);
-    }
     
     private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int sidebarWidth = 120;
@@ -244,6 +217,23 @@ public class MarketplaceContainer implements Renderable {
         }
     }
     
+    /**
+     * Creates a special marketplace item entry for adding new items.
+     * This item has a special GUID that identifies it as the add button.
+     */
+    private MarketplaceItem createAddItemEntry() {
+        // Create a dummy item stack (we won't actually use it for rendering)
+        net.minecraft.world.item.ItemStack dummyStack = net.minecraft.world.item.Items.AIR.getDefaultInstance();
+        return new MarketplaceItem(dummyStack, 0, 0, 0, "admin", "ADD_ITEM_SPECIAL");
+    }
+    
+    /**
+     * Checks if a marketplace item is the special "add item" entry.
+     */
+    private boolean isAddItemEntry(MarketplaceItem item) {
+        return "ADD_ITEM_SPECIAL".equals(item.getGuid());
+    }
+    
     private List<MarketplaceItem> getItemsToRender() {
         // First filter by category
         List<MarketplaceItem> categoryFiltered = ItemCategoryManager.filterItemsByCategory(allItems, selectedCategory);
@@ -251,42 +241,117 @@ public class MarketplaceContainer implements Renderable {
         // Then filter by search text
         if (searchBox != null && !searchBox.getValue().isEmpty()) {
             String searchText = searchBox.getValue().toLowerCase();
-            return categoryFiltered.stream()
+            categoryFiltered = categoryFiltered.stream()
                 .filter(item -> item.getItemName().toLowerCase().contains(searchText))
                 .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        }
+        
+        // Add special "add item" entry if in admin mode and not searching
+        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            // Create a special marketplace item for adding new items
+            MarketplaceItem addItem = createAddItemEntry();
+            categoryFiltered.add(addItem);
         }
         
         return categoryFiltered;
     }
     
     private void renderModernItemCard(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
-        // Modern card background with subtle shadow
-        guiGraphics.fill(itemX - 3, itemY - 3, itemX + 115, itemY + 55, 0xFF1A1A1A);
-        guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 54, 0xFF2D2D2D);
-        guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 53, 0xFF3A3A3A);
+        // Check if this is the special add item entry
+        if (isAddItemEntry(item)) {
+            renderAddItemCard(guiGraphics, itemX, itemY, mouseX, mouseY);
+            return;
+        }
+        
+        // Modern card background with subtle shadow (increased height for larger layout)
+        guiGraphics.fill(itemX - 3, itemY - 3, itemX + 115, itemY + 85, 0xFF1A1A1A);
+        guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 84, 0xFF2D2D2D);
+        guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 83, 0xFF3A3A3A);
         
             // Draw modern delete button (only if admin mode)
-            if (AdminModeHandler.isAdminMode()) {
+        if (AdminModeHandler.isAdminMode()) {
                 renderModernDeleteButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
             }
         
-        // Draw item icon with better positioning
-        guiGraphics.renderItem(item.getItemStack(), itemX + 2, itemY + 2);
-        guiGraphics.renderItemDecorations(net.minecraft.client.Minecraft.getInstance().font, item.getItemStack(), itemX + 2, itemY + 2);
+        // Create item stack with the marketplace quantity for display
+        net.minecraft.world.item.ItemStack displayStack = item.getItemStack().copy();
+        displayStack.setCount(item.getQuantity());
         
-        // Draw item name with better styling
-        String itemName = item.getItemName();
-        if (itemName.length() > 12) {
-            itemName = itemName.substring(0, 12) + "...";
+        // Calculate centered position for item stack (30% smaller)
+        int itemStackSize = 28; // 30% smaller than 40 (40 * 0.7 = 28)
+        int itemStackX = itemX + (115 - itemStackSize) / 2; // Center horizontally
+        int itemStackY = itemY + 5; // Start near top
+        
+        // Draw item icon with quantity overlay (scaled to fit 28x28 space)
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(itemStackX, itemStackY, 0);
+        guiGraphics.pose().scale(1.75f, 1.75f, 1.0f); // Scale up to fill 28x28 (16*1.75=28)
+        guiGraphics.renderItem(displayStack, 0, 0);
+        guiGraphics.renderItemDecorations(net.minecraft.client.Minecraft.getInstance().font, displayStack, 0, 0);
+        guiGraphics.pose().popPose();
+        
+        // Check if mouse is hovering over the item stack for tooltip
+        if (mouseX >= itemStackX && mouseX <= itemStackX + itemStackSize &&
+            mouseY >= itemStackY && mouseY <= itemStackY + itemStackSize) {
+            // Render item tooltip
+            renderItemTooltip(guiGraphics, displayStack, mouseX, mouseY);
         }
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, itemName, itemX + 20, itemY + 5, 0xFFE0E0E0);
         
-        // Draw prices with better formatting
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Buy: $" + item.getBuyPrice(), itemX + 20, itemY + 18, 0xFF4CAF50);
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "Sell: $" + item.getSellPrice(), itemX + 20, itemY + 28, 0xFFFF9800);
+        // Draw clickable price buttons
+        renderClickablePriceButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
+    }
+    
+    /**
+     * Renders the item tooltip when hovering over an item card.
+     */
+    private void renderItemTooltip(GuiGraphics guiGraphics, net.minecraft.world.item.ItemStack itemStack, int mouseX, int mouseY) {
+        // Get the item's tooltip components
+        java.util.List<net.minecraft.network.chat.Component> tooltip = itemStack.getTooltipLines(
+            net.minecraft.world.item.Item.TooltipContext.EMPTY,
+            net.minecraft.client.Minecraft.getInstance().player,
+            net.minecraft.world.item.TooltipFlag.Default.NORMAL
+        );
         
-        // Draw modern action buttons
-        renderActionButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
+        // Render the tooltip
+        guiGraphics.renderTooltip(
+            net.minecraft.client.Minecraft.getInstance().font,
+            tooltip,
+            itemStack.getTooltipImage(),
+            mouseX, mouseY
+        );
+    }
+    
+    /**
+     * Renders the special "add item" card that looks like a marketplace item but with a big plus icon.
+     */
+    private void renderAddItemCard(GuiGraphics guiGraphics, int itemX, int itemY, int mouseX, int mouseY) {
+        // Modern card background with subtle shadow (same as regular items)
+        guiGraphics.fill(itemX - 3, itemY - 3, itemX + 115, itemY + 85, 0xFF1A1A1A);
+        guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 84, 0xFF2D2D2D);
+        guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 83, 0xFF3A3A3A);
+        
+        // Check if mouse is hovering over the add item card
+        boolean isHovered = mouseX >= itemX - 3 && mouseX <= itemX + 115 &&
+                           mouseY >= itemY - 3 && mouseY <= itemY + 85;
+        
+        // Draw a big plus icon in the center of the card (moved up)
+        int centerX = itemX + 57; // Center of the card (115/2)
+        int centerY = itemY + 20; // Moved up from 27 to 20
+        int plusSize = 20;
+        int plusColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A; // Green color, brighter on hover
+        
+        // Draw + lines (horizontal and vertical)
+        guiGraphics.fill(centerX - plusSize/2, centerY - 2, centerX + plusSize/2, centerY + 2, plusColor);
+        guiGraphics.fill(centerX - 2, centerY - plusSize/2, centerX + 2, centerY + plusSize/2, plusColor);
+        
+        // Draw "Add Item" text below the plus (moved up)
+        String addText = "Add Item";
+        int textWidth = net.minecraft.client.Minecraft.getInstance().font.width(addText);
+        int textX = itemX + (115 - textWidth) / 2; // Center the text
+        int textY = itemY + 32; // Moved up from 40 to 32
+        int textColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A;
+        
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, addText, textX, textY, textColor);
     }
     
     private void renderModernDeleteButton(GuiGraphics guiGraphics, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
@@ -305,14 +370,18 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "🗑", iconX, iconY, iconColor);
     }
     
-    private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
+    private void renderClickablePriceButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
+        boolean canSellItem = canSellItem(item);
+        boolean isSellCooldown = isSellButtonInCooldown(item);
         
-        // Buy button
-        int buyButtonX = itemX + 20;
-        int buyButtonY = itemY + 38;
-        int buyButtonWidth = 35;
+        // Buy price button (left side)
+        String buyText = "Buy: $" + item.getBuyPrice();
+        int buyTextWidth = net.minecraft.client.Minecraft.getInstance().font.width(buyText);
+        int buyButtonX = itemX + 5; // Left side
+        int buyButtonY = itemY + 50; // Moved down to accommodate larger item stack
+        int buyButtonWidth = buyTextWidth + 8; // Add padding
         int buyButtonHeight = 12;
         
         boolean buyHovered = mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
@@ -320,65 +389,62 @@ public class MarketplaceContainer implements Renderable {
         
         // Determine buy button state and color
         int buyColor;
-        String buyText;
+        String displayBuyText = buyText;
         
         if (isBuyCooldown) {
             // In cooldown
             buyColor = 0xFF9E9E9E; // Gray for cooldown
-            buyText = "🔄";
+            displayBuyText = "🔄";
         } else if (canBuy) {
             // Can buy
             buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
-            buyText = "Buy";
         } else {
             // Cannot buy (insufficient funds)
             buyColor = 0xFF666666;
-            buyText = "Buy";
         }
         
+        // Draw buy button background
         guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
         
-        // Draw text with appropriate color
-        int textColor = isBuyCooldown ? 0xFFFFFFFF : (canBuy ? 0xFFFFFFFF : 0xFF999999);
-        int textX = buyButtonX + (buyButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(buyText)) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, buyText, textX, buyButtonY + 2, textColor);
+        // Draw buy text
+        int buyTextColor = (isBuyCooldown || canBuy) ? 0xFFFFFFFF : 0xFF999999;
+        int buyTextX = buyButtonX + (buyButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(displayBuyText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, displayBuyText, buyTextX, buyButtonY + 2, buyTextColor);
         
-        // Sell button
-        int sellButtonX = itemX + 60;
-        int sellButtonY = itemY + 38;
-        int sellButtonWidth = 35;
+        // Sell price button (right side)
+        String sellText = "Sell: $" + item.getSellPrice();
+        int sellTextWidth = net.minecraft.client.Minecraft.getInstance().font.width(sellText);
+        int sellButtonX = itemX + 115 - sellTextWidth - 13; // Right side (115 - text width - padding)
+        int sellButtonY = itemY + 50; // Same Y as buy button
+        int sellButtonWidth = sellTextWidth + 8; // Add padding
         int sellButtonHeight = 12;
         
         boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
                              mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
         
-        boolean isSellCooldown = isSellButtonInCooldown(item);
-        boolean canSellItem = canSellItem(item);
-        
         // Determine sell button state and color
         int sellColor;
-        String sellText;
+        String displaySellText = sellText;
         
         if (isSellCooldown) {
             // In cooldown
             sellColor = 0xFF9E9E9E; // Gray for cooldown
-            sellText = "🔄";
+            displaySellText = "🔄";
         } else if (canSellItem) {
             // Can sell
             sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
-            sellText = "Sell";
         } else {
             // Cannot sell (don't have item)
             sellColor = 0xFF666666;
-            sellText = "Sell";
         }
         
+        // Draw sell button background
         guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
         
-        // Draw text with appropriate color
-        int sellTextColor = isSellCooldown ? 0xFFFFFFFF : (canSellItem ? 0xFFFFFFFF : 0xFF999999);
-        int sellTextX = sellButtonX + (sellButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(sellText)) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sellText, sellTextX, sellButtonY + 2, sellTextColor);
+        // Draw sell text
+        int sellTextColor = (isSellCooldown || canSellItem) ? 0xFFFFFFFF : 0xFF999999;
+        int sellTextX = sellButtonX + (sellButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(displaySellText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, displaySellText, sellTextX, sellButtonY + 2, sellTextColor);
     }
     
     private void drawScrollBar(GuiGraphics guiGraphics) {
@@ -425,22 +491,6 @@ public class MarketplaceContainer implements Renderable {
             return true;
         }
         
-        // Handle add button click (only if admin mode)
-        if (AdminModeHandler.isAdminMode()) {
-            int addButtonX = x + width - 30;
-            int addButtonY = y + 20;
-            int addButtonSize = 24;
-            
-            if (mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
-                mouseY >= addButtonY && mouseY <= addButtonY + addButtonSize) {
-                // Open add item popup
-                if (parentScreen != null) {
-                    net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
-                }
-                return true;
-            }
-        }
-        
         // Handle category sidebar clicks
         int sidebarWidth = 120;
         int sidebarX = x + 10;
@@ -478,6 +528,18 @@ public class MarketplaceContainer implements Renderable {
                 int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
+                // Check if this is the add item entry
+                if (isAddItemEntry(item)) {
+                    // Handle click on add item card
+                    if (mouseX >= itemX - 3 && mouseX <= itemX + 115 &&
+                        mouseY >= itemY - 3 && mouseY <= itemY + 85) {
+                        // Open add item popup
+                        if (parentScreen != null) {
+                            net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
+                        }
+                        return true;
+                    }
+                } else {
                     // Check delete button click (only if admin mode)
                     if (AdminModeHandler.isAdminMode()) {
                         int deleteButtonX = itemX + 90;
@@ -494,29 +556,33 @@ public class MarketplaceContainer implements Renderable {
                                 parentScreen.refreshMarketplace();
                             }
                             
-                            return true;
-                        }
+                        return true;
                     }
+                }
                 
-                // Check buy/sell button clicks
-                int buyButtonX = itemX + 20;
-                int buyButtonY = itemY + 38;
-                int buyButtonWidth = 35;
-                int buyButtonHeight = 12;
+                    // Check buy/sell button clicks (now the price buttons)
+                    String buyText = "Buy: $" + item.getBuyPrice();
+                    int buyTextWidth = net.minecraft.client.Minecraft.getInstance().font.width(buyText);
+                    int buyButtonX = itemX + 5; // Left side
+                    int buyButtonY = itemY + 50; // Updated to match rendering position
+                    int buyButtonWidth = buyTextWidth + 8;
+                    int buyButtonHeight = 12;
                 
                 if (mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
                     mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight) {
                     // Handle buy button click (only if not in cooldown)
                     if (!isBuyButtonInCooldown(item) && buyItem(item)) {
                         // Success - item was bought
-                        return true;
+                    return true;
                     }
                     return true; // Still return true to consume the click
                 }
                 
-                int sellButtonX = itemX + 60;
-                int sellButtonY = itemY + 38;
-                int sellButtonWidth = 35;
+                String sellText = "Sell: $" + item.getSellPrice();
+                int sellTextWidth = net.minecraft.client.Minecraft.getInstance().font.width(sellText);
+                int sellButtonX = itemX + 115 - sellTextWidth - 13; // Right side
+                int sellButtonY = itemY + 50; // Same Y as buy button
+                int sellButtonWidth = sellTextWidth + 8;
                 int sellButtonHeight = 12;
                 
                 if (mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
@@ -524,9 +590,10 @@ public class MarketplaceContainer implements Renderable {
                     // Handle sell button click (only if not in cooldown)
                     if (!isSellButtonInCooldown(item) && sellItem(item)) {
                         // Success - item was sold
-                        return true;
+                    return true;
                     }
                     return true; // Still return true to consume the click
+                }
                 }
                 
                 itemsRendered++;

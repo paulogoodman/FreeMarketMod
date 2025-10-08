@@ -21,6 +21,7 @@
   "gui.servershop.marketplace.count": "Showing %d of %d items",
   
   "gui.servershop.add_item.title": "Add Item to Marketplace",
+  "gui.servershop.add_item.item_id": "Item ID",
   "gui.servershop.add_item.item_name": "Item Name",
   "gui.servershop.add_item.buy_price": "Buy Price",
   "gui.servershop.add_item.sell_price": "Sell Price",

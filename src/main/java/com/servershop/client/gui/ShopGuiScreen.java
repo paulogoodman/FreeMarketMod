@@ -11,7 +11,7 @@ import java.util.List;
 import com.servershop.ServerShop;
 import com.servershop.client.data.ClientMarketplaceDataManager;
 import com.servershop.common.data.MarketplaceItem;
-import com.servershop.common.handlers.AdminModeHandler;
+import com.servershop.common.handlers.WalletHandler;
 
 /**
  * Semi-transparent dark overlay GUI for the ServerShop mod.
@@ -70,15 +70,10 @@ public class ShopGuiScreen extends Screen {
         int titleY = 20;
         guiGraphics.drawString(this.font, this.title, titleX, titleY, 0xFFFFFF);
         
-        // Wallet display is now handled inside the marketplace container
+        // Draw wallet display in top right of screen
+        renderWalletDisplay(guiGraphics);
         
-        // Draw admin mode status if enabled (smaller, top right)
-        if (AdminModeHandler.isAdminMode()) {
-            Component adminStatus = Component.translatable("gui.servershop.admin_mode");
-            int adminWidth = this.font.width(adminStatus);
-            int adminX = this.width - adminWidth - 20;
-            guiGraphics.drawString(this.font, adminStatus, adminX, 20, 0x00FF00);
-        }
+        // Wallet display is now handled inside the marketplace container
         
         // Render marketplace container
         if (marketplaceContainer != null) {
@@ -86,6 +81,20 @@ public class ShopGuiScreen extends Screen {
         }
     }
     
+    private void renderWalletDisplay(GuiGraphics guiGraphics) {
+        // Draw wallet display in top right of screen with background
+        Component walletText = Component.translatable("gui.servershop.wallet", WalletHandler.getPlayerMoney());
+        int walletWidth = this.font.width(walletText);
+        int walletX = this.width - walletWidth - 20;
+        int walletY = 20;
+        
+        // Draw background box behind wallet
+        guiGraphics.fill(walletX - 5, walletY - 2, walletX + walletWidth + 5, walletY + 12, 0xFF1A1A1A);
+        guiGraphics.fill(walletX - 4, walletY - 1, walletX + walletWidth + 4, walletY + 11, 0xFF2D2D2D);
+        
+        // Draw wallet text
+        guiGraphics.drawString(this.font, walletText, walletX, walletY, 0xFF4CAF50);
+    }
     
     /**
      * Refreshes the GUI to update button visibility based on admin mode.

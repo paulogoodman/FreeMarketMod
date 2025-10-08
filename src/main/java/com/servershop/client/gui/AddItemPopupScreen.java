@@ -6,11 +6,11 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Item;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.List;
 
 import com.servershop.ServerShop;
 import com.servershop.common.data.MarketplaceItem;
@@ -23,34 +23,20 @@ import com.servershop.client.data.ClientMarketplaceDataManager;
 public class AddItemPopupScreen extends Screen {
     
     private final ShopGuiScreen parentScreen;
-    private EditBox itemNameBox;
+    private EditBox itemIdBox;
     private EditBox buyPriceBox;
     private EditBox sellPriceBox;
     private EditBox quantityBox;
     private Button addButton;
     private Button cancelButton;
     
-    // Sample items for demonstration
-    private final List<ItemStack> sampleItems = new ArrayList<>();
-    private int selectedItemIndex = 0;
+    // Current selected item
+    private ItemStack selectedItem = null;
+    private String itemIdError = null;
     
     public AddItemPopupScreen(ShopGuiScreen parent) {
         super(Component.translatable("gui.servershop.add_item.title"));
         this.parentScreen = parent;
-        
-        // Initialize sample items
-        initializeSampleItems();
-    }
-    
-    private void initializeSampleItems() {
-        sampleItems.add(new ItemStack(Items.DIAMOND));
-        sampleItems.add(new ItemStack(Items.EMERALD));
-        sampleItems.add(new ItemStack(Items.GOLD_INGOT));
-        sampleItems.add(new ItemStack(Items.IRON_INGOT));
-        sampleItems.add(new ItemStack(Items.COAL));
-        sampleItems.add(new ItemStack(Items.REDSTONE));
-        sampleItems.add(new ItemStack(Items.LAPIS_LAZULI));
-        sampleItems.add(new ItemStack(Items.QUARTZ));
     }
     
     @Override
@@ -58,88 +44,89 @@ public class AddItemPopupScreen extends Screen {
         super.init();
         
         // Calculate popup dimensions and position (centered)
-        int popupWidth = 300;
-        int popupHeight = 200;
+        int popupWidth = 350;
+        int popupHeight = 280;
         int popupX = (this.width - popupWidth) / 2;
         int popupY = (this.height - popupHeight) / 2;
         
-        // Item name input
-        this.itemNameBox = new EditBox(this.font, popupX + 20, popupY + 40, 120, 20, 
-            Component.translatable("gui.servershop.add_item.item_name"));
-        this.itemNameBox.setValue(sampleItems.get(selectedItemIndex).getItem().getDescription().getString());
-        this.addRenderableWidget(this.itemNameBox);
+        // Item ID input
+        this.itemIdBox = new EditBox(this.font, popupX + 20, popupY + 50, 200, 20, 
+            Component.translatable("gui.servershop.add_item.item_id"));
+        this.itemIdBox.setValue("minecraft:diamond");
+        this.itemIdBox.setResponder(this::onItemIdChanged);
+        this.addRenderableWidget(this.itemIdBox);
         
         // Buy price input
-        this.buyPriceBox = new EditBox(this.font, popupX + 20, popupY + 70, 120, 20, 
+        this.buyPriceBox = new EditBox(this.font, popupX + 20, popupY + 90, 120, 20, 
             Component.translatable("gui.servershop.add_item.buy_price"));
         this.buyPriceBox.setValue("100");
         this.addRenderableWidget(this.buyPriceBox);
         
         // Sell price input
-        this.sellPriceBox = new EditBox(this.font, popupX + 20, popupY + 100, 120, 20, 
+        this.sellPriceBox = new EditBox(this.font, popupX + 20, popupY + 130, 120, 20, 
             Component.translatable("gui.servershop.add_item.sell_price"));
         this.sellPriceBox.setValue("80");
         this.addRenderableWidget(this.sellPriceBox);
         
         // Quantity input
-        this.quantityBox = new EditBox(this.font, popupX + 20, popupY + 130, 120, 20, 
+        this.quantityBox = new EditBox(this.font, popupX + 20, popupY + 170, 120, 20, 
             Component.translatable("gui.servershop.add_item.quantity"));
         this.quantityBox.setValue("1");
         this.addRenderableWidget(this.quantityBox);
-        
-        // Item selection buttons
-        Button prevItemButton = Button.builder(
-            Component.literal("◀"),
-            button -> selectPreviousItem()
-        ).bounds(popupX + 160, popupY + 40, 20, 20).build();
-        this.addRenderableWidget(prevItemButton);
-        
-        Button nextItemButton = Button.builder(
-            Component.literal("▶"),
-            button -> selectNextItem()
-        ).bounds(popupX + 200, popupY + 40, 20, 20).build();
-        this.addRenderableWidget(nextItemButton);
         
         // Add button
         this.addButton = Button.builder(
             Component.translatable("gui.servershop.add_item.add"),
             button -> addItemToList()
-        ).bounds(popupX + 20, popupY + 170, 80, 20).build();
+        ).bounds(popupX + 20, popupY + 220, 80, 20).build();
         this.addRenderableWidget(this.addButton);
         
         // Cancel button
         this.cancelButton = Button.builder(
             Component.translatable("gui.servershop.add_item.cancel"),
             button -> onClose()
-        ).bounds(popupX + 120, popupY + 170, 80, 20).build();
+        ).bounds(popupX + 120, popupY + 220, 80, 20).build();
         this.addRenderableWidget(this.cancelButton);
     }
     
-    private void selectPreviousItem() {
-        selectedItemIndex = (selectedItemIndex - 1 + sampleItems.size()) % sampleItems.size();
-        updateItemName();
-    }
-    
-    private void selectNextItem() {
-        selectedItemIndex = (selectedItemIndex + 1) % sampleItems.size();
-        updateItemName();
-    }
-    
-    private void updateItemName() {
-        this.itemNameBox.setValue(sampleItems.get(selectedItemIndex).getItem().getDescription().getString());
+    private void onItemIdChanged(String itemId) {
+        itemIdError = null;
+        selectedItem = null;
+        
+        if (itemId.isEmpty()) {
+            return;
+        }
+        
+        try {
+            ResourceLocation itemLocation = ResourceLocation.parse(itemId);
+            
+            if (BuiltInRegistries.ITEM.containsKey(itemLocation)) {
+                Item item = BuiltInRegistries.ITEM.get(itemLocation);
+                selectedItem = new ItemStack(item, 1);
+            } else {
+                itemIdError = "Invalid item ID: " + itemId;
+            }
+        } catch (Exception e) {
+            itemIdError = "Invalid format: " + itemId;
+        }
     }
     
     private void addItemToList() {
         try {
             // Get input values
-            String itemName = this.itemNameBox.getValue();
+            String itemId = this.itemIdBox.getValue();
             String buyPriceStr = this.buyPriceBox.getValue();
             String sellPriceStr = this.sellPriceBox.getValue();
             String quantityStr = this.quantityBox.getValue();
             
             // Validate inputs
-            if (itemName.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
+            if (itemId.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
                 ServerShop.LOGGER.warn("All fields must be filled");
+                return;
+            }
+            
+            if (selectedItem == null) {
+                ServerShop.LOGGER.warn("Please enter a valid item ID");
                 return;
             }
             
@@ -154,11 +141,11 @@ public class AddItemPopupScreen extends Screen {
             }
             
             // Get the selected item stack
-            ItemStack selectedItem = sampleItems.get(selectedItemIndex);
+            ItemStack itemStack = selectedItem.copy();
             
             // Create marketplace item
             MarketplaceItem marketplaceItem = new MarketplaceItem(
-                selectedItem.copy(), 
+                itemStack, 
                 buyPrice, 
                 sellPrice, 
                 quantity, 
@@ -169,7 +156,7 @@ public class AddItemPopupScreen extends Screen {
             ClientMarketplaceDataManager.addMarketplaceItem(marketplaceItem);
             
             ServerShop.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
-                itemName, buyPrice, sellPrice, quantity);
+                itemStack.getItem().getDescription().getString(), buyPrice, sellPrice, quantity);
             
             // Close the popup
             onClose();
@@ -181,17 +168,17 @@ public class AddItemPopupScreen extends Screen {
     
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Draw semi-transparent background
-        int overlayAlpha = 200; // More opaque than main screen
-        guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
-        
         // Calculate popup dimensions and position
-        int popupWidth = 300;
-        int popupHeight = 220;
+        int popupWidth = 350;
+        int popupHeight = 280;
         int popupX = (this.width - popupWidth) / 2;
         int popupY = (this.height - popupHeight) / 2;
         
-        // Draw popup background
+        // Draw semi-transparent background FIRST (behind everything)
+        int overlayAlpha = 200; // More opaque than main screen
+        guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
+        
+        // Draw popup background (on top of blur)
         guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF2C2C2C);
         guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF404040);
         
@@ -210,19 +197,31 @@ public class AddItemPopupScreen extends Screen {
         guiGraphics.drawString(this.font, this.title, titleX, popupY + 10, 0xFFFFFF);
         
         // Draw labels (after widgets to ensure they're on top)
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.item_name"), 
-            popupX + 20, popupY + 30, 0xCCCCCC);
+        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.item_id"), 
+            popupX + 20, popupY + 40, 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.buy_price"), 
-            popupX + 20, popupY + 60, 0xCCCCCC);
+            popupX + 20, popupY + 80, 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.sell_price"), 
-            popupX + 20, popupY + 90, 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.quantity"), 
             popupX + 20, popupY + 120, 0xCCCCCC);
+        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.quantity"), 
+            popupX + 20, popupY + 160, 0xCCCCCC);
         
-        // Draw item icon (after widgets to ensure it's on top)
-        ItemStack currentItem = sampleItems.get(selectedItemIndex);
-        guiGraphics.renderItem(currentItem, popupX + 160, popupY + 70);
-        guiGraphics.renderItemDecorations(this.font, currentItem, popupX + 160, popupY + 70);
+        // Draw item preview and error messages
+        if (selectedItem != null) {
+            // Draw item icon
+            guiGraphics.renderItem(selectedItem, popupX + 250, popupY + 50);
+            guiGraphics.renderItemDecorations(this.font, selectedItem, popupX + 250, popupY + 50);
+            
+            // Draw item name
+            String itemName = selectedItem.getItem().getDescription().getString();
+            if (itemName.length() > 15) {
+                itemName = itemName.substring(0, 15) + "...";
+            }
+            guiGraphics.drawString(this.font, itemName, popupX + 250, popupY + 70, 0xFFFFFF);
+        } else if (itemIdError != null) {
+            // Draw error message
+            guiGraphics.drawString(this.font, itemIdError, popupX + 250, popupY + 50, 0xFF6666);
+        }
     }
     
     @Override
@@ -237,11 +236,12 @@ public class AddItemPopupScreen extends Screen {
     
         @Override
         public void onClose() {
+            // Refresh the marketplace before returning to parent screen
+            if (parentScreen != null) {
+                parentScreen.refreshMarketplace();
+            }
+            
             if (this.minecraft != null) {
-                // Refresh the marketplace before returning to parent screen
-                if (parentScreen != null) {
-                    parentScreen.refreshMarketplace();
-                }
                 this.minecraft.setScreen(this.parentScreen);
             }
         }

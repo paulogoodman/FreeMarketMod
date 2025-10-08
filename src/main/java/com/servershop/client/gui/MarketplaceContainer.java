@@ -17,6 +17,7 @@ import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.AdminModeHandler;
 import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.managers.ItemCategoryManager;
+import com.servershop.client.data.ClientMarketplaceDataManager;
 
 /**
  * A scrollable container for displaying marketplace items with search functionality.
@@ -113,8 +114,7 @@ public class MarketplaceContainer implements Renderable {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
         
-        // Draw wallet display inside container
-        renderWalletDisplay(guiGraphics);
+        // Wallet display is now handled in the main screen
         
         // Draw add button in top right (only if admin mode)
         if (AdminModeHandler.isAdminMode()) {
@@ -153,11 +153,6 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + 10, y + height - 15, 0xCCCCCC);
     }
     
-    private void renderWalletDisplay(GuiGraphics guiGraphics) {
-        // Draw wallet display in top left of container
-        Component walletText = Component.translatable("gui.servershop.wallet", WalletHandler.getPlayerMoney());
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, walletText, x + 10, y + 8, 0xFF4CAF50);
-    }
     
     private void renderAddButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int addButtonX = x + width - 30;
@@ -259,10 +254,10 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(itemX - 2, itemY - 2, itemX + 114, itemY + 54, 0xFF2D2D2D);
         guiGraphics.fill(itemX - 1, itemY - 1, itemX + 113, itemY + 53, 0xFF3A3A3A);
         
-        // Draw modern edit button (only if admin mode)
-        if (AdminModeHandler.isAdminMode()) {
-            renderModernEditButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
-        }
+            // Draw modern delete button (only if admin mode)
+            if (AdminModeHandler.isAdminMode()) {
+                renderModernDeleteButton(guiGraphics, itemX, itemY, mouseX, mouseY, itemIndex);
+            }
         
         // Draw item icon with better positioning
         guiGraphics.renderItem(item.getItemStack(), itemX + 2, itemY + 2);
@@ -283,27 +278,20 @@ public class MarketplaceContainer implements Renderable {
         renderActionButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
     }
     
-    private void renderModernEditButton(GuiGraphics guiGraphics, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
-        int editButtonX = itemX + 90;
-        int editButtonY = itemY + 2;
-        int editButtonSize = 20;
+    private void renderModernDeleteButton(GuiGraphics guiGraphics, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
+        int deleteButtonX = itemX + 90;
+        int deleteButtonY = itemY + 2;
+        int deleteButtonSize = 20;
         
-        boolean isHovered = mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
-                           mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize;
+        boolean isHovered = mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
+                           mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize;
         
-        if (isHovered) {
-            // Hover state
-            guiGraphics.fill(editButtonX, editButtonY, editButtonX + editButtonSize, editButtonY + editButtonSize, 0xFF4A4A4A);
-            guiGraphics.fill(editButtonX + 1, editButtonY + 1, editButtonX + editButtonSize - 1, editButtonY + editButtonSize - 1, 0xFF5A5A5A);
-        } else {
-            // Normal state
-            guiGraphics.fill(editButtonX, editButtonY, editButtonX + editButtonSize, editButtonY + editButtonSize, 0xFF3A3A3A);
-            guiGraphics.fill(editButtonX + 1, editButtonY + 1, editButtonX + editButtonSize - 1, editButtonY + editButtonSize - 1, 0xFF4A4A4A);
-        }
+        // Draw trash can icon directly (no background square)
+        int iconColor = isHovered ? 0xFFFF4444 : 0xFFCC6666; // Red color for delete
+        int iconX = deleteButtonX + deleteButtonSize - 8; // Right-align the icon
+        int iconY = deleteButtonY + 2;
         
-        // Draw modern edit icon (pencil)
-        int iconColor = isHovered ? 0xFFFFFFFF : 0xFFCCCCCC;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "✏", editButtonX + 5, editButtonY + 3, iconColor);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "🗑", iconX, iconY, iconColor);
     }
     
     private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
@@ -444,19 +432,25 @@ public class MarketplaceContainer implements Renderable {
                 int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
-                // Check edit button click (only if admin mode)
-                if (AdminModeHandler.isAdminMode()) {
-                    int editButtonX = itemX + 90;
-                    int editButtonY = itemY + 2;
-                    int editButtonSize = 20;
-                    
-                    if (mouseX >= editButtonX && mouseX <= editButtonX + editButtonSize &&
-                        mouseY >= editButtonY && mouseY <= editButtonY + editButtonSize) {
-                        // TODO: Open edit dialog for this item
-                        System.out.println("Edit button clicked for: " + item.getItemName());
-                        return true;
+                    // Check delete button click (only if admin mode)
+                    if (AdminModeHandler.isAdminMode()) {
+                        int deleteButtonX = itemX + 90;
+                        int deleteButtonY = itemY + 2;
+                        int deleteButtonSize = 20;
+                        
+                        if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
+                            mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
+                            // Delete item from marketplace
+                            ClientMarketplaceDataManager.removeMarketplaceItem(item);
+                            
+                            // Refresh the marketplace display
+                            if (parentScreen != null) {
+                                parentScreen.refreshMarketplace();
+                            }
+                            
+                            return true;
+                        }
                     }
-                }
                 
                 // Check buy/sell button clicks
                 int buyButtonX = itemX + 20;

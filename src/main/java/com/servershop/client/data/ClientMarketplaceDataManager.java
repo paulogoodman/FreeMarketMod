@@ -35,30 +35,41 @@ public class ClientMarketplaceDataManager {
         
         try {
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level == null || minecraft.level.dimension() == null) {
+            var level = minecraft.level;
+            if (level == null) {
                 ServerShop.LOGGER.warn("No world loaded - cannot load marketplace data");
                 return items; // No world loaded
             }
             
+            if (level.dimension() == null) {
+                ServerShop.LOGGER.warn("No dimension loaded - cannot load marketplace data");
+                return items;
+            }
             ServerShop.LOGGER.debug("Attempting to load marketplace data...");
             ServerShop.LOGGER.debug("Singleplayer server available: {}", minecraft.getSingleplayerServer() != null);
-            ServerShop.LOGGER.debug("Level server available: {}", minecraft.level.getServer() != null);
+            ServerShop.LOGGER.debug("Level server available: {}", level != null && level.getServer() != null);
             
             // Get the world data directory - use integrated server's world path directly
             Path marketplaceFile = null;
             
             // Try to get the marketplace file path directly from the integrated server
-            if (minecraft.getSingleplayerServer() != null) {
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            if (singleplayerServer != null) {
                 // Use the server's world path directly - this is the most reliable method
-                Path worldDataPath = minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                Path worldDataPath = singleplayerServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
                 marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
                 ServerShop.LOGGER.info("Using integrated server world path: {}", worldDataPath);
-            } else if (minecraft.level != null && minecraft.level.dimension() != null) {
+            } else {
                 // Fallback: try to get world path from level data
                 try {
-                    Path worldDataPath = minecraft.level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
-                    marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
-                    ServerShop.LOGGER.info("Using level server world path: {}", worldDataPath);
+                    if (level != null) {
+                        var levelServer = level.getServer();
+                        if (levelServer != null) {
+                            Path worldDataPath = levelServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                            marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                            ServerShop.LOGGER.info("Using level server world path: {}", worldDataPath);
+                        }
+                    }
                 } catch (Exception e) {
                     ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
                 }
@@ -121,7 +132,7 @@ public class ClientMarketplaceDataManager {
             ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
             Item item = BuiltInRegistries.ITEM.get(itemId);
             
-            if (item == null) {
+            if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
                 ServerShop.LOGGER.warn("Unknown item ID: {}", itemIdStr);
                 return null;
             }
@@ -148,23 +159,34 @@ public class ClientMarketplaceDataManager {
     public static boolean marketplaceFileExists() {
         try {
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.level == null || minecraft.level.dimension() == null) {
+            var level = minecraft.level;
+            if (level == null) {
                 return false; // No world loaded
+            }
+            
+            if (level.dimension() == null) {
+                return false; // No dimension loaded
             }
             
             // Get the world data directory - use integrated server's world path directly
             Path marketplaceFile = null;
             
             // Try to get the marketplace file path directly from the integrated server
-            if (minecraft.getSingleplayerServer() != null) {
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            if (singleplayerServer != null) {
                 // Use the server's world path directly - this is the most reliable method
-                Path worldDataPath = minecraft.getSingleplayerServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                Path worldDataPath = singleplayerServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
                 marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
-            } else if (minecraft.level != null && minecraft.level.dimension() != null) {
+            } else {
                 // Fallback: try to get world path from level data
                 try {
-                    Path worldDataPath = minecraft.level.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
-                    marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                    if (level != null) {
+                        var levelServer = level.getServer();
+                        if (levelServer != null) {
+                            Path worldDataPath = levelServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                            marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                        }
+                    }
                 } catch (Exception e) {
                     ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
                 }

@@ -8,11 +8,11 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.servershop.ServerShop;
-import com.servershop.common.data.MarketplaceItem;
 
 /**
  * Popup screen for adding items to the marketplace.
@@ -143,7 +143,7 @@ public class AddItemPopupScreen extends Screen {
     }
     
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw semi-transparent background
         int overlayAlpha = 200; // More opaque than main screen
         guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
@@ -200,6 +200,8 @@ public class AddItemPopupScreen extends Screen {
     
     @Override
     public void onClose() {
-        this.minecraft.setScreen(this.parentScreen);
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(this.parentScreen);
+        }
     }
 }

@@ -184,7 +184,7 @@ public class MarketplaceDataManager {
             ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
             Item item = BuiltInRegistries.ITEM.get(itemId);
             
-            if (item == null) {
+            if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
                 ServerShop.LOGGER.warn("Unknown item ID: {}", itemIdStr);
                 return null;
             }

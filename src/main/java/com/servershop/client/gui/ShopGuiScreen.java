@@ -4,6 +4,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,7 +56,7 @@ public class ShopGuiScreen extends Screen {
     }
     
     @Override
-    public void render(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw a semi-transparent dark rectangle covering the entire screen
         int overlayAlpha = 150; // Semi-transparent (0-255)
         guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);

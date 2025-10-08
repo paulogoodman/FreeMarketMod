@@ -21,8 +21,6 @@ import com.servershop.client.data.ClientMarketplaceDataManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
 
 /**
  * A scrollable container for displaying marketplace items with search functionality.
@@ -40,15 +38,13 @@ public class MarketplaceContainer implements Renderable {
     private int itemSpacing = 120;
     private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
     
-    // Buy button state tracking
-    private String buyingItemGuid = null;
-    private long buyButtonCooldown = 0;
-    private static final long BUY_COOLDOWN_MS = 500; // 0.5 second cooldown
+    // Buy button state tracking - per item
+    private final java.util.Map<String, Long> buyButtonCooldowns = new java.util.HashMap<>();
+    private static final long BUY_COOLDOWN_MS = 250; // 0.25 second cooldown
     
-    // Sell button state tracking
-    private String sellingItemGuid = null;
-    private long sellButtonCooldown = 0;
-    private static final long SELL_COOLDOWN_MS = 500; // 0.5 second cooldown
+    // Sell button state tracking - per item
+    private final java.util.Map<String, Long> sellButtonCooldowns = new java.util.HashMap<>();
+    private static final long SELL_COOLDOWN_MS = 250; // 0.25 second cooldown
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
@@ -311,7 +307,6 @@ public class MarketplaceContainer implements Renderable {
     
     private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
-        boolean isBuying = isItemBeingBought(item);
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
         // Buy button
@@ -327,14 +322,10 @@ public class MarketplaceContainer implements Renderable {
         int buyColor;
         String buyText;
         
-        if (isBuying) {
-            // Currently processing purchase with animation
-            buyColor = 0xFF2196F3; // Blue for processing
-            buyText = getAnimatedLoadingText();
-        } else if (isBuyCooldown) {
-            // In cooldown period
+        if (isBuyCooldown) {
+            // In cooldown
             buyColor = 0xFF9E9E9E; // Gray for cooldown
-            buyText = "Wait";
+            buyText = "🔄";
         } else if (canBuy) {
             // Can buy
             buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
@@ -348,8 +339,9 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
         
         // Draw text with appropriate color
-        int textColor = (isBuying || isBuyCooldown) ? 0xFFFFFFFF : (canBuy ? 0xFFFFFFFF : 0xFF999999);
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, buyText, buyButtonX + 10, buyButtonY + 2, textColor);
+        int textColor = isBuyCooldown ? 0xFFFFFFFF : (canBuy ? 0xFFFFFFFF : 0xFF999999);
+        int textX = buyButtonX + (buyButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(buyText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, buyText, textX, buyButtonY + 2, textColor);
         
         // Sell button
         int sellButtonX = itemX + 60;
@@ -360,7 +352,6 @@ public class MarketplaceContainer implements Renderable {
         boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
                              mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
         
-        boolean isSelling = isItemBeingSold(item);
         boolean isSellCooldown = isSellButtonInCooldown(item);
         boolean canSellItem = canSellItem(item);
         
@@ -368,14 +359,10 @@ public class MarketplaceContainer implements Renderable {
         int sellColor;
         String sellText;
         
-        if (isSelling) {
-            // Currently processing sale with animation
-            sellColor = 0xFF2196F3; // Blue for processing
-            sellText = getAnimatedLoadingText();
-        } else if (isSellCooldown) {
-            // In cooldown period
+        if (isSellCooldown) {
+            // In cooldown
             sellColor = 0xFF9E9E9E; // Gray for cooldown
-            sellText = "Wait";
+            sellText = "🔄";
         } else if (canSellItem) {
             // Can sell
             sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
@@ -389,8 +376,9 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
         
         // Draw text with appropriate color
-        int sellTextColor = (isSelling || isSellCooldown) ? 0xFFFFFFFF : (canSellItem ? 0xFFFFFFFF : 0xFF999999);
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sellText, sellButtonX + 10, sellButtonY + 2, sellTextColor);
+        int sellTextColor = isSellCooldown ? 0xFFFFFFFF : (canSellItem ? 0xFFFFFFFF : 0xFF999999);
+        int sellTextX = sellButtonX + (sellButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(sellText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sellText, sellTextX, sellButtonY + 2, sellTextColor);
     }
     
     private void drawScrollBar(GuiGraphics guiGraphics) {
@@ -584,9 +572,8 @@ public class MarketplaceContainer implements Renderable {
      * Validates balance, deducts money, and spawns item in inventory or on ground.
      */
     private boolean buyItem(MarketplaceItem item) {
-        // Check cooldown
-        long currentTime = System.currentTimeMillis();
-        if (currentTime < buyButtonCooldown) {
+        // Check cooldown for this specific item
+        if (isBuyButtonInCooldown(item)) {
             return false; // Still in cooldown
         }
         
@@ -596,15 +583,14 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        // Set cooldown and buying state
-        buyButtonCooldown = currentTime + BUY_COOLDOWN_MS;
-        buyingItemGuid = item.getGuid();
+        // Set cooldown for this specific item
+        long currentTime = System.currentTimeMillis();
+        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
         
         // Get the player
         Minecraft minecraft = Minecraft.getInstance();
         Player clientPlayer = minecraft.player;
         if (clientPlayer == null) {
-            buyingItemGuid = null;
             return false;
         }
         
@@ -621,7 +607,7 @@ public class MarketplaceContainer implements Renderable {
             }
         }
         
-        boolean addedToInventory = playerForInventory.getInventory().add(itemToGive);
+        boolean addedToInventory = addItemToInventory(playerForInventory, itemToGive);
         
         if (!addedToInventory) {
             // Drop the item at player's feet
@@ -640,9 +626,6 @@ public class MarketplaceContainer implements Renderable {
         
         WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
         
-        // Clear buying state
-        buyingItemGuid = null;
-        
         // Refresh wallet display
         if (parentScreen != null) {
             parentScreen.refreshMarketplace();
@@ -652,18 +635,12 @@ public class MarketplaceContainer implements Renderable {
     }
     
     /**
-     * Checks if an item is currently being bought (for visual feedback).
-     */
-    private boolean isItemBeingBought(MarketplaceItem item) {
-        return buyingItemGuid != null && buyingItemGuid.equals(item.getGuid());
-    }
-    
-    /**
      * Checks if buy button is in cooldown for an item.
      */
     private boolean isBuyButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
-        return currentTime < buyButtonCooldown && buyingItemGuid != null && buyingItemGuid.equals(item.getGuid());
+        Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
+        return cooldownEnd != null && currentTime < cooldownEnd;
     }
     
     /**
@@ -671,9 +648,10 @@ public class MarketplaceContainer implements Renderable {
      * Validates inventory, removes item, and adds money to wallet.
      */
     private boolean sellItem(MarketplaceItem item) {
-        // Check cooldown
+        // Check cooldown for this specific item
         long currentTime = System.currentTimeMillis();
-        if (currentTime < sellButtonCooldown) {
+        Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
+        if (cooldownEnd != null && currentTime < cooldownEnd) {
             return false; // Still in cooldown
         }
         
@@ -702,9 +680,8 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        // Set cooldown and selling state
-        sellButtonCooldown = currentTime + SELL_COOLDOWN_MS;
-        sellingItemGuid = item.getGuid();
+        // Set cooldown for this specific item
+        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
         
         // Remove item from inventory
         removeItemFromInventory(playerForInventory, itemToSell);
@@ -720,9 +697,6 @@ public class MarketplaceContainer implements Renderable {
         }
         
         WalletHandler.addMoney(playerForMoney, item.getSellPrice());
-        
-        // Clear selling state
-        sellingItemGuid = null;
         
         // Refresh wallet display
         if (parentScreen != null) {
@@ -750,29 +724,96 @@ public class MarketplaceContainer implements Renderable {
     
     /**
      * Removes the specified item from the player's inventory.
+     * Prioritizes removing from stacks with the fewest items.
      */
     private void removeItemFromInventory(Player player, ItemStack itemToRemove) {
         var inventory = player.getInventory();
         int remainingToRemove = itemToRemove.getCount();
         
-        for (int i = 0; i < inventory.getContainerSize() && remainingToRemove > 0; i++) {
+        // First pass: find all matching stacks and sort by count (fewest first)
+        java.util.List<java.util.Map.Entry<Integer, ItemStack>> matchingStacks = new java.util.ArrayList<>();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack slotItem = inventory.getItem(i);
             if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToRemove)) {
-                int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
-                slotItem.shrink(removeFromSlot);
-                remainingToRemove -= removeFromSlot;
-                
-                // Update the slot
-                inventory.setItem(i, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
+                matchingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
             }
+        }
+        
+        // Sort by count (ascending - fewest items first)
+        matchingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        // Remove items starting from stacks with fewest items
+        for (var entry : matchingStacks) {
+            if (remainingToRemove <= 0) break;
+            
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
+            slotItem.shrink(removeFromSlot);
+            remainingToRemove -= removeFromSlot;
+            
+            // Update the slot
+            inventory.setItem(slotIndex, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
         }
     }
     
     /**
-     * Checks if an item is currently being sold (for visual feedback).
+     * Adds the specified item to the player's inventory.
+     * Prioritizes adding to stacks with the fewest items.
+     * @param player the player to add items to
+     * @param itemToAdd the item to add
+     * @return true if all items were added, false if some had to be dropped
      */
-    private boolean isItemBeingSold(MarketplaceItem item) {
-        return sellingItemGuid != null && sellingItemGuid.equals(item.getGuid());
+    private boolean addItemToInventory(Player player, ItemStack itemToAdd) {
+        var inventory = player.getInventory();
+        int remainingToAdd = itemToAdd.getCount();
+        
+        // First pass: find all existing stacks of the same item and sort by count (fewest first)
+        java.util.List<java.util.Map.Entry<Integer, ItemStack>> existingStacks = new java.util.ArrayList<>();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToAdd)) {
+                existingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
+            }
+        }
+        
+        // Sort by count (ascending - fewest items first)
+        existingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        // Add items to existing stacks starting with those that have fewest items
+        for (var entry : existingStacks) {
+            if (remainingToAdd <= 0) break;
+            
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int maxStackSize = slotItem.getMaxStackSize();
+            int currentCount = slotItem.getCount();
+            int canAdd = maxStackSize - currentCount;
+            
+            if (canAdd > 0) {
+                int addToSlot = Math.min(remainingToAdd, canAdd);
+                slotItem.grow(addToSlot);
+                remainingToAdd -= addToSlot;
+                inventory.setItem(slotIndex, slotItem);
+            }
+        }
+        
+        // If there are still items to add, try to find empty slots
+        if (remainingToAdd > 0) {
+            for (int i = 0; i < inventory.getContainerSize() && remainingToAdd > 0; i++) {
+                ItemStack slotItem = inventory.getItem(i);
+                if (slotItem.isEmpty()) {
+                    int addToSlot = Math.min(remainingToAdd, itemToAdd.getMaxStackSize());
+                    ItemStack newStack = itemToAdd.copy();
+                    newStack.setCount(addToSlot);
+                    inventory.setItem(i, newStack);
+                    remainingToAdd -= addToSlot;
+                }
+            }
+        }
+        
+        // Return true if all items were added, false if some remain
+        return remainingToAdd == 0;
     }
     
     /**
@@ -780,7 +821,8 @@ public class MarketplaceContainer implements Renderable {
      */
     private boolean isSellButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
-        return currentTime < sellButtonCooldown && sellingItemGuid != null && sellingItemGuid.equals(item.getGuid());
+        Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
+        return cooldownEnd != null && currentTime < cooldownEnd;
     }
     
     /**
@@ -806,21 +848,6 @@ public class MarketplaceContainer implements Renderable {
         return hasItemInInventory(playerForCheck, item.getItemStack());
     }
     
-    /**
-     * Gets animated loading text that cycles through different characters.
-     */
-    private String getAnimatedLoadingText() {
-        long currentTime = System.currentTimeMillis();
-        int animationFrame = (int) ((currentTime / 200) % 4); // Change every 200ms
-        
-        switch (animationFrame) {
-            case 0: return "...";
-            case 1: return ".. ";
-            case 2: return ".  ";
-            case 3: return "   ";
-            default: return "...";
-        }
-    }
     
     public boolean charTyped(char codePoint, int modifiers) {
         if (searchBox != null && searchBox.charTyped(codePoint, modifiers)) {

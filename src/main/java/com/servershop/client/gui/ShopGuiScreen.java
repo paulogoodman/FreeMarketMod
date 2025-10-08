@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -9,6 +9,12 @@ import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import com.servershop.ServerShop;
+import com.servershop.client.data.ClientMarketplaceDataManager;
+import com.servershop.common.data.MarketplaceItem;
+import com.servershop.common.handlers.AdminModeHandler;
+import com.servershop.common.handlers.WalletHandler;
 
 /**
  * Semi-transparent dark overlay GUI for the ServerShop mod.

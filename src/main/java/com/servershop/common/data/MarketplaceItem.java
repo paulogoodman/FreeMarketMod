@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.common.data;
 
 import net.minecraft.world.item.ItemStack;
 

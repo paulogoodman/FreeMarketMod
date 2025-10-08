@@ -1,4 +1,6 @@
-package com.servershop;
+package com.servershop.common.handlers;
+
+import com.servershop.ServerShop;
 
 /**
  * Handles player wallet/money system for the ServerShop mod.

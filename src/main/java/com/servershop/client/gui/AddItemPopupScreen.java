@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -10,6 +10,9 @@ import net.minecraft.world.item.Items;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import com.servershop.ServerShop;
+import com.servershop.common.data.MarketplaceItem;
 
 /**
  * Popup screen for adding items to the marketplace.

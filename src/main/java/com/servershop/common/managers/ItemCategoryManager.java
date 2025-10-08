@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.common.managers;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -8,6 +8,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
+
+import com.servershop.common.data.MarketplaceItem;
 
 /**
  * Manages item categorization based entirely on Forge item tags and NBT data.

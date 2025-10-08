@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -13,6 +13,12 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+
+import com.servershop.ServerShop;
+import com.servershop.common.data.MarketplaceItem;
+import com.servershop.common.handlers.AdminModeHandler;
+import com.servershop.common.handlers.WalletHandler;
+import com.servershop.common.managers.ItemCategoryManager;
 
 /**
  * A scrollable container for displaying marketplace items with search functionality.

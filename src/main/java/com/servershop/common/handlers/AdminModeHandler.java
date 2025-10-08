@@ -1,4 +1,6 @@
-package com.servershop;
+package com.servershop.common.handlers;
+
+import com.servershop.ServerShop;
 
 /**
  * Handles admin mode state for the ServerShop mod.

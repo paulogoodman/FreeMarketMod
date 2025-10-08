@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.server.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -9,6 +9,9 @@ import net.minecraft.network.chat.Component;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
+
+import com.servershop.ServerShop;
+import com.servershop.common.handlers.AdminModeHandler;
 
 /**
  * Handles command registration for the ServerShop mod.

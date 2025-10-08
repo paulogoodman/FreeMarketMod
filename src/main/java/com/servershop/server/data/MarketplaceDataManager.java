@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.server.data;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -19,6 +19,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+
+import com.servershop.ServerShop;
+import com.servershop.common.data.MarketplaceItem;
 
 /**
  * Manages marketplace data persistence using JSON files in world data directory.

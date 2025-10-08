@@ -1,4 +1,4 @@
-package com.servershop;
+package com.servershop.client;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -15,6 +15,9 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.client.event.InputEvent;
 import org.lwjgl.glfw.GLFW;
+
+import com.servershop.ServerShop;
+import com.servershop.client.gui.ShopGuiScreen;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = ServerShop.MODID, dist = Dist.CLIENT)

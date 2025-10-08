@@ -13,6 +13,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.servershop.ServerShop;
+import com.servershop.common.data.MarketplaceItem;
+import com.servershop.client.data.ClientMarketplaceDataManager;
 
 /**
  * Popup screen for adding items to the marketplace.
@@ -128,18 +130,53 @@ public class AddItemPopupScreen extends Screen {
     }
     
     private void addItemToList() {
-        // For now, just log the item being added
-        String itemName = this.itemNameBox.getValue();
-        String buyPrice = this.buyPriceBox.getValue();
-        String sellPrice = this.sellPriceBox.getValue();
-        String quantity = this.quantityBox.getValue();
-        
-        ServerShop.LOGGER.info("Adding item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
-            itemName, buyPrice, sellPrice, quantity);
-        
-        // TODO: Add to actual marketplace list
-        // For now, just close the popup
-        onClose();
+        try {
+            // Get input values
+            String itemName = this.itemNameBox.getValue();
+            String buyPriceStr = this.buyPriceBox.getValue();
+            String sellPriceStr = this.sellPriceBox.getValue();
+            String quantityStr = this.quantityBox.getValue();
+            
+            // Validate inputs
+            if (itemName.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
+                ServerShop.LOGGER.warn("All fields must be filled");
+                return;
+            }
+            
+            int buyPrice, sellPrice, quantity;
+            try {
+                buyPrice = Integer.parseInt(buyPriceStr);
+                sellPrice = Integer.parseInt(sellPriceStr);
+                quantity = Integer.parseInt(quantityStr);
+            } catch (NumberFormatException e) {
+                ServerShop.LOGGER.warn("Invalid number format in price or quantity fields");
+                return;
+            }
+            
+            // Get the selected item stack
+            ItemStack selectedItem = sampleItems.get(selectedItemIndex);
+            
+            // Create marketplace item
+            MarketplaceItem marketplaceItem = new MarketplaceItem(
+                selectedItem.copy(), 
+                buyPrice, 
+                sellPrice, 
+                quantity, 
+                "admin" // TODO: Get actual player name
+            );
+            
+            // Add to marketplace via client data manager
+            ClientMarketplaceDataManager.addMarketplaceItem(marketplaceItem);
+            
+            ServerShop.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
+                itemName, buyPrice, sellPrice, quantity);
+            
+            // Close the popup
+            onClose();
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to add item to marketplace", e);
+        }
     }
     
     @Override
@@ -198,10 +235,14 @@ public class AddItemPopupScreen extends Screen {
         return true;
     }
     
-    @Override
-    public void onClose() {
-        if (this.minecraft != null) {
-            this.minecraft.setScreen(this.parentScreen);
+        @Override
+        public void onClose() {
+            if (this.minecraft != null) {
+                // Refresh the marketplace before returning to parent screen
+                if (parentScreen != null) {
+                    parentScreen.refreshMarketplace();
+                }
+                this.minecraft.setScreen(this.parentScreen);
+            }
         }
-    }
 }

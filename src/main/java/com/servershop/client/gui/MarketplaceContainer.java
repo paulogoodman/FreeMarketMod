@@ -25,6 +25,7 @@ public class MarketplaceContainer implements Renderable {
     
     private final int x, y, width, height;
     private final List<MarketplaceItem> allItems;
+    private final ShopGuiScreen parentScreen;
     private EditBox searchBox;
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
@@ -33,12 +34,13 @@ public class MarketplaceContainer implements Renderable {
     private int itemSpacing = 120;
     private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
     
-    public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items) {
+    public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
         this.y = y;
         this.width = width;
         this.height = height;
         this.allItems = new ArrayList<>(items);
+        this.parentScreen = parentScreen;
         calculateMaxVisibleItems();
     }
     
@@ -68,6 +70,12 @@ public class MarketplaceContainer implements Renderable {
     
     public void removeItem(MarketplaceItem item) {
         allItems.remove(item);
+        onSearchChanged(searchBox != null ? searchBox.getValue() : "");
+    }
+    
+    public void updateItems(List<MarketplaceItem> newItems) {
+        allItems.clear();
+        allItems.addAll(newItems);
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
     }
     
@@ -391,8 +399,10 @@ public class MarketplaceContainer implements Renderable {
             
             if (mouseX >= addButtonX && mouseX <= addButtonX + addButtonSize &&
                 mouseY >= addButtonY && mouseY <= addButtonY + addButtonSize) {
-                // TODO: Open add item dialog
-                System.out.println("Add button clicked!");
+                // Open add item popup
+                if (parentScreen != null) {
+                    net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
+                }
                 return true;
             }
         }

@@ -154,6 +154,127 @@ public class ClientMarketplaceDataManager {
     }
     
     /**
+     * Adds a new marketplace item to the JSON file.
+     * This is a client-side operation for admin mode.
+     */
+    public static void addMarketplaceItem(MarketplaceItem item) {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            var level = minecraft.level;
+            if (level == null) {
+                ServerShop.LOGGER.warn("No world loaded - cannot add marketplace item");
+                return;
+            }
+            
+            if (level.dimension() == null) {
+                ServerShop.LOGGER.warn("No dimension loaded - cannot add marketplace item");
+                return;
+            }
+            
+            // Get the world data directory - use integrated server's world path directly
+            Path marketplaceFile = null;
+            
+            // Try to get the marketplace file path directly from the integrated server
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            if (singleplayerServer != null) {
+                // Use the server's world path directly - this is the most reliable method
+                Path worldDataPath = singleplayerServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+            } else {
+                // Fallback: try to get world path from level data
+                try {
+                    if (level != null) {
+                        var levelServer = level.getServer();
+                        if (levelServer != null) {
+                            Path worldDataPath = levelServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                            marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
+                        }
+                    }
+                } catch (Exception e) {
+                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                }
+            }
+            
+            // If we still can't get the world path, we can't proceed
+            if (marketplaceFile == null) {
+                ServerShop.LOGGER.error("Could not determine current world path - cannot add marketplace item");
+                return;
+            }
+            
+            // Load existing items
+            List<MarketplaceItem> existingItems = loadMarketplaceItems();
+            
+            // Add new item
+            existingItems.add(item);
+            
+            // Save back to file
+            saveMarketplaceItems(marketplaceFile, existingItems);
+            
+            ServerShop.LOGGER.info("Added marketplace item: {}", item.getItemName());
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to add marketplace item", e);
+        }
+    }
+    
+    /**
+     * Saves marketplace items to the JSON file.
+     */
+    private static void saveMarketplaceItems(Path marketplaceFile, List<MarketplaceItem> items) {
+        try {
+            File file = marketplaceFile.toFile();
+            
+            // Create parent directories if they don't exist
+            file.getParentFile().mkdirs();
+            
+            JsonObject marketplaceData = new JsonObject();
+            JsonArray itemsArray = new JsonArray();
+            
+            for (MarketplaceItem item : items) {
+                JsonObject itemJson = serializeMarketplaceItem(item);
+                itemsArray.add(itemJson);
+            }
+            
+            marketplaceData.add("items", itemsArray);
+            marketplaceData.addProperty("version", "1.0");
+            marketplaceData.addProperty("description", "ServerShop Marketplace Data");
+            marketplaceData.addProperty("lastUpdated", System.currentTimeMillis());
+            
+            // Write to file
+            try (java.io.FileWriter writer = new java.io.FileWriter(file)) {
+                com.google.gson.Gson gson = new com.google.gson.GsonBuilder().setPrettyPrinting().create();
+                gson.toJson(marketplaceData, writer);
+            }
+            
+            ServerShop.LOGGER.info("Saved {} marketplace items to {}", items.size(), marketplaceFile);
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to save marketplace items", e);
+        }
+    }
+    
+    /**
+     * Serializes a MarketplaceItem to JSON.
+     */
+    private static JsonObject serializeMarketplaceItem(MarketplaceItem item) {
+        JsonObject itemJson = new JsonObject();
+        
+        // Serialize ItemStack
+        ItemStack itemStack = item.getItemStack();
+        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+        itemJson.addProperty("itemId", itemId.toString());
+        itemJson.addProperty("count", itemStack.getCount());
+        
+        // Serialize marketplace data
+        itemJson.addProperty("buyPrice", item.getBuyPrice());
+        itemJson.addProperty("sellPrice", item.getSellPrice());
+        itemJson.addProperty("quantity", item.getQuantity());
+        itemJson.addProperty("seller", item.getSeller());
+        
+        return itemJson;
+    }
+    
+    /**
      * Checks if the marketplace file exists for the current world.
      */
     public static boolean marketplaceFileExists() {

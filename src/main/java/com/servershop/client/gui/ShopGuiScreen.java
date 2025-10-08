@@ -51,7 +51,7 @@ public class ShopGuiScreen extends Screen {
         int containerX = (this.width - containerWidth) / 2;
         int containerY = (this.height - containerHeight) / 2;
         
-        this.marketplaceContainer = new MarketplaceContainer(containerX, containerY, containerWidth, containerHeight, marketplaceItems);
+        this.marketplaceContainer = new MarketplaceContainer(containerX, containerY, containerWidth, containerHeight, marketplaceItems, this);
         this.marketplaceContainer.init();
     }
     
@@ -109,10 +109,22 @@ public class ShopGuiScreen extends Screen {
         return true; // Close GUI when ESC is pressed
     }
     
-    @Override
-    public void onClose() {
-        super.onClose();
-    }
+        @Override
+        public void onClose() {
+            super.onClose();
+        }
+        
+        /**
+         * Refreshes the marketplace items from the JSON file.
+         * Call this when returning from the add item popup.
+         */
+        public void refreshMarketplace() {
+            loadMarketplaceItemsFromFile();
+            if (marketplaceContainer != null) {
+                // Update the container's items list
+                marketplaceContainer.updateItems(marketplaceItems);
+            }
+        }
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {

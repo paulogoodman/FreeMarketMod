@@ -137,6 +137,31 @@ public class ItemComponentHandler {
                 }
             }
             
+            // Serialize armor trim if present
+            net.minecraft.world.item.armortrim.ArmorTrim trim = components.get(DataComponents.TRIM);
+            if (trim != null) {
+                try {
+                    Tag trimTag = net.minecraft.world.item.armortrim.ArmorTrim.CODEC.encodeStart(NbtOps.INSTANCE, trim).getOrThrow();
+                    if (trimTag instanceof CompoundTag) {
+                        resultTag.put("minecraft:trim", (CompoundTag) trimTag);
+                    }
+                } catch (Exception trimError) {
+                    ServerShop.LOGGER.warn("Failed to serialize armor trim: {}", trimError.getMessage());
+                }
+            }
+            
+            // Serialize damage if present
+            Integer damage = components.get(DataComponents.DAMAGE);
+            if (damage != null && damage > 0) {
+                resultTag.putInt("minecraft:damage", damage);
+            }
+            
+            // Serialize max damage if present
+            Integer maxDamage = components.get(DataComponents.MAX_DAMAGE);
+            if (maxDamage != null && maxDamage > 0) {
+                resultTag.putInt("minecraft:max_damage", maxDamage);
+            }
+            
             // Serialize other components as needed
             // Add more component serialization here as needed
             

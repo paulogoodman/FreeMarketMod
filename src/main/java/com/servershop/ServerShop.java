@@ -34,7 +34,7 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import com.servershop.server.data.MarketplaceDataManager;
-import com.servershop.server.commands.EconomyCommands;
+import com.servershop.server.commands.MarketplaceCommands;
 import com.servershop.common.attachments.ItemComponentHandler;
 import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.attachments.PlayerWalletAttachment;
@@ -142,7 +142,7 @@ public class ServerShop {
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         // Register economy commands
-        EconomyCommands.register(event.getDispatcher());
+        MarketplaceCommands.register(event.getDispatcher());
     }
     
     @SubscribeEvent

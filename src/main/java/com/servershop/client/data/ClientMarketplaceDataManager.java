@@ -22,16 +22,103 @@ import com.servershop.common.attachments.ItemComponentHandler;
 /**
  * Client-side marketplace data manager for reading marketplace data from world files.
  * This allows the client to load marketplace items from the JSON file in the world data directory.
+ * Includes caching to reduce frequent file reads.
  */
 public class ClientMarketplaceDataManager {
     
     private static final String MARKETPLACE_FILE_NAME = "marketplace.json";
     
+    // Cache for marketplace items to reduce file reads
+    private static List<MarketplaceItem> cachedItems = null;
+    private static long lastCacheUpdate = 0;
+    private static String lastWorldPath = null;
+    private static final long CACHE_DURATION_MS = 5000; // Cache for 5 seconds
+    
     /**
-     * Loads marketplace items from the current world's JSON file.
-     * Returns empty list if file doesn't exist or is invalid.
+     * Loads marketplace items from the current world's JSON file with caching.
+     * Returns cached data if available and recent, otherwise reads from file.
      */
     public static List<MarketplaceItem> loadMarketplaceItems() {
+        // Get current world path for cache validation
+        String currentWorldPath = getCurrentWorldPath();
+        if (currentWorldPath == null) {
+            return new ArrayList<>();
+        }
+        
+        // Check if cache is still valid
+        long currentTime = System.currentTimeMillis();
+        if (cachedItems != null && 
+            currentTime - lastCacheUpdate < CACHE_DURATION_MS && 
+            currentWorldPath.equals(lastWorldPath)) {
+            ServerShop.LOGGER.debug("Using cached marketplace data ({} items)", cachedItems.size());
+            return new ArrayList<>(cachedItems); // Return copy to prevent external modification
+        }
+        
+        // Cache is invalid or expired, reload from file
+        List<MarketplaceItem> items = loadMarketplaceItemsFromFile();
+        
+        // Update cache
+        cachedItems = new ArrayList<>(items);
+        lastCacheUpdate = currentTime;
+        lastWorldPath = currentWorldPath;
+        
+        ServerShop.LOGGER.debug("Reloaded marketplace data from file ({} items)", items.size());
+        return items;
+    }
+    
+    /**
+     * Forces a cache refresh by clearing the cache.
+     * Call this after marketplace modifications to ensure fresh data.
+     */
+    public static void invalidateCache() {
+        cachedItems = null;
+        lastCacheUpdate = 0;
+        lastWorldPath = null;
+        ServerShop.LOGGER.debug("Marketplace cache invalidated");
+    }
+    
+    /**
+     * Gets the current world path for cache validation.
+     */
+    private static String getCurrentWorldPath() {
+        try {
+            Minecraft minecraft = Minecraft.getInstance();
+            var level = minecraft.level;
+            if (level == null) {
+                return null;
+            }
+            
+            if (level.dimension() == null) {
+                return null;
+            }
+            
+            // Try to get the marketplace file path directly from the integrated server
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            if (singleplayerServer != null) {
+                Path worldDataPath = singleplayerServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                return worldDataPath.toString();
+            } else {
+                // Fallback: try to get world path from level data
+                if (level != null) {
+                    var levelServer = level.getServer();
+                    if (levelServer != null) {
+                        Path worldDataPath = levelServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                        return worldDataPath.toString();
+                    }
+                }
+            }
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Could not determine current world path: {}", e.getMessage());
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Loads marketplace items from the current world's JSON file (without caching).
+     * This is the actual file reading implementation.
+     */
+    private static List<MarketplaceItem> loadMarketplaceItemsFromFile() {
         List<MarketplaceItem> items = new ArrayList<>();
         
         try {
@@ -241,6 +328,9 @@ public class ClientMarketplaceDataManager {
             // Save back to file
             saveMarketplaceItems(marketplaceFile, existingItems);
             
+            // Invalidate cache since we modified the marketplace
+            invalidateCache();
+            
             ServerShop.LOGGER.info("Added marketplace item: {}", item.getItemName());
             
         } catch (Exception e) {
@@ -370,6 +460,10 @@ public class ClientMarketplaceDataManager {
                 if (removed) {
                     // Save back to file
                     saveMarketplaceItems(marketplaceFile, existingItems);
+                    
+                    // Invalidate cache since we modified the marketplace
+                    invalidateCache();
+                    
                     ServerShop.LOGGER.info("Removed marketplace item: {}", itemToRemove.getItemName());
                 } else {
                     ServerShop.LOGGER.warn("Could not find marketplace item to remove: {}", itemToRemove.getItemName());

@@ -60,6 +60,9 @@ public class AddItemPopupScreen extends Screen {
         this.itemIdBox.setResponder(this::onItemIdChanged);
         this.addRenderableWidget(this.itemIdBox);
         
+        // Pre-validate the default diamond value to show icon immediately
+        onItemIdChanged("minecraft:diamond");
+        
         // Buy price input
         this.buyPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(90, 75, 110), 
             GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
@@ -105,28 +108,6 @@ public class AddItemPopupScreen extends Screen {
         ).bounds(popupX + GuiScalingHelper.responsiveWidth(120, 100, 150), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
             GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
         this.addRenderableWidget(this.cancelButton);
-        
-        // Helper buttons for common enchantments
-        Button sharpnessButton = Button.builder(
-            Component.literal("Sharpness"),
-            button -> addEnchantment("minecraft:sharpness", 3)
-        ).bounds(popupX + GuiScalingHelper.responsiveWidth(220, 180, 280), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
-            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
-        this.addRenderableWidget(sharpnessButton);
-        
-        Button efficiencyButton = Button.builder(
-            Component.literal("Efficiency"),
-            button -> addEnchantment("minecraft:efficiency", 5)
-        ).bounds(popupX + GuiScalingHelper.responsiveWidth(300, 250, 360), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
-            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
-        this.addRenderableWidget(efficiencyButton);
-        
-        Button unbreakingButton = Button.builder(
-            Component.literal("Unbreaking"),
-            button -> addEnchantment("minecraft:unbreaking", 3)
-        ).bounds(popupX + GuiScalingHelper.responsiveWidth(380, 320, 440), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
-            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
-        this.addRenderableWidget(unbreakingButton);
     }
     
     private void onItemIdChanged(String itemId) {
@@ -163,27 +144,6 @@ public class AddItemPopupScreen extends Screen {
         }
     }
     
-    /**
-     * Helper method to add an enchantment to the component data field.
-     */
-    private void addEnchantment(String enchantmentId, int level) {
-        String currentData = this.componentDataBox.getValue();
-        
-        // If the field is empty, create new component data with the enchantment
-        if (currentData.trim().isEmpty()) {
-            String enchantmentJson = ItemComponentHandler.createEnchantmentJson(enchantmentId, level);
-            this.componentDataBox.setValue(enchantmentJson);
-        } else {
-            // Try to append to existing data (this is a simple implementation)
-            // In a more sophisticated version, you'd parse and merge the JSON properly
-            ServerShop.LOGGER.info("Adding enchantment {} level {} to existing component data", enchantmentId, level);
-            // For now, just show a message that manual editing is needed
-            this.componentDataBox.setValue(currentData + " // Add enchantment: " + enchantmentId + " level " + level);
-        }
-        
-        // Validate the new data
-        onComponentDataChanged(this.componentDataBox.getValue());
-    }
     
     private ItemStack createItemWithComponents(Item item, int count, String componentDataString) {
         ItemStack itemStack = new ItemStack(item, count);
@@ -208,6 +168,9 @@ public class AddItemPopupScreen extends Screen {
             String buyPriceStr = this.buyPriceBox.getValue();
             String sellPriceStr = this.sellPriceBox.getValue();
             String quantityStr = this.quantityBox.getValue();
+            
+            // Validate item ID first (in case user clicked Add without losing focus)
+            onItemIdChanged(itemId);
             
             // Validate inputs
             if (itemId.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
@@ -273,22 +236,28 @@ public class AddItemPopupScreen extends Screen {
         int popupX = GuiScalingHelper.centerX(popupWidth);
         int popupY = GuiScalingHelper.centerY(popupHeight);
         
-        // Draw semi-transparent background FIRST (behind everything)
-        int overlayAlpha = 200; // More opaque than main screen
-        guiGraphics.fill(0, 0, this.width, this.height, (overlayAlpha << 24) | 0x000000);
+        // Call super.render() FIRST to draw the blur overlay behind everything
+        super.render(guiGraphics, mouseX, mouseY, partialTick);
         
-        // Draw popup background (on top of blur)
-        guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF2C2C2C);
-        guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF404040);
+        // Draw popup background on top of the blur (matching MarketplaceContainer colors)
+        guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF1E1E1E);
+        guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF2A2A2A);
         
+
         // Draw popup border
         guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + 1, 0xFF808080);
         guiGraphics.fill(popupX, popupY, popupX + 1, popupY + popupHeight, 0xFF808080);
         guiGraphics.fill(popupX + popupWidth - 1, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF808080);
         guiGraphics.fill(popupX, popupY + popupHeight - 1, popupX + popupWidth, popupY + popupHeight, 0xFF808080);
         
-        // Render all widgets first
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Render all widgets on top of the background
+        if (itemIdBox != null) itemIdBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (buyPriceBox != null) buyPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (sellPriceBox != null) sellPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (quantityBox != null) quantityBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (componentDataBox != null) componentDataBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (addButton != null) addButton.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (cancelButton != null) cancelButton.render(guiGraphics, mouseX, mouseY, partialTick);
         
         // Draw title (after widgets to ensure it's on top)
         int titleWidth = this.font.width(this.title);
@@ -309,19 +278,49 @@ public class AddItemPopupScreen extends Screen {
         
         // Draw item preview and error messages
         if (selectedItem != null) {
-            // Draw item icon
-            guiGraphics.renderItem(selectedItem, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65));
-            guiGraphics.renderItemDecorations(this.font, selectedItem, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65));
+            // Calculate item preview size and position (50x50 with responsive scaling)
+            int itemPreviewSize = GuiScalingHelper.responsiveWidth(50, 40, 60);
+            int itemPreviewX = popupX + GuiScalingHelper.responsiveWidth(300, 250, 350);
+            int itemPreviewY = popupY + GuiScalingHelper.responsiveHeight(50, 40, 65);
             
-            // Draw item name
+            // Draw item icon with scaling (similar to MarketplaceContainer)
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(itemPreviewX, itemPreviewY, 0);
+            float scale = (float) itemPreviewSize / 16f; // Scale to fit the responsive size
+            guiGraphics.pose().scale(scale, scale, 1.0f);
+            guiGraphics.renderItem(selectedItem, 0, 0);
+            guiGraphics.renderItemDecorations(this.font, selectedItem, 0, 0);
+            guiGraphics.pose().popPose();
+            
+            // Draw item name (centered underneath the item image)
             String itemName = selectedItem.getItem().getDescription().getString();
             if (itemName.length() > 15) {
                 itemName = itemName.substring(0, 15) + "...";
             }
-            guiGraphics.drawString(this.font, itemName, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(70, 55, 85), 0xFFFFFF);
+            int itemNameWidth = this.font.width(itemName);
+            int itemNameX = itemPreviewX + (itemPreviewSize - itemNameWidth) / 2; // Center horizontally
+            guiGraphics.drawString(this.font, itemName, itemNameX, itemPreviewY + itemPreviewSize + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFFFFFF);
         } else if (itemIdError != null) {
-            // Draw error message
-            guiGraphics.drawString(this.font, itemIdError, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 0xFF6666);
+            // Calculate error preview size and position (50x50 with responsive scaling)
+            int errorPreviewSize = GuiScalingHelper.responsiveWidth(50, 40, 60);
+            int errorPreviewX = popupX + GuiScalingHelper.responsiveWidth(300, 250, 350);
+            int errorPreviewY = popupY + GuiScalingHelper.responsiveHeight(50, 40, 65);
+            
+            // Draw barrier item (red X) with scaling
+            ItemStack barrierItem = new ItemStack(net.minecraft.world.item.Items.BARRIER);
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(errorPreviewX, errorPreviewY, 0);
+            float scale = (float) errorPreviewSize / 16f; // Scale to fit the responsive size
+            guiGraphics.pose().scale(scale, scale, 1.0f);
+            guiGraphics.renderItem(barrierItem, 0, 0);
+            guiGraphics.renderItemDecorations(this.font, barrierItem, 0, 0);
+            guiGraphics.pose().popPose();
+            
+            // Draw "Invalid Item ID" text (centered underneath the barrier item)
+            String errorText = "Invalid Item ID";
+            int errorTextWidth = this.font.width(errorText);
+            int errorTextX = errorPreviewX + (errorPreviewSize - errorTextWidth) / 2; // Center horizontally
+            guiGraphics.drawString(this.font, errorText, errorTextX, errorPreviewY + errorPreviewSize + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFF6666);
         }
         
         // Draw component data error message

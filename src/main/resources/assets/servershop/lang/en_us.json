@@ -45,5 +45,19 @@
   "command.servershop.economy.set.success": "Set %s's balance from %d to %d coins",
   "command.servershop.economy.set.notify": "Your balance has been set to %d coins",
   "command.servershop.economy.player_not_found": "Player %s not found or not online.",
-  "command.servershop.economy.not_player": "This command can only be executed by a player."
+  "command.servershop.economy.not_player": "This command can only be executed by a player.",
+  
+  "command.servershop.marketplace.clear.success": "Marketplace cleared successfully",
+  "command.servershop.marketplace.additem.success": "Added %s (x%d) to marketplace - Buy: %d, Sell: %d",
+  "command.servershop.marketplace.additem.invalid_item": "Invalid item ID: %s",
+  "command.servershop.marketplace.additem.error": "Error adding item: %s",
+  "command.servershop.marketplace.testdata.success": "Generated %d test items in marketplace",
+  
+  "command.servershop.marketplace.pay.sender_success": "Sent %d coins to %s. Your balance: %d",
+  "command.servershop.marketplace.pay.target_notify": "You received %d coins from %s! Your balance: %d",
+  "command.servershop.marketplace.pay.insufficient": "Insufficient funds. You need %d coins but only have %d",
+  "command.servershop.marketplace.pay.self": "You cannot pay yourself",
+  "command.servershop.marketplace.pay.failed": "Payment failed. Please try again",
+  
+  "command.servershop.marketplace.itemdata.no_item": "You must be holding an item to get its data"
 }

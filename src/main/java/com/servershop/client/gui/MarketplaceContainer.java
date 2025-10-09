@@ -30,7 +30,7 @@ import net.minecraft.world.item.ItemStack;
 public class MarketplaceContainer implements Renderable {
     
     private final int x, y, width, height;
-    private final List<MarketplaceItem> allItems;
+    private List<MarketplaceItem> allItems;
     private final ShopGuiScreen parentScreen;
     private EditBox searchBox;
     private int scrollOffset = 0;
@@ -60,6 +60,32 @@ public class MarketplaceContainer implements Renderable {
         calculateResponsiveDimensions();
         
         calculateMaxVisibleItems();
+    }
+    
+    /**
+     * Updates the marketplace items list.
+     * Called when the marketplace data is refreshed.
+     */
+    /**
+     * Updates the marketplace items list and optionally preserves scroll position.
+     * @param newItems The new list of marketplace items
+     * @param preserveScrollPosition If true, preserves the current scroll position
+     */
+    public void updateMarketplaceItems(List<MarketplaceItem> newItems, boolean preserveScrollPosition) {
+        this.allItems = new ArrayList<>(newItems);
+        if (!preserveScrollPosition) {
+            // Reset scroll position when items change (default behavior)
+            this.scrollOffset = 0;
+        }
+        // If preserveScrollPosition is true, keep the current scrollOffset
+    }
+    
+    /**
+     * Updates the marketplace items list (default behavior - resets scroll).
+     * @param newItems The new list of marketplace items
+     */
+    public void updateMarketplaceItems(List<MarketplaceItem> newItems) {
+        updateMarketplaceItems(newItems, false);
     }
     
     private void calculateResponsiveDimensions() {
@@ -230,9 +256,14 @@ public class MarketplaceContainer implements Renderable {
         Component sidebarTitle = Component.literal("Categories");
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sidebarTitle, sidebarX + GuiScalingHelper.responsiveWidth(5, 4, 8), sidebarY + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFFE0E0E0);
         
-        // Draw categories
-        List<ItemCategoryManager.Category> categories = ItemCategoryManager.getAllCategories();
+        // Draw categories (filter out categories with zero items)
+        List<ItemCategoryManager.Category> allCategories = ItemCategoryManager.getAllCategories();
         Map<ItemCategoryManager.Category, Integer> categoryCounts = ItemCategoryManager.getCategoryCounts(allItems);
+        
+        // Filter out categories with zero items
+        List<ItemCategoryManager.Category> categories = allCategories.stream()
+            .filter(category -> categoryCounts.getOrDefault(category, 0) > 0)
+            .collect(java.util.stream.Collectors.toList());
         
         int categoryY = sidebarY + GuiScalingHelper.responsiveHeight(20, 16, 28);
         int categoryHeight = GuiScalingHelper.responsiveHeight(16, 12, 22);
@@ -439,7 +470,7 @@ public class MarketplaceContainer implements Renderable {
         int cardWidth = calculatedItemWidth;
         int margin = GuiScalingHelper.responsiveWidth(5, 4, 8);
         int buttonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
-        int buttonSpacing = GuiScalingHelper.responsiveHeight(2, 1, 3);
+        int buttonSpacing = GuiScalingHelper.responsiveHeight(4, 3, 6);
         
         // Calculate button dimensions (fill width with margins)
         int buttonWidth = cardWidth - (margin * 2);
@@ -628,7 +659,15 @@ public class MarketplaceContainer implements Renderable {
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
             mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
             
-            List<ItemCategoryManager.Category> categories = ItemCategoryManager.getAllCategories();
+            // Use the same filtered categories as rendering
+            List<ItemCategoryManager.Category> allCategories = ItemCategoryManager.getAllCategories();
+            Map<ItemCategoryManager.Category, Integer> categoryCounts = ItemCategoryManager.getCategoryCounts(allItems);
+            
+            // Filter out categories with zero items
+            List<ItemCategoryManager.Category> categories = allCategories.stream()
+                .filter(category -> categoryCounts.getOrDefault(category, 0) > 0)
+                .collect(java.util.stream.Collectors.toList());
+            
             int categoryY = sidebarY + GuiScalingHelper.responsiveHeight(20, 16, 28);
             int categoryHeight = GuiScalingHelper.responsiveHeight(16, 12, 22);
             
@@ -669,7 +708,7 @@ public class MarketplaceContainer implements Renderable {
                     }
                 } else {
                     // Check delete button click (only if admin mode)
-                if (AdminModeHandler.isAdminMode()) {
+                    if (AdminModeHandler.isAdminMode()) {
                         int deleteButtonX = itemX + calculatedItemWidth - GuiScalingHelper.responsiveWidth(25, 20, 30);
                         int deleteButtonY = itemY + GuiScalingHelper.responsiveHeight(2, 1, 3);
                         int deleteButtonSize = GuiScalingHelper.responsiveWidth(20, 16, 26);
@@ -679,49 +718,57 @@ public class MarketplaceContainer implements Renderable {
                             // Delete item from marketplace
                             ClientMarketplaceDataManager.removeMarketplaceItem(item);
                             
-                            // Refresh the marketplace display
+                            // Refresh the marketplace display (preserve scroll position)
                             if (parentScreen != null) {
-                                parentScreen.refreshMarketplace();
+                                parentScreen.refreshMarketplace(true); // Preserve scroll position
                             }
                             
-                        return true;
+                            return true;
+                        }
                     }
                 }
                 
-                    // Check buy/sell button clicks (now vertically stacked)
-                    int margin = GuiScalingHelper.responsiveWidth(5, 4, 8);
-                    int buttonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
-                    int buttonSpacing = GuiScalingHelper.responsiveHeight(2, 1, 3);
-                    int buttonWidth = calculatedItemWidth - (margin * 2);
-                    int buttonStartY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
+                // Check buy/sell button clicks (now vertically stacked) - OUTSIDE admin mode check
+                int margin = GuiScalingHelper.responsiveWidth(5, 4, 8);
+                int buttonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
+                int buttonSpacing = GuiScalingHelper.responsiveHeight(4, 3, 6);
+                int buttonWidth = calculatedItemWidth - (margin * 2);
+                int buttonStartY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
+                
+                // Buy button (top) - with floating point tolerance
+                int buyButtonX = itemX + margin;
+                int buyButtonY = buttonStartY;
+                
+                if (mouseX >= buyButtonX - 0.5 && mouseX <= buyButtonX + buttonWidth + 0.5 &&
+                    mouseY >= buyButtonY - 0.5 && mouseY <= buyButtonY + buttonHeight + 0.5) {
+                    // Debug logging
+                    ServerShop.LOGGER.info("Buy button clicked at ({}, {}) - Button bounds: ({}, {}) to ({}, {})", 
+                        mouseX, mouseY, buyButtonX, buyButtonY, buyButtonX + buttonWidth, buyButtonY + buttonHeight);
                     
-                    // Buy button (top)
-                    int buyButtonX = itemX + margin;
-                    int buyButtonY = buttonStartY;
-                    
-                    if (mouseX >= buyButtonX && mouseX <= buyButtonX + buttonWidth &&
-                        mouseY >= buyButtonY && mouseY <= buyButtonY + buttonHeight) {
-                        // Handle buy button click (only if not in cooldown)
-                        if (!isBuyButtonInCooldown(item) && buyItem(item)) {
-                            // Success - item was bought
-                    return true;
-                        }
-                        return true; // Still return true to consume the click
+                    // Handle buy button click (only if not in cooldown)
+                    if (!isBuyButtonInCooldown(item) && buyItem(item)) {
+                        // Success - item was bought
+                        return true;
                     }
+                    return true; // Still return true to consume the click
+                }
+                
+                // Sell button (bottom) - with floating point tolerance
+                int sellButtonX = itemX + margin;
+                int sellButtonY = buttonStartY + buttonHeight + buttonSpacing;
+                
+                if (mouseX >= sellButtonX - 0.5 && mouseX <= sellButtonX + buttonWidth + 0.5 &&
+                    mouseY >= sellButtonY - 0.5 && mouseY <= sellButtonY + buttonHeight + 0.5) {
+                    // Debug logging
+                    ServerShop.LOGGER.info("Sell button clicked at ({}, {}) - Button bounds: ({}, {}) to ({}, {})", 
+                        mouseX, mouseY, sellButtonX, sellButtonY, sellButtonX + buttonWidth, sellButtonY + buttonHeight);
                     
-                    // Sell button (bottom)
-                    int sellButtonX = itemX + margin;
-                    int sellButtonY = buttonStartY + buttonHeight + buttonSpacing;
-                    
-                    if (mouseX >= sellButtonX && mouseX <= sellButtonX + buttonWidth &&
-                        mouseY >= sellButtonY && mouseY <= sellButtonY + buttonHeight) {
-                        // Handle sell button click (only if not in cooldown)
-                        if (!isSellButtonInCooldown(item) && sellItem(item)) {
-                            // Success - item was sold
-                    return true;
-                        }
-                        return true; // Still return true to consume the click
+                    // Handle sell button click (only if not in cooldown)
+                    if (!isSellButtonInCooldown(item) && sellItem(item)) {
+                        // Success - item was sold
+                        return true;
                     }
+                    return true; // Still return true to consume the click
                 }
                 
                 itemsRendered++;
@@ -826,10 +873,10 @@ public class MarketplaceContainer implements Renderable {
         
         WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
         
-        // Refresh wallet display and marketplace
+        // Refresh wallet display and marketplace (preserve scroll position)
         if (parentScreen != null) {
             parentScreen.refreshBalance(); // Refresh cached balance
-            parentScreen.refreshMarketplace();
+            parentScreen.refreshMarketplace(true); // Preserve scroll position
         }
         
         return true;
@@ -941,9 +988,10 @@ public class MarketplaceContainer implements Renderable {
         
         WalletHandler.addMoney(playerForMoney, item.getSellPrice());
         
-        // Refresh wallet display
+        // Refresh wallet display and marketplace (preserve scroll position)
         if (parentScreen != null) {
-            parentScreen.refreshMarketplace();
+            parentScreen.refreshBalance(); // Refresh cached balance
+            parentScreen.refreshMarketplace(true); // Preserve scroll position
         }
         
         return true;
@@ -951,18 +999,21 @@ public class MarketplaceContainer implements Renderable {
     
     /**
      * Checks if the player has the specified item in their inventory.
+     * Checks total count across all stacks, not individual stack counts.
      */
     private boolean hasItemInInventory(Player player, ItemStack itemToCheck) {
         var inventory = player.getInventory();
+        int totalCount = 0;
         
+        // Count all matching items across the entire inventory
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack slotItem = inventory.getItem(i);
             if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
-                return slotItem.getCount() >= itemToCheck.getCount();
+                totalCount += slotItem.getCount();
             }
         }
         
-        return false;
+        return totalCount >= itemToCheck.getCount();
     }
     
     /**
@@ -1002,6 +1053,7 @@ public class MarketplaceContainer implements Renderable {
     
     /**
      * Adds the specified item to the player's inventory.
+     * Only uses main inventory slots (0-35) to avoid offhand, armor, and curio slots.
      * Prioritizes adding to stacks with the fewest items.
      * @param player the player to add items to
      * @param itemToAdd the item to add
@@ -1011,9 +1063,12 @@ public class MarketplaceContainer implements Renderable {
         var inventory = player.getInventory();
         int remainingToAdd = itemToAdd.getCount();
         
-        // First pass: find all existing stacks of the same item and sort by count (fewest first)
+        // Only use main inventory slots (0-35) - avoid offhand (40), armor (36-39), and curio slots
+        final int MAIN_INVENTORY_SIZE = 36; // 0-35: hotbar + main inventory
+        
+        // First pass: find all existing stacks of the same item in main inventory and sort by count (fewest first)
         java.util.List<java.util.Map.Entry<Integer, ItemStack>> existingStacks = new java.util.ArrayList<>();
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
             ItemStack slotItem = inventory.getItem(i);
             if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToAdd)) {
                 existingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
@@ -1041,9 +1096,9 @@ public class MarketplaceContainer implements Renderable {
             }
         }
         
-        // If there are still items to add, try to find empty slots
+        // If there are still items to add, try to find empty slots in main inventory only
         if (remainingToAdd > 0) {
-            for (int i = 0; i < inventory.getContainerSize() && remainingToAdd > 0; i++) {
+            for (int i = 0; i < MAIN_INVENTORY_SIZE && remainingToAdd > 0; i++) {
                 ItemStack slotItem = inventory.getItem(i);
                 if (slotItem.isEmpty()) {
                     int addToSlot = Math.min(remainingToAdd, itemToAdd.getMaxStackSize());

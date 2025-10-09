@@ -30,14 +30,14 @@ public class ShopGuiScreen extends Screen {
     public ShopGuiScreen() {
         super(Component.translatable("gui.servershop.shop.title"));
         this.marketplaceItems = new ArrayList<>();
-        loadMarketplaceItemsFromFile();
+        // Don't load items here - let init() handle it with caching
     }
     
     private void loadMarketplaceItemsFromFile() {
-        // Load marketplace items from JSON file
+        // Load marketplace items from JSON file (now with caching)
         List<MarketplaceItem> loadedItems = ClientMarketplaceDataManager.loadMarketplaceItems();
         this.marketplaceItems = loadedItems;
-        ServerShop.LOGGER.info("Loaded {} marketplace items from JSON file", loadedItems.size());
+        ServerShop.LOGGER.debug("Loaded {} marketplace items from JSON file", loadedItems.size());
     }
     
     /**
@@ -60,6 +60,34 @@ public class ShopGuiScreen extends Screen {
     public void refreshBalance() {
         cachedBalance = WalletHandler.getPlayerMoney();
         lastBalanceUpdate = System.currentTimeMillis();
+    }
+    
+    /**
+     * Forces a refresh of the marketplace data.
+     * Invalidates the cache and reloads from file.
+     * @param preserveScrollPosition If true, preserves the current scroll position
+     */
+    public void refreshMarketplace(boolean preserveScrollPosition) {
+        int currentScrollPosition = 0;
+        if (preserveScrollPosition && marketplaceContainer != null) {
+            currentScrollPosition = marketplaceContainer.getScrollPosition();
+        }
+        
+        ClientMarketplaceDataManager.invalidateCache();
+        loadMarketplaceItemsFromFile();
+        
+        // Update the marketplace container with new data
+        if (marketplaceContainer != null) {
+            marketplaceContainer.updateMarketplaceItems(marketplaceItems, preserveScrollPosition);
+        }
+    }
+    
+    /**
+     * Forces a refresh of the marketplace data (default behavior - resets scroll).
+     * Invalidates the cache and reloads from file.
+     */
+    public void refreshMarketplace() {
+        refreshMarketplace(false);
     }
     
     
@@ -167,19 +195,7 @@ public class ShopGuiScreen extends Screen {
         @Override
         public void onClose() {
             super.onClose();
-        }
-        
-        /**
-         * Refreshes the marketplace items from the JSON file.
-         * Call this when returning from the add item popup.
-         */
-        public void refreshMarketplace() {
-            loadMarketplaceItemsFromFile();
-            if (marketplaceContainer != null) {
-                // Update the container's items list
-                marketplaceContainer.updateItems(marketplaceItems);
-            }
-        }
+    }
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {

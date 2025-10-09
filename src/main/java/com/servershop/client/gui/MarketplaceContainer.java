@@ -98,21 +98,24 @@ public class MarketplaceContainer implements Renderable {
     private int calculatedItemWidth = 130;
     
     public void init() {
-        // Create search box with responsive positioning
-        int searchMargin = GuiScalingHelper.responsiveWidth(10, 8, 15);
-        int searchTopMargin = GuiScalingHelper.responsiveHeight(25, 20, 35);
+        // Create search box with centered positioning and proper spacing from title
+        int searchWidth = GuiScalingHelper.responsiveWidth(300, 250, 400); // Fixed width for centering
         int searchHeight = GuiScalingHelper.responsiveHeight(20, 16, 26);
+        int searchX = x + (width - searchWidth) / 2; // Center horizontally
+        int searchY = y + GuiScalingHelper.responsiveHeight(30, 25, 35); // Position well above sidebar
         
         this.searchBox = new EditBox(
             net.minecraft.client.Minecraft.getInstance().font,
-            x + searchMargin, y + searchTopMargin, width - GuiScalingHelper.responsiveWidth(40, 30, 50), searchHeight,
-            Component.translatable("gui.servershop.marketplace.search")
+            searchX, searchY, searchWidth, searchHeight,
+            Component.translatable("gui.servershop.marketplace.search_placeholder")
         );
         this.searchBox.setResponder(this::onSearchChanged);
+        this.searchBox.setMaxLength(50); // Set max length for search
+        this.searchBox.setValue(""); // Clear any initial value
     }
     
     private void calculateMaxVisibleItems() {
-        int availableHeight = height - GuiScalingHelper.responsiveHeight(50, 40, 70); // Account for search box and padding
+        int availableHeight = height - GuiScalingHelper.responsiveHeight(65, 55, 85); // Account for title, search box, and padding
         this.maxVisibleItems = (availableHeight / itemHeight) * itemsPerRow;
     }
     
@@ -163,7 +166,8 @@ public class MarketplaceContainer implements Renderable {
         Component title = Component.translatable("gui.servershop.marketplace.title");
         int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
         int titleX = x + (width - titleWidth) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, y + GuiScalingHelper.responsiveHeight(15, 12, 20), 0xFFE0E0E0);
+        int titleY = y + GuiScalingHelper.responsiveHeight(15, 12, 20);
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, titleY, 0xFFE0E0E0);
         
         // Render search box
         if (searchBox != null) {
@@ -182,7 +186,7 @@ public class MarketplaceContainer implements Renderable {
         
         // Draw items with modern styling (adjusted for sidebar)
         int sidebarWidth = GuiScalingHelper.responsiveWidth(120, 100, 150);
-        int startY = y + GuiScalingHelper.responsiveHeight(60, 50, 80);
+        int startY = y + GuiScalingHelper.responsiveHeight(65, 55, 85); // Align with category sidebar
         int startX = x + sidebarWidth + GuiScalingHelper.responsiveWidth(20, 15, 30); // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
@@ -215,8 +219,8 @@ public class MarketplaceContainer implements Renderable {
     private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         int sidebarWidth = GuiScalingHelper.responsiveWidth(120, 100, 150);
         int sidebarX = x + GuiScalingHelper.responsiveWidth(10, 8, 15);
-        int sidebarY = y + GuiScalingHelper.responsiveHeight(50, 40, 70);
-        int sidebarHeight = height - GuiScalingHelper.responsiveHeight(80, 60, 100);
+        int sidebarY = y + GuiScalingHelper.responsiveHeight(65, 55, 85); // More margin from search box
+        int sidebarHeight = height - GuiScalingHelper.responsiveHeight(95, 75, 115);
         
         // Draw sidebar background
         guiGraphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + sidebarHeight, 0xFF1A1A1A);
@@ -601,15 +605,25 @@ public class MarketplaceContainer implements Renderable {
     }
     
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (searchBox != null && searchBox.mouseClicked(mouseX, mouseY, button)) {
-            return true;
+        // Handle search box clicks first
+        if (searchBox != null) {
+            if (searchBox.mouseClicked(mouseX, mouseY, button)) {
+                searchBox.setFocused(true);
+                return true;
+            }
+            // If click is within search box bounds, focus it
+            if (mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth() &&
+                mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight()) {
+                searchBox.setFocused(true);
+                return true;
+            }
         }
         
         // Handle category sidebar clicks
         int sidebarWidth = GuiScalingHelper.responsiveWidth(120, 100, 150);
         int sidebarX = x + GuiScalingHelper.responsiveWidth(10, 8, 15);
-        int sidebarY = y + GuiScalingHelper.responsiveHeight(50, 40, 70);
-        int sidebarHeight = height - GuiScalingHelper.responsiveHeight(80, 60, 100);
+        int sidebarY = y + GuiScalingHelper.responsiveHeight(65, 55, 85); // Match new sidebar position
+        int sidebarHeight = height - GuiScalingHelper.responsiveHeight(95, 75, 115);
         
         if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
             mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
@@ -733,6 +747,11 @@ public class MarketplaceContainer implements Renderable {
             }
         }
         
+        // If click is outside search box, unfocus it
+        if (searchBox != null && searchBox.isFocused()) {
+            searchBox.setFocused(false);
+        }
+        
         // Check if click is within container bounds
         if (mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height) {
             return true;
@@ -807,8 +826,9 @@ public class MarketplaceContainer implements Renderable {
         
         WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
         
-        // Refresh wallet display
+        // Refresh wallet display and marketplace
         if (parentScreen != null) {
+            parentScreen.refreshBalance(); // Refresh cached balance
             parentScreen.refreshMarketplace();
         }
         

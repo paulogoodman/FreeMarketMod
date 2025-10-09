@@ -1,6 +1,5 @@
 package com.servershop.server.handlers;
 
-import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -8,16 +7,12 @@ import net.minecraft.nbt.TagParser;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
-import net.minecraft.world.item.enchantment.EnchantmentInstance;
-import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.Registries;
-
 import com.servershop.ServerShop;
-import com.servershop.common.attachments.ItemComponentHandler;
 
 /**
  * Server-side handler for creating items with component data.

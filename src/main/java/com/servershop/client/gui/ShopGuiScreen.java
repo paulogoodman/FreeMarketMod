@@ -22,6 +22,11 @@ public class ShopGuiScreen extends Screen {
     private List<MarketplaceItem> marketplaceItems;
     private MarketplaceContainer marketplaceContainer;
     
+    // Cache wallet balance to avoid retrieving it every frame
+    private long cachedBalance = 0;
+    private long lastBalanceUpdate = 0;
+    private static final long BALANCE_CACHE_DURATION = 1000; // Update every 1 second
+    
     public ShopGuiScreen() {
         super(Component.translatable("gui.servershop.shop.title"));
         this.marketplaceItems = new ArrayList<>();
@@ -33,6 +38,28 @@ public class ShopGuiScreen extends Screen {
         List<MarketplaceItem> loadedItems = ClientMarketplaceDataManager.loadMarketplaceItems();
         this.marketplaceItems = loadedItems;
         ServerShop.LOGGER.info("Loaded {} marketplace items from JSON file", loadedItems.size());
+    }
+    
+    /**
+     * Gets the cached wallet balance, updating it only if the cache has expired.
+     * This prevents excessive wallet balance retrieval during rendering.
+     */
+    private long getCachedBalance() {
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastBalanceUpdate > BALANCE_CACHE_DURATION) {
+            cachedBalance = WalletHandler.getPlayerMoney();
+            lastBalanceUpdate = currentTime;
+        }
+        return cachedBalance;
+    }
+    
+    /**
+     * Forces a refresh of the cached balance.
+     * Call this after transactions to ensure the display is up-to-date.
+     */
+    public void refreshBalance() {
+        cachedBalance = WalletHandler.getPlayerMoney();
+        lastBalanceUpdate = System.currentTimeMillis();
     }
     
     
@@ -47,7 +74,7 @@ public class ShopGuiScreen extends Screen {
         
         // Create the marketplace container with responsive positioning
         int containerWidth = GuiScalingHelper.responsiveWidth(600, 400, 800);
-        int containerHeight = GuiScalingHelper.responsiveHeight(400, 300, 600);
+        int containerHeight = GuiScalingHelper.responsiveHeight(450, 350, 650); // Increased height for better spacing
         int containerX = GuiScalingHelper.centerX(containerWidth);
         int containerY = GuiScalingHelper.centerY(containerHeight);
         
@@ -74,7 +101,7 @@ public class ShopGuiScreen extends Screen {
     
     private void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
-        long money = WalletHandler.getPlayerMoney();
+        long money = getCachedBalance(); // Use cached balance instead of retrieving every frame
         String formattedMoney = String.format("$%,d", money);
         
         // Create title and money components

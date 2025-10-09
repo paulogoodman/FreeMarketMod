@@ -1,19 +1,18 @@
 package com.servershop.common.handlers;
 
 import com.servershop.ServerShop;
-import net.minecraft.nbt.CompoundTag;
+import com.servershop.common.attachments.PlayerWalletAttachment;
 import net.minecraft.world.entity.player.Player;
 
 /**
  * Handles player wallet/money system for the ServerShop mod.
- * This class manages player money balances stored in player NBT data.
- * Uses getPersistentData() which should persist across deaths in NeoForge 1.21.1.
+ * This class manages player money balances using NeoForge Data Attachments.
+ * Uses PlayerWalletAttachment for proper persistence across deaths.
  */
 public class WalletHandler {
-    private static final String WALLET_NBT_KEY = "servershop_wallet";
     
     /**
-     * Gets the current player money amount from their NBT data.
+     * Gets the current player money amount from their wallet attachment.
      * @param player the player to get money for
      * @return current money amount
      */
@@ -23,22 +22,14 @@ public class WalletHandler {
             return 0;
         }
         
-        CompoundTag playerData = player.getPersistentData();
-        
-        if (playerData.contains(WALLET_NBT_KEY)) {
-            long balance = playerData.getLong(WALLET_NBT_KEY);
-            // Only log on first initialization, not every retrieval
-            return balance;
-        }
-        
-        // If no wallet data exists, initialize with zero
-        ServerShop.LOGGER.info("No wallet data found for {}, initializing with 0", player.getName().getString());
-        setPlayerMoney(player, 0);
-        return 0;
+        PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
+        long balance = wallet.getBalance();
+        // Only log debug messages, not every retrieval
+        return balance;
     }
     
     /**
-     * Sets the player money amount in their NBT data.
+     * Sets the player money amount in their wallet attachment.
      * @param player the player to set money for
      * @param amount the new money amount
      */
@@ -48,10 +39,10 @@ public class WalletHandler {
             return;
         }
         
-        CompoundTag playerData = player.getPersistentData();
-        playerData.putLong(WALLET_NBT_KEY, amount);
+        PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
+        wallet.setBalance(amount);
         
-        // Only log significant changes, not every set operation
+        // Only log significant wallet changes, not every set operation
         ServerShop.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
     
@@ -66,11 +57,10 @@ public class WalletHandler {
             return;
         }
         
-        long currentMoney = getPlayerMoney(player);
-        long newAmount = currentMoney + amount;
-        setPlayerMoney(player, newAmount);
+        PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
+        wallet.addBalance(amount);
         
-        ServerShop.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), newAmount);
+        ServerShop.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
     }
     
     /**
@@ -85,15 +75,13 @@ public class WalletHandler {
             return false;
         }
         
-        long currentMoney = getPlayerMoney(player);
-        if (currentMoney >= amount) {
-            long newAmount = currentMoney - amount;
-            setPlayerMoney(player, newAmount);
-            ServerShop.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), newAmount);
+        PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
+        if (wallet.removeBalance(amount)) {
+            ServerShop.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
             return true;
         }
         
-        ServerShop.LOGGER.info("Insufficient funds for {}. Required: {}, Available: {}", player.getName().getString(), amount, currentMoney);
+        ServerShop.LOGGER.info("Insufficient funds for {}. Required: {}, Available: {}", player.getName().getString(), amount, wallet.getBalance());
         return false;
     }
     
@@ -104,7 +92,12 @@ public class WalletHandler {
      * @return true if player has enough money
      */
     public static boolean hasEnoughMoney(Player player, long amount) {
-        return getPlayerMoney(player) >= amount;
+        if (player == null) {
+            return false;
+        }
+        
+        PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
+        return wallet.hasEnoughBalance(amount);
     }
     
     /**

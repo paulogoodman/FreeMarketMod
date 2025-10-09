@@ -166,24 +166,13 @@ public class ItemComponentHandler {
      */
     public static String createEnchantmentJson(String enchantmentId, int level) {
         try {
-            // Create the individual enchantment tag
-            CompoundTag enchantmentTag = new CompoundTag();
-            enchantmentTag.putString("id", enchantmentId);
-            enchantmentTag.putInt("lvl", level);
+            // Create proper JSON string instead of using CompoundTag.toString()
+            String json = String.format(
+                "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"%s\",\"lvl\":%d}}}}",
+                enchantmentId, level
+            );
             
-            // Create the enchantments list
-            CompoundTag enchantmentsList = new CompoundTag();
-            enchantmentsList.put("0", enchantmentTag);
-            
-            // Create the main enchantments tag
-            CompoundTag enchantmentsTag = new CompoundTag();
-            enchantmentsTag.put("enchantments", enchantmentsList);
-            
-            // Create the final result
-            CompoundTag result = new CompoundTag();
-            result.put("minecraft:enchantments", enchantmentsTag);
-            
-            return result.toString();
+            return json;
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to create enchantment JSON: {}", e.getMessage());
             return "{}";
@@ -199,32 +188,28 @@ public class ItemComponentHandler {
      */
     public static String createComponentDataJson(String customName, String enchantmentId, int enchantmentLevel) {
         try {
-            CompoundTag result = new CompoundTag();
+            StringBuilder json = new StringBuilder("{");
+            boolean hasContent = false;
             
             // Add custom name if provided
             if (customName != null && !customName.trim().isEmpty()) {
-                result.putString("minecraft:custom_name", customName);
+                if (hasContent) json.append(",");
+                json.append("\"minecraft:custom_name\":\"").append(customName).append("\"");
+                hasContent = true;
             }
             
             // Add enchantments if provided
             if (enchantmentId != null && !enchantmentId.trim().isEmpty()) {
-                // Create the individual enchantment tag
-                CompoundTag enchantmentTag = new CompoundTag();
-                enchantmentTag.putString("id", enchantmentId);
-                enchantmentTag.putInt("lvl", enchantmentLevel);
-                
-                // Create the enchantments list
-                CompoundTag enchantmentsList = new CompoundTag();
-                enchantmentsList.put("0", enchantmentTag);
-                
-                // Create the main enchantments tag
-                CompoundTag enchantmentsTag = new CompoundTag();
-                enchantmentsTag.put("enchantments", enchantmentsList);
-                
-                result.put("minecraft:enchantments", enchantmentsTag);
+                if (hasContent) json.append(",");
+                json.append("\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"")
+                    .append(enchantmentId).append("\",\"lvl\":").append(enchantmentLevel).append("}}}");
+                hasContent = true;
             }
             
-            return result.toString();
+            json.append("}");
+            
+            String result = json.toString();
+            return result;
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to create component data JSON: {}", e.getMessage());
             return "{}";

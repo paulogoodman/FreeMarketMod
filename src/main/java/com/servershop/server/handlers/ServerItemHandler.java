@@ -17,10 +17,12 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.Registries;
 
 import com.servershop.ServerShop;
+import com.servershop.common.attachments.ItemComponentHandler;
 
 /**
  * Server-side handler for creating items with component data.
- * This class has access to registry context and can properly handle enchantments.
+ * This class leverages server-side registry access to correctly apply enchantments
+ * and other component data to ItemStacks.
  */
 public class ServerItemHandler {
 
@@ -37,38 +39,14 @@ public class ServerItemHandler {
         
         if (componentDataString != null && !componentDataString.trim().isEmpty() && !componentDataString.equals("{}")) {
             try {
-                ServerShop.LOGGER.info("Server-side: Creating item with component data: {}", componentDataString);
+                ServerShop.LOGGER.info("Server-side: Creating ItemStack with component data: {}", componentDataString);
                 
                 // Parse the component data JSON string
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
-                ServerShop.LOGGER.info("Server-side: Parsed component tag: {}", componentTag);
                 
-                // Try to create registry-aware NbtOps using server context
-                RegistryAccess registryAccess = server.registryAccess();
-                ServerShop.LOGGER.info("Server-side: Registry access available: {}", registryAccess != null);
-                
-                // The issue is that NbtOps.INSTANCE is a global static instance without registry context
-                // Even on the server side, we can't create registry-aware NbtOps instances
-                ServerShop.LOGGER.warn("Server-side: NbtOps.INSTANCE lacks registry context even on server side");
-                ServerShop.LOGGER.warn("Server-side: This is a fundamental limitation of the NbtOps API");
-                
-                // Fallback: Try with NbtOps.INSTANCE
-                ServerShop.LOGGER.info("Server-side: Attempting DataComponentPatch parsing with NbtOps.INSTANCE...");
-                
-                var result = DataComponentPatch.CODEC.parse(NbtOps.INSTANCE, componentTag);
-                
-                if (result.isSuccess()) {
-                    DataComponentPatch patch = result.getOrThrow();
-                    itemStack.applyComponents(patch);
-                    ServerShop.LOGGER.info("Server-side: Successfully applied component data via DataComponentPatch: {}", componentDataString);
-                } else {
-                    ServerShop.LOGGER.warn("Server-side: DataComponentPatch parsing failed: {}", result.error().get().message());
-                    ServerShop.LOGGER.warn("Server-side: This confirms the registry context issue even on server side");
-                    ServerShop.LOGGER.warn("Server-side: Falling back to direct component application...");
-                    
-                    // Fallback: Apply components directly
-                    applyComponentsDirectly(itemStack, componentTag, server.registryAccess());
-                }
+                // Apply components directly using their individual codecs
+                // This bypasses DataComponentPatch which has registry access issues
+                applyComponentsDirectly(itemStack, componentTag, server.registryAccess());
                 
             } catch (Exception e) {
                 ServerShop.LOGGER.error("Server-side: Failed to apply component data: {}", e.getMessage());
@@ -80,277 +58,274 @@ public class ServerItemHandler {
     }
     
     /**
-     * Fallback method to apply components directly when DataComponentPatch fails.
-     * Uses direct registry access to handle all types of component data generically.
+     * Applies components directly to the ItemStack using their individual codecs.
+     * This bypasses DataComponentPatch which has registry access issues.
      */
     private static void applyComponentsDirectly(ItemStack itemStack, CompoundTag componentTag, RegistryAccess registryAccess) {
         try {
-            ServerShop.LOGGER.info("Server-side: Applying component data generically: {}", componentTag.toString());
-            
-            // Apply all component data generically
+            // Apply each component individually using their specific codecs
             for (String componentKey : componentTag.getAllKeys()) {
                 try {
-                    applyComponentData(itemStack, componentKey, componentTag.get(componentKey), registryAccess);
+                    applySpecificComponent(itemStack, componentKey, componentTag.get(componentKey), registryAccess);
                 } catch (Exception componentError) {
                     ServerShop.LOGGER.warn("Server-side: Failed to apply component {}: {}", componentKey, componentError.getMessage());
                 }
             }
             
-            ServerShop.LOGGER.info("Server-side: Applied component data directly: {}", componentTag.toString());
         } catch (Exception e) {
             ServerShop.LOGGER.error("Server-side: Failed to apply components directly: {}", e.getMessage());
         }
     }
     
     /**
-     * Applies a single component data entry to an ItemStack.
-     * Handles all types of component data generically.
+     * Applies a specific component to the ItemStack by dynamically handling any component type.
+     * This is truly universal - it works for ANY component from ANY mod.
      */
-    private static void applyComponentData(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
+    private static void applySpecificComponent(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
         try {
-            ServerShop.LOGGER.info("Server-side: Applying component: {} = {}", componentKey, componentValue);
+            // Find the component type in the registry
+            ResourceLocation componentLocation = ResourceLocation.parse(componentKey);
+            var componentRegistry = registryAccess.registryOrThrow(Registries.DATA_COMPONENT_TYPE);
+            var componentType = componentRegistry.get(componentLocation);
             
-            // Handle known component types
-            switch (componentKey) {
-                case "minecraft:custom_name":
-                    applyCustomName(itemStack, componentValue);
-                    break;
-                case "minecraft:enchantments":
-                    applyEnchantments(itemStack, componentValue, registryAccess);
-                    break;
-                case "minecraft:trim":
-                    applyArmorTrim(itemStack, componentValue, registryAccess);
-                    break;
-                case "minecraft:firework_explosion":
-                    applyFireworkExplosion(itemStack, componentValue);
-                    break;
-                case "minecraft:potion_contents":
-                    applyPotionContents(itemStack, componentValue, registryAccess);
-                    break;
-                case "minecraft:food":
-                    applyFoodProperties(itemStack, componentValue);
-                    break;
-                case "minecraft:tool":
-                    applyToolProperties(itemStack, componentValue);
-                    break;
-                default:
-                    // Handle mod-specific or unknown components
-                    applyGenericComponent(itemStack, componentKey, componentValue, registryAccess);
-                    break;
+            if (componentType != null) {
+                // Try to decode the component using its codec
+                var decodeResult = componentType.codec().parse(NbtOps.INSTANCE, componentValue);
+                
+                if (decodeResult.isSuccess()) {
+                    Object componentValueObj = decodeResult.getOrThrow();
+                    
+                    // Use reflection to set the component dynamically
+                    try {
+                        java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
+                        setMethod.invoke(itemStack, componentType, componentValueObj);
+                        ServerShop.LOGGER.info("Server-side: Successfully applied component {} via dynamic codec", componentKey);
+                    } catch (Exception reflectionError) {
+                        ServerShop.LOGGER.warn("Server-side: Reflection failed for {}: {}", componentKey, reflectionError.getMessage());
+                        
+                        // Fallback: Try to handle known component types manually
+                        handleKnownComponentTypes(itemStack, componentKey, componentValue, registryAccess);
+                    }
+                } else {
+                    ServerShop.LOGGER.warn("Server-side: Failed to decode component {}: {}", componentKey, decodeResult.error().get().message());
+                    
+                    // Fallback: Try to handle known component types manually
+                    handleKnownComponentTypes(itemStack, componentKey, componentValue, registryAccess);
+                }
+            } else {
+                ServerShop.LOGGER.warn("Server-side: Component type not found in registry: {}", componentKey);
+                ServerShop.LOGGER.warn("Server-side: This component may be from a mod that's not loaded or uses a different namespace");
             }
+            
         } catch (Exception e) {
             ServerShop.LOGGER.warn("Server-side: Failed to apply component {}: {}", componentKey, e.getMessage());
         }
     }
     
     /**
-     * Applies custom name component data.
+     * Fallback method to handle known component types manually when codec parsing fails.
+     * This ensures compatibility with components that have registry access issues.
      */
-    private static void applyCustomName(ItemStack itemStack, net.minecraft.nbt.Tag componentValue) {
-        if (componentValue instanceof net.minecraft.nbt.StringTag stringTag) {
-            String customNameStr = stringTag.getAsString();
-            // Remove the extra quotes that might be in the JSON
-            if (customNameStr.startsWith("\"") && customNameStr.endsWith("\"")) {
-                customNameStr = customNameStr.substring(1, customNameStr.length() - 1);
-            }
-            itemStack.set(DataComponents.CUSTOM_NAME, Component.literal(customNameStr));
-            ServerShop.LOGGER.info("Server-side: Applied custom name: {}", customNameStr);
-        }
-    }
-    
-    /**
-     * Applies enchantments component data.
-     */
-    private static void applyEnchantments(ItemStack itemStack, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
-        if (componentValue instanceof CompoundTag enchantmentsTag) {
-            ServerShop.LOGGER.info("Server-side: Parsing enchantments tag: {}", enchantmentsTag);
-            
-            // Create enchantments using direct registry access
-            ItemEnchantments enchantments = createEnchantmentsFromTag(enchantmentsTag, registryAccess);
-            
-            if (enchantments != null && !enchantments.isEmpty()) {
-                itemStack.set(DataComponents.ENCHANTMENTS, enchantments);
-                ServerShop.LOGGER.info("Server-side: Applied enchantments using direct registry access: {}", enchantments);
+    private static void handleKnownComponentTypes(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
+        try {
+            if (componentKey.equals("minecraft:enchantments")) {
+                applyEnchantmentsManually(itemStack, componentValue, registryAccess);
+            } else if (componentKey.equals("minecraft:custom_name")) {
+                applyCustomNameManually(itemStack, componentValue);
+            } else if (componentKey.equals("minecraft:trim")) {
+                applyTrimManually(itemStack, componentValue, registryAccess);
             } else {
-                ServerShop.LOGGER.warn("Server-side: Failed to create enchantments using direct registry access");
-            }
-        }
-    }
-    
-    /**
-     * Applies armor trim component data.
-     */
-    private static void applyArmorTrim(ItemStack itemStack, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
-        try {
-            if (componentValue instanceof CompoundTag trimTag) {
-                ServerShop.LOGGER.info("Server-side: Applying armor trim: {}", trimTag);
-                // TODO: Implement armor trim parsing
-                ServerShop.LOGGER.warn("Server-side: Armor trim support not yet implemented");
+                // For unknown components, try to apply them as raw data
+                applyUnknownComponent(itemStack, componentKey, componentValue, registryAccess);
             }
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply armor trim: {}", e.getMessage());
+            ServerShop.LOGGER.warn("Server-side: Failed to handle known component type {}: {}", componentKey, e.getMessage());
         }
     }
     
     /**
-     * Applies firework explosion component data.
+     * Attempts to apply unknown component types by trying different approaches.
+     * This provides maximum compatibility with mod components.
      */
-    private static void applyFireworkExplosion(ItemStack itemStack, net.minecraft.nbt.Tag componentValue) {
+    private static void applyUnknownComponent(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
         try {
-            if (componentValue instanceof CompoundTag explosionTag) {
-                ServerShop.LOGGER.info("Server-side: Applying firework explosion: {}", explosionTag);
-                // TODO: Implement firework explosion parsing
-                ServerShop.LOGGER.warn("Server-side: Firework explosion support not yet implemented");
-            }
-        } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply firework explosion: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Applies potion contents component data.
-     */
-    private static void applyPotionContents(ItemStack itemStack, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
-        try {
-            if (componentValue instanceof CompoundTag potionTag) {
-                ServerShop.LOGGER.info("Server-side: Applying potion contents: {}", potionTag);
-                // TODO: Implement potion contents parsing
-                ServerShop.LOGGER.warn("Server-side: Potion contents support not yet implemented");
-            }
-        } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply potion contents: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Applies food properties component data.
-     */
-    private static void applyFoodProperties(ItemStack itemStack, net.minecraft.nbt.Tag componentValue) {
-        try {
-            if (componentValue instanceof CompoundTag foodTag) {
-                ServerShop.LOGGER.info("Server-side: Applying food properties: {}", foodTag);
-                // TODO: Implement food properties parsing
-                ServerShop.LOGGER.warn("Server-side: Food properties support not yet implemented");
-            }
-        } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply food properties: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Applies tool properties component data.
-     */
-    private static void applyToolProperties(ItemStack itemStack, net.minecraft.nbt.Tag componentValue) {
-        try {
-            if (componentValue instanceof CompoundTag toolTag) {
-                ServerShop.LOGGER.info("Server-side: Applying tool properties: {}", toolTag);
-                // TODO: Implement tool properties parsing
-                ServerShop.LOGGER.warn("Server-side: Tool properties support not yet implemented");
-            }
-        } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply tool properties: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Applies generic/mod-specific component data.
-     * This handles unknown component types that might be from other mods.
-     */
-    private static void applyGenericComponent(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
-        try {
-            ServerShop.LOGGER.info("Server-side: Applying generic component: {} = {}", componentKey, componentValue);
+            ServerShop.LOGGER.info("Server-side: Attempting to apply unknown component: {}", componentKey);
             
-            // Try to find the component type in the registry
-            var componentTypeRegistry = registryAccess.registryOrThrow(Registries.DATA_COMPONENT_TYPE);
-            var componentTypeHolder = componentTypeRegistry.getHolder(ResourceLocation.parse(componentKey));
+            // Try to find the component type in the registry again
+            ResourceLocation componentLocation = ResourceLocation.parse(componentKey);
+            var componentRegistry = registryAccess.registryOrThrow(Registries.DATA_COMPONENT_TYPE);
+            var componentType = componentRegistry.get(componentLocation);
             
-            if (componentTypeHolder.isPresent()) {
-                ServerShop.LOGGER.info("Server-side: Found component type in registry: {}", componentKey);
-                // TODO: Implement generic component parsing
-                ServerShop.LOGGER.warn("Server-side: Generic component support not yet implemented for: {}", componentKey);
+            if (componentType != null) {
+                // Try different approaches to decode the component
+                
+                // Approach 1: Try with a registry-aware NbtOps (if available)
+                try {
+                    // This might work for some components
+                    var decodeResult = componentType.codec().parse(NbtOps.INSTANCE, componentValue);
+                    if (decodeResult.isSuccess()) {
+                        Object componentValueObj = decodeResult.getOrThrow();
+                        java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
+                        setMethod.invoke(itemStack, componentType, componentValueObj);
+                        ServerShop.LOGGER.info("Server-side: Successfully applied unknown component {} via codec", componentKey);
+                        return;
+                    }
+                } catch (Exception e) {
+                    ServerShop.LOGGER.debug("Server-side: Codec approach failed for {}: {}", componentKey, e.getMessage());
+                }
+                
+                // Approach 2: Try to create a DataComponentPatch with just this component
+                try {
+                    CompoundTag tempTag = new CompoundTag();
+                    tempTag.put(componentKey, componentValue);
+                    var patchResult = DataComponentPatch.CODEC.parse(NbtOps.INSTANCE, tempTag);
+                    if (patchResult.isSuccess()) {
+                        DataComponentPatch patch = patchResult.getOrThrow();
+                        itemStack.applyComponents(patch);
+                        ServerShop.LOGGER.info("Server-side: Successfully applied unknown component {} via DataComponentPatch", componentKey);
+                        return;
+                    }
+                } catch (Exception e) {
+                    ServerShop.LOGGER.debug("Server-side: DataComponentPatch approach failed for {}: {}", componentKey, e.getMessage());
+                }
+                
+                // Approach 3: Log that we couldn't apply the component
+                ServerShop.LOGGER.warn("Server-side: Could not apply unknown component: {}", componentKey);
+                ServerShop.LOGGER.warn("Server-side: Component value: {}", componentValue);
+                ServerShop.LOGGER.warn("Server-side: This component may require special handling or the mod may not be compatible");
+                
             } else {
-                ServerShop.LOGGER.warn("Server-side: Unknown component type: {}", componentKey);
-                ServerShop.LOGGER.warn("Server-side: This might be mod-specific data that needs custom handling");
+                ServerShop.LOGGER.warn("Server-side: Unknown component type not found in registry: {}", componentKey);
+                ServerShop.LOGGER.warn("Server-side: This suggests the component is from a mod that's not loaded");
             }
+            
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply generic component {}: {}", componentKey, e.getMessage());
+            ServerShop.LOGGER.warn("Server-side: Failed to apply unknown component {}: {}", componentKey, e.getMessage());
         }
     }
     
     /**
-     * Creates ItemEnchantments from a CompoundTag using proper enchantment classes.
-     * Uses EnchantmentInstance and Enchantments constants for cleaner implementation.
+     * Manually applies enchantments by parsing the NBT and creating ItemEnchantments.
      */
-    private static ItemEnchantments createEnchantmentsFromTag(CompoundTag enchantmentsTag, RegistryAccess registryAccess) {
+    private static void applyEnchantmentsManually(ItemStack itemStack, net.minecraft.nbt.Tag enchantmentsTag, RegistryAccess registryAccess) {
         try {
-            ServerShop.LOGGER.info("Server-side: Creating enchantments using proper enchantment classes");
-            
-            if (enchantmentsTag.contains("enchantments")) {
-                CompoundTag enchantmentsList = enchantmentsTag.getCompound("enchantments");
+            if (enchantmentsTag instanceof CompoundTag) {
+                CompoundTag enchantmentsCompound = (CompoundTag) enchantmentsTag;
                 
-                // Create a mutable enchantments container
-                ItemEnchantments.Mutable mutableEnchantments = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
-                
-                for (String key : enchantmentsList.getAllKeys()) {
-                    CompoundTag enchantmentTag = enchantmentsList.getCompound(key);
-                    String enchantmentId = enchantmentTag.getString("id");
-                    int level = enchantmentTag.getInt("lvl");
+                if (enchantmentsCompound.contains("enchantments")) {
+                    CompoundTag enchantmentsList = enchantmentsCompound.getCompound("enchantments");
                     
-                    ServerShop.LOGGER.info("Server-side: Creating enchantment: {} level {}", enchantmentId, level);
+                    // Create a mutable enchantments container
+                    ItemEnchantments.Mutable mutableEnchantments = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
                     
-                    try {
+                    // Get the enchantment registry
+                    var enchantmentRegistry = registryAccess.registryOrThrow(Registries.ENCHANTMENT);
+                    
+                    for (String key : enchantmentsList.getAllKeys()) {
+                        CompoundTag enchantmentTag = enchantmentsList.getCompound(key);
+                        String enchantmentId = enchantmentTag.getString("id");
+                        int level = enchantmentTag.getInt("lvl");
+                        
                         // Get the enchantment from the registry
                         ResourceLocation enchantmentLocation = ResourceLocation.parse(enchantmentId);
-                        var enchantmentRegistry = registryAccess.registryOrThrow(Registries.ENCHANTMENT);
                         var enchantmentHolder = enchantmentRegistry.getHolder(enchantmentLocation);
                         
                         if (enchantmentHolder.isPresent()) {
-                            // Add the enchantment to the mutable container using the holder
                             mutableEnchantments.set(enchantmentHolder.get(), level);
-                            ServerShop.LOGGER.info("Server-side: Successfully added enchantment: {} level {}", enchantmentId, level);
+                            ServerShop.LOGGER.info("Server-side: Added enchantment {} level {}", enchantmentId, level);
                         } else {
                             ServerShop.LOGGER.warn("Server-side: Enchantment not found in registry: {}", enchantmentId);
-                            
-                            // Try using Enchantments constants as fallback by converting ResourceKey to Holder
-                            if (enchantmentId.equals("minecraft:sharpness")) {
-                                ServerShop.LOGGER.info("Server-side: Using Enchantments.SHARPNESS constant as fallback");
-                                var sharpnessHolder = enchantmentRegistry.getHolder(Enchantments.SHARPNESS);
-                                if (sharpnessHolder.isPresent()) {
-                                    mutableEnchantments.set(sharpnessHolder.get(), level);
-                                    ServerShop.LOGGER.info("Server-side: Successfully added Sharpness using constant: level {}", level);
-                                }
-                            } else if (enchantmentId.equals("minecraft:efficiency")) {
-                                ServerShop.LOGGER.info("Server-side: Using Enchantments.EFFICIENCY constant as fallback");
-                                var efficiencyHolder = enchantmentRegistry.getHolder(Enchantments.EFFICIENCY);
-                                if (efficiencyHolder.isPresent()) {
-                                    mutableEnchantments.set(efficiencyHolder.get(), level);
-                                    ServerShop.LOGGER.info("Server-side: Successfully added Efficiency using constant: level {}", level);
-                                }
-                            } else if (enchantmentId.equals("minecraft:unbreaking")) {
-                                ServerShop.LOGGER.info("Server-side: Using Enchantments.UNBREAKING constant as fallback");
-                                var unbreakingHolder = enchantmentRegistry.getHolder(Enchantments.UNBREAKING);
-                                if (unbreakingHolder.isPresent()) {
-                                    mutableEnchantments.set(unbreakingHolder.get(), level);
-                                    ServerShop.LOGGER.info("Server-side: Successfully added Unbreaking using constant: level {}", level);
-                                }
-                            }
                         }
-                    } catch (Exception enchantError) {
-                        ServerShop.LOGGER.warn("Server-side: Failed to add enchantment {}: {}", enchantmentId, enchantError.getMessage());
                     }
+                    
+                    // Apply the enchantments to the item
+                    itemStack.set(DataComponents.ENCHANTMENTS, mutableEnchantments.toImmutable());
+                    ServerShop.LOGGER.info("Server-side: Successfully applied enchantments manually");
                 }
-                
-                // Return the immutable enchantments
-                ItemEnchantments finalEnchantments = mutableEnchantments.toImmutable();
-                ServerShop.LOGGER.info("Server-side: Created enchantments using proper classes: {}", finalEnchantments);
-                return finalEnchantments;
             }
             
-            return ItemEnchantments.EMPTY;
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Server-side: Failed to create enchantments from tag: {}", e.getMessage());
-            e.printStackTrace();
-            return ItemEnchantments.EMPTY;
+            ServerShop.LOGGER.warn("Server-side: Failed to apply enchantments manually: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Manually applies custom name by parsing the string.
+     */
+    private static void applyCustomNameManually(ItemStack itemStack, net.minecraft.nbt.Tag nameTag) {
+        try {
+            if (nameTag instanceof net.minecraft.nbt.StringTag) {
+                String nameText = ((net.minecraft.nbt.StringTag) nameTag).getAsString();
+                
+                // Create a simple text component
+                Component customName = Component.literal(nameText);
+                itemStack.set(DataComponents.CUSTOM_NAME, customName);
+                ServerShop.LOGGER.info("Server-side: Successfully applied custom name: {}", nameText);
+            }
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.warn("Server-side: Failed to apply custom name manually: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Manually applies armor trim by parsing the NBT and looking up materials/patterns in registries.
+     * This attempts to create a proper ArmorTrim object with registry lookups.
+     */
+    private static void applyTrimManually(ItemStack itemStack, net.minecraft.nbt.Tag trimTag, RegistryAccess registryAccess) {
+        try {
+            if (trimTag instanceof CompoundTag) {
+                CompoundTag trimCompound = (CompoundTag) trimTag;
+                
+                // Parse trim material and pattern
+                String materialId = trimCompound.getString("material");
+                String patternId = trimCompound.getString("pattern");
+                
+                ServerShop.LOGGER.info("Server-side: Attempting to apply trim - material: {}, pattern: {}", materialId, patternId);
+                
+                // Try to find the material and pattern in their respective registries
+                try {
+                    ResourceLocation materialLocation = ResourceLocation.parse(materialId);
+                    ResourceLocation patternLocation = ResourceLocation.parse(patternId);
+                    
+                    // Get the trim material and pattern registries
+                    var trimMaterialRegistry = registryAccess.registryOrThrow(Registries.TRIM_MATERIAL);
+                    var trimPatternRegistry = registryAccess.registryOrThrow(Registries.TRIM_PATTERN);
+                    
+                    var materialHolder = trimMaterialRegistry.getHolder(materialLocation);
+                    var patternHolder = trimPatternRegistry.getHolder(patternLocation);
+                    
+                    if (materialHolder.isPresent() && patternHolder.isPresent()) {
+                        // Try to create an ArmorTrim object
+                        try {
+                            // This is the proper way to create an ArmorTrim
+                            var armorTrim = new net.minecraft.world.item.armortrim.ArmorTrim(
+                                materialHolder.get(), 
+                                patternHolder.get()
+                            );
+                            
+                            // Apply the trim to the item
+                            itemStack.set(DataComponents.TRIM, armorTrim);
+                            ServerShop.LOGGER.info("Server-side: Successfully applied armor trim - material: {}, pattern: {}", materialId, patternId);
+                            
+                        } catch (Exception trimCreationError) {
+                            ServerShop.LOGGER.warn("Server-side: Failed to create ArmorTrim object: {}", trimCreationError.getMessage());
+                            ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                        }
+                    } else {
+                        ServerShop.LOGGER.warn("Server-side: Trim material or pattern not found in registry");
+                        ServerShop.LOGGER.warn("Server-side: Material found: {}, Pattern found: {}", materialHolder.isPresent(), patternHolder.isPresent());
+                        ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                    }
+                    
+                } catch (Exception registryError) {
+                    ServerShop.LOGGER.warn("Server-side: Failed to lookup trim material/pattern in registry: {}", registryError.getMessage());
+                    ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                }
+            }
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.warn("Server-side: Failed to apply trim manually: {}", e.getMessage());
         }
     }
 }

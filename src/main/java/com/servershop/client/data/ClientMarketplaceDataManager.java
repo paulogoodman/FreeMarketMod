@@ -150,7 +150,6 @@ public class ClientMarketplaceDataManager {
                         var singleplayerServer = minecraft.getSingleplayerServer();
                         
                         if (singleplayerServer != null) {
-                            ServerShop.LOGGER.info("ClientMarketplaceDataManager: Using server-side processing for component data");
                             // Use server-side handler with registry access
                             itemStack = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
                                 itemStack, componentDataString, singleplayerServer);

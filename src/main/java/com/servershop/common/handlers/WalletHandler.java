@@ -7,6 +7,7 @@ import net.minecraft.world.entity.player.Player;
 /**
  * Handles player wallet/money system for the ServerShop mod.
  * This class manages player money balances stored in player NBT data.
+ * Uses getPersistentData() which should persist across deaths in NeoForge 1.21.1.
  */
 public class WalletHandler {
     private static final String WALLET_NBT_KEY = "servershop_wallet";
@@ -26,11 +27,12 @@ public class WalletHandler {
         
         if (playerData.contains(WALLET_NBT_KEY)) {
             long balance = playerData.getLong(WALLET_NBT_KEY);
+            // Only log on first initialization, not every retrieval
             return balance;
         }
         
         // If no wallet data exists, initialize with zero
-        ServerShop.LOGGER.info("No NBT data found for {}, initializing with 0", player.getName().getString());
+        ServerShop.LOGGER.info("No wallet data found for {}, initializing with 0", player.getName().getString());
         setPlayerMoney(player, 0);
         return 0;
     }
@@ -49,6 +51,7 @@ public class WalletHandler {
         CompoundTag playerData = player.getPersistentData();
         playerData.putLong(WALLET_NBT_KEY, amount);
         
+        // Only log significant changes, not every set operation
         ServerShop.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
     

@@ -17,7 +17,9 @@ import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.AdminModeHandler;
 import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.managers.ItemCategoryManager;
+import com.servershop.common.attachments.ItemComponentHandler;
 import com.servershop.client.data.ClientMarketplaceDataManager;
+import com.servershop.ServerShop;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -773,8 +775,8 @@ public class MarketplaceContainer implements Renderable {
             return false;
         }
         
-        // Try to add item to inventory first - use server player for persistence
-        ItemStack itemToGive = item.getItemStack().copy();
+        // Create item with component data applied
+        ItemStack itemToGive = createItemWithComponentData(item);
         Player playerForInventory = clientPlayer;
         
         // In singleplayer, use server player for inventory operations to ensure persistence
@@ -811,6 +813,48 @@ public class MarketplaceContainer implements Renderable {
         }
         
         return true;
+    }
+    
+    /**
+     * Creates an ItemStack with component data applied from the marketplace item.
+     * Uses server-side processing for proper registry access.
+     */
+    private ItemStack createItemWithComponentData(MarketplaceItem item) {
+        ItemStack baseItemStack = item.getItemStack().copy();
+        
+        // Apply component data if present
+        String componentData = item.getComponentData();
+        ServerShop.LOGGER.info("Creating item with component data: {}", componentData);
+        
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            ServerShop.LOGGER.info("Applying component data to item: {}", componentData);
+            
+            // Try to use server-side processing for proper registry access
+            Minecraft minecraft = Minecraft.getInstance();
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            
+            ServerShop.LOGGER.info("Checking server availability: singleplayerServer = {}", singleplayerServer != null ? "AVAILABLE" : "NULL");
+            
+            if (singleplayerServer != null) {
+                ServerShop.LOGGER.info("✅ Using server-side processing for component data application");
+                // Use server-side handler with registry access
+                ItemStack result = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    baseItemStack, componentData, singleplayerServer);
+                ServerShop.LOGGER.info("✅ Server-side processing completed, returning result");
+                return result;
+            } else {
+                ServerShop.LOGGER.warn("❌ No server available, falling back to client-side processing");
+                // Fallback to client-side processing
+                ItemComponentHandler.applyComponentData(baseItemStack, componentData);
+            }
+            
+            ServerShop.LOGGER.info("Component data applied. Item now has components: {}", 
+                ItemComponentHandler.hasComponentData(baseItemStack));
+        } else {
+            ServerShop.LOGGER.info("No component data to apply for item: {}", item.getItemName());
+        }
+        
+        return baseItemStack;
     }
     
     /**

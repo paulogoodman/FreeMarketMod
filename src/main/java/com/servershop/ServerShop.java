@@ -34,6 +34,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import com.servershop.server.data.MarketplaceDataManager;
 import com.servershop.server.commands.EconomyCommands;
+import com.servershop.common.attachments.ItemComponentHandler;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(ServerShop.MODID)
@@ -103,6 +104,9 @@ public class ServerShop {
         LOGGER.info("{}{}", Config.MAGIC_NUMBER_INTRODUCTION.get(), Config.MAGIC_NUMBER.getAsInt());
 
         Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
+        
+        // Test enchantment parsing
+        ItemComponentHandler.testEnchantmentParsing();
     }
 
     // Add the example block item to the building blocks tab

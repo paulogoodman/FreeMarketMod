@@ -12,6 +12,7 @@ public class MarketplaceItem {
     private final int quantity;
     private final String seller;
     private final String guid; // Unique identifier for this marketplace entry
+    private final String componentData; // Component data as JSON string
     
     public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller) {
         this.itemStack = itemStack;
@@ -20,6 +21,7 @@ public class MarketplaceItem {
         this.quantity = quantity;
         this.seller = seller;
         this.guid = generateRandomGuid();
+        this.componentData = "{}"; // Default empty component data
     }
     
     public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid) {
@@ -29,6 +31,17 @@ public class MarketplaceItem {
         this.quantity = quantity;
         this.seller = seller;
         this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
+        this.componentData = "{}"; // Default empty component data
+    }
+    
+    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid, String componentData) {
+        this.itemStack = itemStack;
+        this.buyPrice = buyPrice;
+        this.sellPrice = sellPrice;
+        this.quantity = quantity;
+        this.seller = seller;
+        this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
+        this.componentData = componentData != null ? componentData : "{}";
     }
     
     /**
@@ -61,6 +74,10 @@ public class MarketplaceItem {
     
     public String getGuid() {
         return guid;
+    }
+    
+    public String getComponentData() {
+        return componentData;
     }
     
     public String getItemName() {

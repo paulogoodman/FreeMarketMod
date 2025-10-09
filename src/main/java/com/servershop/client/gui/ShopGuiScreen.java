@@ -81,34 +81,37 @@ public class ShopGuiScreen extends Screen {
         Component titleText = Component.literal("Balance:");
         Component walletText = Component.literal(formattedMoney);
         
-        // Calculate widths and positions
+        // Calculate text widths
         int titleWidth = this.font.width(titleText);
         int moneyWidth = this.font.width(walletText);
-        int totalWidth = Math.max(titleWidth, moneyWidth);
+        int maxTextWidth = Math.max(titleWidth, moneyWidth);
         
-        int walletX = GuiScalingHelper.percentageX(0.85f) - totalWidth; // 85% from left, minus width
-        int titleY = GuiScalingHelper.responsiveHeight(15, 10, 25);
-        int moneyY = GuiScalingHelper.responsiveHeight(25, 20, 35);
-        
-        // Draw background box behind wallet with responsive margins
+        // Calculate background box dimensions first
         int marginX = GuiScalingHelper.responsiveWidth(15, 10, 20);
         int marginY = GuiScalingHelper.responsiveHeight(8, 6, 12);
+        int backgroundWidth = maxTextWidth + (marginX * 2);
+        int backgroundHeight = GuiScalingHelper.responsiveHeight(40, 30, 50); // Fixed height for better centering
         
-        // Calculate background box dimensions
-        int backgroundX = walletX - marginX;
-        int backgroundY = titleY - marginY;
-        int backgroundWidth = totalWidth + (marginX * 2);
-        int backgroundHeight = (moneyY + GuiScalingHelper.responsiveHeight(12, 8, 18)) - backgroundY;
+        // Position background box in top right
+        int backgroundX = GuiScalingHelper.percentageX(0.85f) - backgroundWidth; // 85% from left, minus width
+        int backgroundY = GuiScalingHelper.responsiveHeight(15, 10, 25);
         
+        // Draw background box
         guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0xFF1A1A1A);
         guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0xFF2D2D2D);
         
-        // Draw title (centered within background box)
+        // Calculate text positions (centered within background box)
         int titleX = backgroundX + (backgroundWidth - titleWidth) / 2;
+        int moneyX = backgroundX + (backgroundWidth - moneyWidth) / 2;
+        
+        // Calculate vertical centering
+        int titleY = backgroundY + marginY;
+        int moneyY = backgroundY + backgroundHeight - marginY - GuiScalingHelper.responsiveHeight(8, 6, 12);
+        
+        // Draw title (centered horizontally and vertically)
         guiGraphics.drawString(this.font, titleText, titleX, titleY, 0xFFFFFFFF);
         
-        // Draw wallet text (centered within background box)
-        int moneyX = backgroundX + (backgroundWidth - moneyWidth) / 2;
+        // Draw wallet text (centered horizontally and vertically)
         guiGraphics.drawString(this.font, walletText, moneyX, moneyY, 0xFF4CAF50);
     }
     

@@ -15,6 +15,7 @@ import javax.annotation.Nonnull;
 import com.servershop.ServerShop;
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.client.data.ClientMarketplaceDataManager;
+import com.servershop.common.attachments.ItemComponentHandler;
 
 /**
  * Popup screen for adding items to the marketplace.
@@ -27,14 +28,14 @@ public class AddItemPopupScreen extends Screen {
     private EditBox buyPriceBox;
     private EditBox sellPriceBox;
     private EditBox quantityBox;
-    private EditBox nbtBox;
+    private EditBox componentDataBox;
     private Button addButton;
     private Button cancelButton;
     
     // Current selected item
     private ItemStack selectedItem = null;
     private String itemIdError = null;
-    private String nbtError = null;
+    private String componentDataError = null;
     
     public AddItemPopupScreen(ShopGuiScreen parent) {
         super(Component.translatable("gui.servershop.add_item.title"));
@@ -80,15 +81,14 @@ public class AddItemPopupScreen extends Screen {
         this.quantityBox.setValue("1");
         this.addRenderableWidget(this.quantityBox);
         
-        // NBT input (optional) - much wider for long NBT strings
-        this.nbtBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(210, 175, 230), 
+        // Component data input (optional) - stores all item components as JSON
+        this.componentDataBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(210, 175, 230), 
             GuiScalingHelper.responsiveWidth(450, 360, 550), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.nbt"));
-        this.nbtBox.setValue("");
-        this.nbtBox.setResponder(this::onNbtChanged);
-        // Remove character limit for NBT field to allow long strings
-        this.nbtBox.setMaxLength(Integer.MAX_VALUE);
-        this.addRenderableWidget(this.nbtBox);
+            Component.translatable("gui.servershop.add_item.component_data"));
+        this.componentDataBox.setValue(""); // Start empty - users can add their own
+        this.componentDataBox.setResponder(this::onComponentDataChanged);
+        this.componentDataBox.setMaxLength(Integer.MAX_VALUE);
+        this.addRenderableWidget(this.componentDataBox);
         
         // Add button
         this.addButton = Button.builder(
@@ -105,6 +105,28 @@ public class AddItemPopupScreen extends Screen {
         ).bounds(popupX + GuiScalingHelper.responsiveWidth(120, 100, 150), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
             GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
         this.addRenderableWidget(this.cancelButton);
+        
+        // Helper buttons for common enchantments
+        Button sharpnessButton = Button.builder(
+            Component.literal("Sharpness"),
+            button -> addEnchantment("minecraft:sharpness", 3)
+        ).bounds(popupX + GuiScalingHelper.responsiveWidth(220, 180, 280), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
+            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
+        this.addRenderableWidget(sharpnessButton);
+        
+        Button efficiencyButton = Button.builder(
+            Component.literal("Efficiency"),
+            button -> addEnchantment("minecraft:efficiency", 5)
+        ).bounds(popupX + GuiScalingHelper.responsiveWidth(300, 250, 360), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
+            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
+        this.addRenderableWidget(efficiencyButton);
+        
+        Button unbreakingButton = Button.builder(
+            Component.literal("Unbreaking"),
+            button -> addEnchantment("minecraft:unbreaking", 3)
+        ).bounds(popupX + GuiScalingHelper.responsiveWidth(380, 320, 440), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
+            GuiScalingHelper.responsiveWidth(70, 60, 80), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
+        this.addRenderableWidget(unbreakingButton);
     }
     
     private void onItemIdChanged(String itemId) {
@@ -129,28 +151,51 @@ public class AddItemPopupScreen extends Screen {
         }
     }
     
-    private void onNbtChanged(String nbtString) {
-        nbtError = null;
-        
-        if (nbtString.trim().isEmpty()) {
-            return;
-        }
-        
+    private void onComponentDataChanged(String componentDataString) {
+        componentDataError = null;
         try {
-            // Validate NBT string format
-            net.minecraft.nbt.TagParser.parseTag(nbtString.trim());
+            if (componentDataString != null && !componentDataString.trim().isEmpty()) {
+                // Validate component data JSON format
+                net.minecraft.nbt.TagParser.parseTag(componentDataString.trim());
+            }
         } catch (Exception e) {
-            nbtError = "Invalid NBT format";
+            componentDataError = "Invalid component data format";
         }
     }
     
-    private ItemStack createItemWithNbt(Item item, int count, String nbtString) {
+    /**
+     * Helper method to add an enchantment to the component data field.
+     */
+    private void addEnchantment(String enchantmentId, int level) {
+        String currentData = this.componentDataBox.getValue();
+        
+        // If the field is empty, create new component data with the enchantment
+        if (currentData.trim().isEmpty()) {
+            String enchantmentJson = ItemComponentHandler.createEnchantmentJson(enchantmentId, level);
+            this.componentDataBox.setValue(enchantmentJson);
+        } else {
+            // Try to append to existing data (this is a simple implementation)
+            // In a more sophisticated version, you'd parse and merge the JSON properly
+            ServerShop.LOGGER.info("Adding enchantment {} level {} to existing component data", enchantmentId, level);
+            // For now, just show a message that manual editing is needed
+            this.componentDataBox.setValue(currentData + " // Add enchantment: " + enchantmentId + " level " + level);
+        }
+        
+        // Validate the new data
+        onComponentDataChanged(this.componentDataBox.getValue());
+    }
+    
+    private ItemStack createItemWithComponents(Item item, int count, String componentDataString) {
         ItemStack itemStack = new ItemStack(item, count);
         
-        if (nbtString != null && !nbtString.trim().isEmpty()) {
-            // TODO: Implement NBT application for NeoForge 1.21
-            // The NBT methods have changed in NeoForge 1.21 and need to be researched
-            ServerShop.LOGGER.info("NBT data provided but not yet implemented: {}", nbtString);
+        // Apply component data if provided
+        if (componentDataString != null && !componentDataString.trim().isEmpty()) {
+            ServerShop.LOGGER.info("Applying component data to item: {}", componentDataString);
+            ItemComponentHandler.applyComponentData(itemStack, componentDataString);
+            ServerShop.LOGGER.info("Component data applied. Item now has components: {}", 
+                ItemComponentHandler.hasComponentData(itemStack));
+        } else {
+            ServerShop.LOGGER.info("No component data provided for item");
         }
         
         return itemStack;
@@ -185,23 +230,25 @@ public class AddItemPopupScreen extends Screen {
                 return;
             }
             
-            // Validate NBT if provided
-            String nbtString = this.nbtBox.getValue().trim();
-            if (!nbtString.isEmpty() && nbtError != null) {
-                ServerShop.LOGGER.warn("Invalid NBT format");
+            // Validate component data if provided
+            if (componentDataError != null) {
+                ServerShop.LOGGER.warn("Component data validation failed: {}", componentDataError);
                 return;
             }
             
-            // Get the selected item stack with NBT applied
-            ItemStack itemStack = createItemWithNbt(selectedItem.getItem(), quantity, nbtString);
+            // Get the selected item stack with component data applied
+            ItemStack itemStack = createItemWithComponents(selectedItem.getItem(), quantity, 
+                this.componentDataBox.getValue());
             
-            // Create marketplace item
+            // Create marketplace item with component data
             MarketplaceItem marketplaceItem = new MarketplaceItem(
                 itemStack, 
                 buyPrice, 
                 sellPrice, 
                 quantity, 
-                "admin" // TODO: Get actual player name
+                "admin", // TODO: Get actual player name
+                null, // GUID will be generated
+                this.componentDataBox.getValue() // Pass the component data from the text field
             );
             
             // Add to marketplace via client data manager
@@ -257,7 +304,7 @@ public class AddItemPopupScreen extends Screen {
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(120, 95, 140), 0xCCCCCC);
         guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.quantity"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(160, 130, 180), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.nbt"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.component_data"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(200, 165, 200), 0xCCCCCC);
         
         // Draw item preview and error messages
@@ -275,6 +322,11 @@ public class AddItemPopupScreen extends Screen {
         } else if (itemIdError != null) {
             // Draw error message
             guiGraphics.drawString(this.font, itemIdError, popupX + GuiScalingHelper.responsiveWidth(250, 200, 300), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 0xFF6666);
+        }
+        
+        // Draw component data error message
+        if (componentDataError != null) {
+            guiGraphics.drawString(this.font, componentDataError, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(230, 195, 250), 0xFF6666);
         }
     }
     
@@ -300,3 +352,5 @@ public class AddItemPopupScreen extends Screen {
             }
         }
 }
+
+

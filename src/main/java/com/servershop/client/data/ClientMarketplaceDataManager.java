@@ -17,6 +17,7 @@ import java.util.List;
 
 import com.servershop.ServerShop;
 import com.servershop.common.data.MarketplaceItem;
+import com.servershop.common.attachments.ItemComponentHandler;
 
 /**
  * Client-side marketplace data manager for reading marketplace data from world files.
@@ -139,19 +140,44 @@ public class ClientMarketplaceDataManager {
             
             ItemStack itemStack = new ItemStack(item, count);
             
-                // Deserialize marketplace data
-                int buyPrice = itemJson.get("buyPrice").getAsInt();
-                int sellPrice = itemJson.get("sellPrice").getAsInt();
-                int quantity = itemJson.get("quantity").getAsInt();
-                String seller = itemJson.get("seller").getAsString();
-                String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
-
-                // If GUID is missing or empty, generate a random one
-                if (guid == null || guid.isEmpty()) {
-                    guid = java.util.UUID.randomUUID().toString();
+            // Deserialize component data if present
+            if (itemJson.has("componentData")) {
+                try {
+                    String componentDataString = itemJson.get("componentData").getAsString();
+                    if (!componentDataString.isEmpty()) {
+                        // Try to use server-side processing for proper registry access
+                        Minecraft minecraft = Minecraft.getInstance();
+                        var singleplayerServer = minecraft.getSingleplayerServer();
+                        
+                        if (singleplayerServer != null) {
+                            ServerShop.LOGGER.info("ClientMarketplaceDataManager: Using server-side processing for component data");
+                            // Use server-side handler with registry access
+                            itemStack = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
+                                itemStack, componentDataString, singleplayerServer);
+                        } else {
+                            ServerShop.LOGGER.warn("ClientMarketplaceDataManager: No server available, skipping component data application");
+                            ServerShop.LOGGER.warn("Component data will be applied when item is purchased");
+                        }
+                    }
+                } catch (Exception e) {
+                    ServerShop.LOGGER.warn("Failed to deserialize component data for item: {}", e.getMessage());
                 }
+            }
+            
+            // Deserialize marketplace data
+            int buyPrice = itemJson.get("buyPrice").getAsInt();
+            int sellPrice = itemJson.get("sellPrice").getAsInt();
+            int quantity = itemJson.get("quantity").getAsInt();
+            String seller = itemJson.get("seller").getAsString();
+            String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
+            String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
 
-                return new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid);
+            // If GUID is missing or empty, generate a random one
+            if (guid == null || guid.isEmpty()) {
+                guid = java.util.UUID.randomUUID().toString();
+            }
+
+            return new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
             
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
@@ -271,12 +297,17 @@ public class ClientMarketplaceDataManager {
         itemJson.addProperty("itemId", itemId.toString());
         itemJson.addProperty("count", itemStack.getCount());
         
-            // Serialize marketplace data
-            itemJson.addProperty("buyPrice", item.getBuyPrice());
-            itemJson.addProperty("sellPrice", item.getSellPrice());
-            itemJson.addProperty("quantity", item.getQuantity());
-            itemJson.addProperty("seller", item.getSeller());
-            itemJson.addProperty("guid", item.getGuid());
+        // Serialize component data (use stored component data from MarketplaceItem)
+        String componentData = item.getComponentData();
+        ServerShop.LOGGER.info("Serializing component data for item {}: {}", itemStack.getItem().getDescription().getString(), componentData);
+        itemJson.addProperty("componentData", componentData);
+        
+        // Serialize marketplace data
+        itemJson.addProperty("buyPrice", item.getBuyPrice());
+        itemJson.addProperty("sellPrice", item.getSellPrice());
+        itemJson.addProperty("quantity", item.getQuantity());
+        itemJson.addProperty("seller", item.getSeller());
+        itemJson.addProperty("guid", item.getGuid());
         
         return itemJson;
     }

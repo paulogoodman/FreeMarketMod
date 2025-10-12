@@ -252,49 +252,10 @@ public class ItemComponentHandler {
             ServerShop.LOGGER.warn("Enchantments will not be applied to this item");
             ServerShop.LOGGER.info("Enchantment data that failed to apply: {}", enchantmentsTag);
             
-            // TODO: The issue is that we need to find the correct way to access the enchantment registry
-            // in NeoForge 1.21+ without causing compilation errors. The modern component approach
-            // requires proper registry access which is currently not working.
+            // Enchantment application failed - component data will be applied server-side
             
         } catch (Exception e) {
             ServerShop.LOGGER.error("Manual enchantment creation failed: {}", e.getMessage());
-        }
-    }
-    
-    /**
-     * Test method to validate enchantment parsing with the current JSON format.
-     * This can be called to test if the enchantment JSON is properly formatted.
-     */
-    public static void testEnchantmentParsing() {
-        try {
-            // Test the JSON format from the marketplace file
-            String testJson = "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}";
-            ServerShop.LOGGER.info("Testing enchantment JSON: {}", testJson);
-            
-            CompoundTag componentTag = TagParser.parseTag(testJson);
-            ServerShop.LOGGER.info("Parsed component tag: {}", componentTag);
-            
-            if (componentTag.contains("minecraft:enchantments")) {
-                CompoundTag enchantmentsTag = componentTag.getCompound("minecraft:enchantments");
-                ServerShop.LOGGER.info("Enchantments tag: {}", enchantmentsTag);
-                
-                // Try to parse with proper NBT ops context
-                var result = ItemEnchantments.CODEC.parse(NbtOps.INSTANCE, enchantmentsTag);
-                if (result.isSuccess()) {
-                    ItemEnchantments enchantments = result.getOrThrow();
-                    ServerShop.LOGGER.info("Successfully parsed enchantments: {}", enchantments);
-                } else {
-                    ServerShop.LOGGER.error("Failed to parse enchantments: {}", result.error().get().message());
-                }
-            }
-            
-            // Test our JSON generation method
-            String generatedJson = createEnchantmentJson("minecraft:sharpness", 3);
-            ServerShop.LOGGER.info("Generated enchantment JSON: {}", generatedJson);
-            
-        } catch (Exception e) {
-            ServerShop.LOGGER.error("Enchantment parsing test failed: {}", e.getMessage());
-            e.printStackTrace();
         }
     }
 }

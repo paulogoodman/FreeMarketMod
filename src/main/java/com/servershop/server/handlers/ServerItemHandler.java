@@ -34,8 +34,6 @@ public class ServerItemHandler {
         
         if (componentDataString != null && !componentDataString.trim().isEmpty() && !componentDataString.equals("{}")) {
             try {
-                ServerShop.LOGGER.info("Server-side: Creating ItemStack with component data: {}", componentDataString);
-                
                 // Parse the component data JSON string
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
                 
@@ -63,7 +61,7 @@ public class ServerItemHandler {
                 try {
                     applySpecificComponent(itemStack, componentKey, componentTag.get(componentKey), registryAccess);
                 } catch (Exception componentError) {
-                    ServerShop.LOGGER.warn("Server-side: Failed to apply component {}: {}", componentKey, componentError.getMessage());
+                    // Component failed to apply, continue with others
                 }
             }
             
@@ -84,32 +82,32 @@ public class ServerItemHandler {
             var componentType = componentRegistry.get(componentLocation);
             
             if (componentType != null) {
-                // Try to decode the component using its codec
-                var decodeResult = componentType.codec().parse(NbtOps.INSTANCE, componentValue);
+                var codec = componentType.codec();
+                if (codec != null) {
+                    // Try to decode the component using its codec
+                    var decodeResult = codec.parse(NbtOps.INSTANCE, componentValue);
                 
-                if (decodeResult.isSuccess()) {
-                    Object componentValueObj = decodeResult.getOrThrow();
-                    
-                    // Use reflection to set the component dynamically
-                    try {
-                        java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
-                        setMethod.invoke(itemStack, componentType, componentValueObj);
-                        ServerShop.LOGGER.info("Server-side: Successfully applied component {} via dynamic codec", componentKey);
-                    } catch (Exception reflectionError) {
-                        ServerShop.LOGGER.warn("Server-side: Reflection failed for {}: {}", componentKey, reflectionError.getMessage());
+                    if (decodeResult.isSuccess()) {
+                        Object componentValueObj = decodeResult.getOrThrow();
                         
+                        // Use reflection to set the component dynamically
+                        try {
+                            java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
+                            setMethod.invoke(itemStack, componentType, componentValueObj);
+                        } catch (Exception reflectionError) {
+                            // Fallback: Try to handle known component types manually
+                            handleKnownComponentTypes(itemStack, componentKey, componentValue, registryAccess);
+                        }
+                    } else {
                         // Fallback: Try to handle known component types manually
                         handleKnownComponentTypes(itemStack, componentKey, componentValue, registryAccess);
                     }
                 } else {
-                    ServerShop.LOGGER.warn("Server-side: Failed to decode component {}: {}", componentKey, decodeResult.error().get().message());
-                    
                     // Fallback: Try to handle known component types manually
                     handleKnownComponentTypes(itemStack, componentKey, componentValue, registryAccess);
                 }
             } else {
-                ServerShop.LOGGER.warn("Server-side: Component type not found in registry: {}", componentKey);
-                ServerShop.LOGGER.warn("Server-side: This component may be from a mod that's not loaded or uses a different namespace");
+                // Component type not found in registry
             }
             
         } catch (Exception e) {
@@ -134,7 +132,7 @@ public class ServerItemHandler {
                 applyUnknownComponent(itemStack, componentKey, componentValue, registryAccess);
             }
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to handle known component type {}: {}", componentKey, e.getMessage());
+            // Failed to handle known component type
         }
     }
     
@@ -144,30 +142,29 @@ public class ServerItemHandler {
      */
     private static void applyUnknownComponent(ItemStack itemStack, String componentKey, net.minecraft.nbt.Tag componentValue, RegistryAccess registryAccess) {
         try {
-            ServerShop.LOGGER.info("Server-side: Attempting to apply unknown component: {}", componentKey);
-            
             // Try to find the component type in the registry again
             ResourceLocation componentLocation = ResourceLocation.parse(componentKey);
             var componentRegistry = registryAccess.registryOrThrow(Registries.DATA_COMPONENT_TYPE);
             var componentType = componentRegistry.get(componentLocation);
             
             if (componentType != null) {
-                // Try different approaches to decode the component
-                
-                // Approach 1: Try with a registry-aware NbtOps (if available)
-                try {
-                    // This might work for some components
-                    var decodeResult = componentType.codec().parse(NbtOps.INSTANCE, componentValue);
-                    if (decodeResult.isSuccess()) {
-                        Object componentValueObj = decodeResult.getOrThrow();
-                        java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
-                        setMethod.invoke(itemStack, componentType, componentValueObj);
-                        ServerShop.LOGGER.info("Server-side: Successfully applied unknown component {} via codec", componentKey);
-                        return;
+                var codec = componentType.codec();
+                if (codec != null) {
+                    // Try different approaches to decode the component
+                    
+                    // Approach 1: Try with a registry-aware NbtOps (if available)
+                    try {
+                        // This might work for some components
+                        var decodeResult = codec.parse(NbtOps.INSTANCE, componentValue);
+                        if (decodeResult.isSuccess()) {
+                            Object componentValueObj = decodeResult.getOrThrow();
+                            java.lang.reflect.Method setMethod = itemStack.getClass().getMethod("set", net.minecraft.core.component.DataComponentType.class, Object.class);
+                            setMethod.invoke(itemStack, componentType, componentValueObj);
+                            return;
+                        }
+                    } catch (Exception e) {
+                        // Codec approach failed
                     }
-                } catch (Exception e) {
-                    ServerShop.LOGGER.debug("Server-side: Codec approach failed for {}: {}", componentKey, e.getMessage());
-                }
                 
                 // Approach 2: Try to create a DataComponentPatch with just this component
                 try {
@@ -177,21 +174,18 @@ public class ServerItemHandler {
                     if (patchResult.isSuccess()) {
                         DataComponentPatch patch = patchResult.getOrThrow();
                         itemStack.applyComponents(patch);
-                        ServerShop.LOGGER.info("Server-side: Successfully applied unknown component {} via DataComponentPatch", componentKey);
                         return;
                     }
                 } catch (Exception e) {
-                    ServerShop.LOGGER.debug("Server-side: DataComponentPatch approach failed for {}: {}", componentKey, e.getMessage());
+                    // DataComponentPatch approach failed
                 }
                 
-                // Approach 3: Log that we couldn't apply the component
-                ServerShop.LOGGER.warn("Server-side: Could not apply unknown component: {}", componentKey);
-                ServerShop.LOGGER.warn("Server-side: Component value: {}", componentValue);
-                ServerShop.LOGGER.warn("Server-side: This component may require special handling or the mod may not be compatible");
-                
+                    // Approach 3: Could not apply the component
+                } else {
+                    // Component type has no codec
+                }
             } else {
-                ServerShop.LOGGER.warn("Server-side: Unknown component type not found in registry: {}", componentKey);
-                ServerShop.LOGGER.warn("Server-side: This suggests the component is from a mod that's not loaded");
+                // Unknown component type not found in registry
             }
             
         } catch (Exception e) {
@@ -227,20 +221,18 @@ public class ServerItemHandler {
                         
                         if (enchantmentHolder.isPresent()) {
                             mutableEnchantments.set(enchantmentHolder.get(), level);
-                            ServerShop.LOGGER.info("Server-side: Added enchantment {} level {}", enchantmentId, level);
                         } else {
-                            ServerShop.LOGGER.warn("Server-side: Enchantment not found in registry: {}", enchantmentId);
+                            // Enchantment not found in registry
                         }
                     }
                     
                     // Apply the enchantments to the item
                     itemStack.set(DataComponents.ENCHANTMENTS, mutableEnchantments.toImmutable());
-                    ServerShop.LOGGER.info("Server-side: Successfully applied enchantments manually");
                 }
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply enchantments manually: {}", e.getMessage());
+            // Failed to apply enchantments manually
         }
     }
     
@@ -255,11 +247,10 @@ public class ServerItemHandler {
                 // Create a simple text component
                 Component customName = Component.literal(nameText);
                 itemStack.set(DataComponents.CUSTOM_NAME, customName);
-                ServerShop.LOGGER.info("Server-side: Successfully applied custom name: {}", nameText);
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply custom name manually: {}", e.getMessage());
+            // Failed to apply custom name manually
         }
     }
     
@@ -275,8 +266,6 @@ public class ServerItemHandler {
                 // Parse trim material and pattern
                 String materialId = trimCompound.getString("material");
                 String patternId = trimCompound.getString("pattern");
-                
-                ServerShop.LOGGER.info("Server-side: Attempting to apply trim - material: {}, pattern: {}", materialId, patternId);
                 
                 // Try to find the material and pattern in their respective registries
                 try {
@@ -301,26 +290,21 @@ public class ServerItemHandler {
                             
                             // Apply the trim to the item
                             itemStack.set(DataComponents.TRIM, armorTrim);
-                            ServerShop.LOGGER.info("Server-side: Successfully applied armor trim - material: {}, pattern: {}", materialId, patternId);
                             
                         } catch (Exception trimCreationError) {
-                            ServerShop.LOGGER.warn("Server-side: Failed to create ArmorTrim object: {}", trimCreationError.getMessage());
-                            ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                            // Failed to create ArmorTrim object
                         }
                     } else {
-                        ServerShop.LOGGER.warn("Server-side: Trim material or pattern not found in registry");
-                        ServerShop.LOGGER.warn("Server-side: Material found: {}, Pattern found: {}", materialHolder.isPresent(), patternHolder.isPresent());
-                        ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                        // Trim material or pattern not found in registry
                     }
                     
                 } catch (Exception registryError) {
-                    ServerShop.LOGGER.warn("Server-side: Failed to lookup trim material/pattern in registry: {}", registryError.getMessage());
-                    ServerShop.LOGGER.warn("Server-side: Material: {}, Pattern: {}", materialId, patternId);
+                    // Failed to lookup trim material/pattern in registry
                 }
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply trim manually: {}", e.getMessage());
+            // Failed to apply trim manually
         }
     }
 }

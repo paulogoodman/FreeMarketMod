@@ -11,7 +11,9 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.storage.LevelResource;
+import com.servershop.ServerShop;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -30,6 +32,7 @@ import com.servershop.common.data.MarketplaceItem;
 public class MarketplaceDataManager {
     
     private static final String MARKETPLACE_FILE_NAME = "marketplace.json";
+    private static final String INITIALIZATION_FLAG_FILE_NAME = "servershop_initialized.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -62,8 +65,6 @@ public class MarketplaceDataManager {
                 GSON.toJson(marketplaceData, writer);
             }
             
-            ServerShop.LOGGER.info("Created empty marketplace.json file for world: {}", level.dimension().location());
-            
         } catch (IOException e) {
             ServerShop.LOGGER.error("Failed to create marketplace.json file for world: {}", level.dimension().location(), e);
         }
@@ -81,7 +82,6 @@ public class MarketplaceDataManager {
             File file = marketplaceFile.toFile();
             
             if (!file.exists()) {
-                ServerShop.LOGGER.warn("Marketplace file does not exist: {}", marketplaceFile);
                 return items;
             }
             
@@ -106,10 +106,61 @@ public class MarketplaceDataManager {
                 }
             }
             
-            ServerShop.LOGGER.info("Loaded {} marketplace items from {}", items.size(), marketplaceFile);
-            
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to load marketplace items from world: {}", level.dimension().location(), e);
+        }
+        
+        // Auto-generate test data if marketplace is empty
+        if (items.isEmpty()) {
+            generateInitialTestData(level);
+            // Reload after generating test data
+            try {
+                items = loadMarketplaceItemsFromFile(level);
+            } catch (Exception e) {
+                ServerShop.LOGGER.error("Failed to reload marketplace items after generating test data: {}", e.getMessage());
+            }
+        }
+        
+        return items;
+    }
+    
+    /**
+     * Internal method to load marketplace items from file without auto-generation.
+     * Used to reload after generating test data to avoid infinite recursion.
+     */
+    private static List<MarketplaceItem> loadMarketplaceItemsFromFile(ServerLevel level) {
+        List<MarketplaceItem> items = new ArrayList<>();
+        
+        try {
+            Path marketplaceFile = getMarketplaceFilePath(level);
+            File file = marketplaceFile.toFile();
+            
+            if (!file.exists()) {
+                return items;
+            }
+            
+            JsonElement jsonElement = JsonParser.parseString(new String(java.nio.file.Files.readAllBytes(marketplaceFile)));
+            
+            if (!jsonElement.isJsonObject()) {
+                return items;
+            }
+            
+            JsonObject marketplaceData = jsonElement.getAsJsonObject();
+            JsonArray itemsArray = marketplaceData.getAsJsonArray("items");
+            
+            if (itemsArray != null) {
+                for (JsonElement itemElement : itemsArray) {
+                    if (itemElement.isJsonObject()) {
+                        MarketplaceItem item = deserializeMarketplaceItem(itemElement.getAsJsonObject());
+                        if (item != null) {
+                            items.add(item);
+                        }
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to load marketplace items from file: {}", e.getMessage());
         }
         
         return items;
@@ -143,8 +194,6 @@ public class MarketplaceDataManager {
             try (FileWriter writer = new FileWriter(file)) {
                 GSON.toJson(marketplaceData, writer);
             }
-            
-            ServerShop.LOGGER.info("Saved {} marketplace items to {}", items.size(), marketplaceFile);
             
         } catch (IOException e) {
             ServerShop.LOGGER.error("Failed to save marketplace items to world: {}", level.dimension().location(), e);
@@ -185,7 +234,6 @@ public class MarketplaceDataManager {
             Item item = BuiltInRegistries.ITEM.get(itemId);
             
             if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
-                ServerShop.LOGGER.warn("Unknown item ID: {}", itemIdStr);
                 return null;
             }
             
@@ -211,5 +259,117 @@ public class MarketplaceDataManager {
     public static boolean marketplaceFileExists(ServerLevel level) {
         Path marketplaceFile = getMarketplaceFilePath(level);
         return marketplaceFile.toFile().exists();
+    }
+    
+    /**
+     * Checks if ServerShop has been initialized for this world (test data generated).
+     */
+    private static boolean isModInitialized(ServerLevel level) {
+        try {
+            Path initFlagFile = getInitializationFlagPath(level);
+            return initFlagFile.toFile().exists();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * Marks ServerShop as initialized for this world.
+     */
+    private static void markModAsInitialized(ServerLevel level) {
+        try {
+            Path initFlagFile = getInitializationFlagPath(level);
+            File file = initFlagFile.toFile();
+            
+            // Create parent directories if they don't exist
+            file.getParentFile().mkdirs();
+            
+            // Create a simple JSON file to mark initialization
+            JsonObject initData = new JsonObject();
+            initData.addProperty("initialized", true);
+            initData.addProperty("timestamp", System.currentTimeMillis());
+            initData.addProperty("version", "1.0.0");
+            
+            try (FileWriter writer = new FileWriter(file)) {
+                GSON.toJson(initData, writer);
+            }
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to mark mod as initialized: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Gets the initialization flag file path for a given world.
+     */
+    private static Path getInitializationFlagPath(ServerLevel level) {
+        return level.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve(INITIALIZATION_FLAG_FILE_NAME);
+    }
+    
+    /**
+     * Generates initial test data for the marketplace if it's empty and mod hasn't been initialized.
+     * This is called automatically when the marketplace is first created.
+     */
+    public static void generateInitialTestData(ServerLevel level) {
+        try {
+            // Only generate test data if mod hasn't been initialized yet
+            if (isModInitialized(level)) {
+                return;
+            }
+            
+            List<MarketplaceItem> existingItems = loadMarketplaceItemsFromFile(level);
+            
+            // Only generate test data if marketplace is empty AND mod hasn't been initialized
+            if (existingItems.isEmpty()) {
+                List<MarketplaceItem> testItems = new ArrayList<>();
+                String seller = "ServerShop";
+                
+                // Add various test items
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.DIAMOND, 1), 100, 80, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.IRON_INGOT, 1), 10, 8, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.GOLD_INGOT, 1), 20, 16, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.EMERALD, 1), 50, 40, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.DIAMOND_SWORD, 1), 200, 160, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.DIAMOND_PICKAXE, 1), 150, 120, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:efficiency\",\"lvl\":5}}}}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.APPLE, 1), 2, 1, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                testItems.add(new MarketplaceItem(
+                    new ItemStack(Items.BREAD, 1), 3, 2, 1, seller, 
+                    java.util.UUID.randomUUID().toString(), "{}"));
+                
+                // Save test data
+                saveMarketplaceItems(level, testItems);
+                
+                // Mark mod as initialized to prevent future auto-generation
+                markModAsInitialized(level);
+                
+            } else {
+                // Marketplace has items but mod not initialized - mark as initialized anyway
+                markModAsInitialized(level);
+            }
+            
+        } catch (Exception e) {
+            ServerShop.LOGGER.error("Failed to generate initial test data: {}", e.getMessage());
+        }
     }
 }

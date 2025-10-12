@@ -50,7 +50,6 @@ public class ClientMarketplaceDataManager {
         if (cachedItems != null && 
             currentTime - lastCacheUpdate < CACHE_DURATION_MS && 
             currentWorldPath.equals(lastWorldPath)) {
-            ServerShop.LOGGER.debug("Using cached marketplace data ({} items)", cachedItems.size());
             return new ArrayList<>(cachedItems); // Return copy to prevent external modification
         }
         
@@ -62,7 +61,6 @@ public class ClientMarketplaceDataManager {
         lastCacheUpdate = currentTime;
         lastWorldPath = currentWorldPath;
         
-        ServerShop.LOGGER.debug("Reloaded marketplace data from file ({} items)", items.size());
         return items;
     }
     
@@ -74,7 +72,6 @@ public class ClientMarketplaceDataManager {
         cachedItems = null;
         lastCacheUpdate = 0;
         lastWorldPath = null;
-        ServerShop.LOGGER.debug("Marketplace cache invalidated");
     }
     
     /**
@@ -125,17 +122,12 @@ public class ClientMarketplaceDataManager {
             Minecraft minecraft = Minecraft.getInstance();
             var level = minecraft.level;
             if (level == null) {
-                ServerShop.LOGGER.warn("No world loaded - cannot load marketplace data");
                 return items; // No world loaded
             }
             
             if (level.dimension() == null) {
-                ServerShop.LOGGER.warn("No dimension loaded - cannot load marketplace data");
                 return items;
             }
-            ServerShop.LOGGER.debug("Attempting to load marketplace data...");
-            ServerShop.LOGGER.debug("Singleplayer server available: {}", minecraft.getSingleplayerServer() != null);
-            ServerShop.LOGGER.debug("Level server available: {}", level != null && level.getServer() != null);
             
             // Get the world data directory - use integrated server's world path directly
             Path marketplaceFile = null;
@@ -146,7 +138,6 @@ public class ClientMarketplaceDataManager {
                 // Use the server's world path directly - this is the most reliable method
                 Path worldDataPath = singleplayerServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
                 marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
-                ServerShop.LOGGER.info("Using integrated server world path: {}", worldDataPath);
             } else {
                 // Fallback: try to get world path from level data
                 try {
@@ -155,26 +146,21 @@ public class ClientMarketplaceDataManager {
                         if (levelServer != null) {
                             Path worldDataPath = levelServer.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
                             marketplaceFile = worldDataPath.resolve("data").resolve(MARKETPLACE_FILE_NAME);
-                            ServerShop.LOGGER.info("Using level server world path: {}", worldDataPath);
                         }
                     }
                 } catch (Exception e) {
-                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                    // Fallback failed
                 }
             }
             
             // If we still can't get the world path, we can't proceed
             if (marketplaceFile == null) {
-                ServerShop.LOGGER.error("Could not determine current world path - cannot load marketplace data");
                 return items;
             }
-            
-            ServerShop.LOGGER.info("Loading marketplace from: {}", marketplaceFile);
             
             File file = marketplaceFile.toFile();
             
             if (!file.exists()) {
-                ServerShop.LOGGER.warn("Marketplace file does not exist: {}", marketplaceFile);
                 return items;
             }
             
@@ -199,8 +185,6 @@ public class ClientMarketplaceDataManager {
                 }
             }
             
-            ServerShop.LOGGER.info("Loaded {} marketplace items from {}", items.size(), marketplaceFile);
-            
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to load marketplace items from world", e);
         }
@@ -221,7 +205,6 @@ public class ClientMarketplaceDataManager {
             Item item = BuiltInRegistries.ITEM.get(itemId);
             
             if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
-                ServerShop.LOGGER.warn("Unknown item ID: {}", itemIdStr);
                 return null;
             }
             
@@ -241,12 +224,11 @@ public class ClientMarketplaceDataManager {
                             itemStack = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
                                 itemStack, componentDataString, singleplayerServer);
                         } else {
-                            ServerShop.LOGGER.warn("ClientMarketplaceDataManager: No server available, skipping component data application");
-                            ServerShop.LOGGER.warn("Component data will be applied when item is purchased");
+                            // No server available, component data will be applied when item is purchased
                         }
                     }
                 } catch (Exception e) {
-                    ServerShop.LOGGER.warn("Failed to deserialize component data for item: {}", e.getMessage());
+                    // Failed to deserialize component data
                 }
             }
             
@@ -280,12 +262,10 @@ public class ClientMarketplaceDataManager {
             Minecraft minecraft = Minecraft.getInstance();
             var level = minecraft.level;
             if (level == null) {
-                ServerShop.LOGGER.warn("No world loaded - cannot add marketplace item");
                 return;
             }
             
             if (level.dimension() == null) {
-                ServerShop.LOGGER.warn("No dimension loaded - cannot add marketplace item");
                 return;
             }
             
@@ -331,8 +311,6 @@ public class ClientMarketplaceDataManager {
             // Invalidate cache since we modified the marketplace
             invalidateCache();
             
-            ServerShop.LOGGER.info("Added marketplace item: {}", item.getItemName());
-            
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to add marketplace item", e);
         }
@@ -367,8 +345,6 @@ public class ClientMarketplaceDataManager {
                 gson.toJson(marketplaceData, writer);
             }
             
-            ServerShop.LOGGER.info("Saved {} marketplace items to {}", items.size(), marketplaceFile);
-            
         } catch (Exception e) {
             ServerShop.LOGGER.error("Failed to save marketplace items", e);
         }
@@ -388,7 +364,6 @@ public class ClientMarketplaceDataManager {
         
         // Serialize component data (use stored component data from MarketplaceItem)
         String componentData = item.getComponentData();
-        ServerShop.LOGGER.info("Serializing component data for item {}: {}", itemStack.getItem().getDescription().getString(), componentData);
         itemJson.addProperty("componentData", componentData);
         
         // Serialize marketplace data
@@ -410,12 +385,10 @@ public class ClientMarketplaceDataManager {
                 Minecraft minecraft = Minecraft.getInstance();
                 var level = minecraft.level;
                 if (level == null) {
-                    ServerShop.LOGGER.warn("No world loaded - cannot remove marketplace item");
                     return;
                 }
 
                 if (level.dimension() == null) {
-                    ServerShop.LOGGER.warn("No dimension loaded - cannot remove marketplace item");
                     return;
                 }
 
@@ -464,9 +437,8 @@ public class ClientMarketplaceDataManager {
                     // Invalidate cache since we modified the marketplace
                     invalidateCache();
                     
-                    ServerShop.LOGGER.info("Removed marketplace item: {}", itemToRemove.getItemName());
                 } else {
-                    ServerShop.LOGGER.warn("Could not find marketplace item to remove: {}", itemToRemove.getItemName());
+                    // Could not find marketplace item to remove
                 }
 
             } catch (Exception e) {

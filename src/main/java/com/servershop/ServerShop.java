@@ -36,7 +36,6 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 import com.servershop.server.data.MarketplaceDataManager;
 import com.servershop.server.commands.MarketplaceCommands;
 import com.servershop.common.attachments.ItemComponentHandler;
-import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.attachments.PlayerWalletAttachment;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -100,9 +99,7 @@ public class ServerShop {
     }
 
     private void commonSetup(FMLCommonSetupEvent event) {
-        // Some common setup code
-        LOGGER.info("HELLO FROM COMMON SETUP");
-
+        // Initialize ServerShop mod
         if (Config.LOG_DIRT_BLOCK.getAsBoolean()) {
             LOGGER.info("DIRT BLOCK >> {}", BuiltInRegistries.BLOCK.getKey(Blocks.DIRT));
         }
@@ -110,9 +107,6 @@ public class ServerShop {
         LOGGER.info("{}{}", Config.MAGIC_NUMBER_INTRODUCTION.get(), Config.MAGIC_NUMBER.getAsInt());
 
         Config.ITEM_STRINGS.get().forEach((item) -> LOGGER.info("ITEM >> {}", item));
-        
-        // Test enchantment parsing
-        ItemComponentHandler.testEnchantmentParsing();
     }
 
     // Add the example block item to the building blocks tab
@@ -125,8 +119,7 @@ public class ServerShop {
     // You can use SubscribeEvent and let the Event Bus discover methods to call
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
-        // Do something when the server starts
-        LOGGER.info("HELLO from server starting");
+        // Server starting event
     }
     
     @SubscribeEvent
@@ -147,17 +140,11 @@ public class ServerShop {
     
     @SubscribeEvent
     public void onPlayerJoin(PlayerEvent.PlayerLoggedInEvent event) {
-        // Player join event - no need to retrieve wallet balance
-        if (event.getEntity() instanceof net.minecraft.world.entity.player.Player player) {
-            LOGGER.debug("Player {} joined", player.getName().getString());
-        }
+        // Player join event
     }
     
     @SubscribeEvent
     public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
-        // Player respawn event - no need to retrieve wallet balance
-        if (event.getEntity() instanceof net.minecraft.world.entity.player.Player player) {
-            LOGGER.debug("Player {} respawned", player.getName().getString());
-        }
+        // Player respawn event
     }
 }

@@ -97,10 +97,7 @@ public class MarketplaceCommands {
                     .then(Commands.argument("buyPrice", IntegerArgumentType.integer(1))
                         .then(Commands.argument("sellPrice", IntegerArgumentType.integer(0))
                             .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
-                                .executes(MarketplaceCommands::addItemToMarketplace))))))
-            .then(Commands.literal("testdata")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .executes(MarketplaceCommands::generateTestData)));;
+                                .executes(MarketplaceCommands::addItemToMarketplace)))))));;
     }
 
     /**
@@ -439,7 +436,7 @@ public class MarketplaceCommands {
         CommandSourceStack source = context.getSource();
         ServerLevel level = source.getLevel();
         
-        // Save empty marketplace
+        // Clear marketplace using JSON system
         MarketplaceDataManager.saveMarketplaceItems(level, new ArrayList<>());
         
         Component message = Component.translatable("command.servershop.marketplace.clear.success");
@@ -478,11 +475,9 @@ public class MarketplaceCommands {
             String guid = java.util.UUID.randomUUID().toString();
             MarketplaceItem marketplaceItem = new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, "{}");
             
-            // Load existing items and add new one
+            // Add item using JSON system
             List<MarketplaceItem> existingItems = MarketplaceDataManager.loadMarketplaceItems(level);
             existingItems.add(marketplaceItem);
-            
-            // Save back to file
             MarketplaceDataManager.saveMarketplaceItems(level, existingItems);
             
             Component message = Component.translatable("command.servershop.marketplace.additem.success", 
@@ -494,60 +489,6 @@ public class MarketplaceCommands {
             source.sendFailure(message);
             return 0;
         }
-        
-        return 1;
-    }
-    
-    /**
-     * Generates test data for the marketplace.
-     * @param context the command context
-     * @return command result
-     */
-    private static int generateTestData(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        CommandSourceStack source = context.getSource();
-        ServerLevel level = source.getLevel();
-        
-        List<MarketplaceItem> testItems = new ArrayList<>();
-        String seller = source.getTextName();
-        
-        // Add various test items
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.DIAMOND, 1), 100, 80, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.IRON_INGOT, 1), 10, 8, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.GOLD_INGOT, 1), 20, 16, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.EMERALD, 1), 50, 40, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.DIAMOND_SWORD, 1), 200, 160, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.DIAMOND_PICKAXE, 1), 150, 120, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:efficiency\",\"lvl\":5}}}}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.APPLE, 1), 2, 1, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        testItems.add(new MarketplaceItem(
-            new ItemStack(Items.BREAD, 1), 3, 2, 1, seller, 
-            java.util.UUID.randomUUID().toString(), "{}"));
-        
-        // Save test data
-        MarketplaceDataManager.saveMarketplaceItems(level, testItems);
-        
-        Component message = Component.translatable("command.servershop.marketplace.testdata.success", testItems.size());
-        source.sendSuccess(() -> message, true);
         
         return 1;
     }

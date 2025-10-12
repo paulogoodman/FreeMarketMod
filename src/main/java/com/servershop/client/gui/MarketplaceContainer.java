@@ -42,11 +42,11 @@ public class MarketplaceContainer implements Renderable {
     
     // Buy button state tracking - per item
     private final java.util.Map<String, Long> buyButtonCooldowns = new java.util.HashMap<>();
-    private static final long BUY_COOLDOWN_MS = 250; // 0.25 second cooldown
+    private static final long BUY_COOLDOWN_MS = 2000; // 2 second cooldown
     
     // Sell button state tracking - per item
     private final java.util.Map<String, Long> sellButtonCooldowns = new java.util.HashMap<>();
-    private static final long SELL_COOLDOWN_MS = 250; // 0.25 second cooldown
+    private static final long SELL_COOLDOWN_MS = 2000; // 2 second cooldown
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
@@ -739,14 +739,11 @@ public class MarketplaceContainer implements Renderable {
                 int buyButtonX = itemX + margin;
                 int buyButtonY = buttonStartY;
                 
-                if (mouseX >= buyButtonX - 0.5 && mouseX <= buyButtonX + buttonWidth + 0.5 &&
-                    mouseY >= buyButtonY - 0.5 && mouseY <= buyButtonY + buttonHeight + 0.5) {
-                    // Debug logging
-                    ServerShop.LOGGER.info("Buy button clicked at ({}, {}) - Button bounds: ({}, {}) to ({}, {})", 
-                        mouseX, mouseY, buyButtonX, buyButtonY, buyButtonX + buttonWidth, buyButtonY + buttonHeight);
+                if (mouseX >= buyButtonX - 2.0 && mouseX <= buyButtonX + buttonWidth + 2.0 &&
+                    mouseY >= buyButtonY - 2.0 && mouseY <= buyButtonY + buttonHeight + 2.0) {
                     
-                    // Handle buy button click (only if not in cooldown)
-                    if (!isBuyButtonInCooldown(item) && buyItem(item)) {
+                    // Handle buy button click
+                    if (buyItem(item)) {
                         // Success - item was bought
                         return true;
                     }
@@ -757,14 +754,11 @@ public class MarketplaceContainer implements Renderable {
                 int sellButtonX = itemX + margin;
                 int sellButtonY = buttonStartY + buttonHeight + buttonSpacing;
                 
-                if (mouseX >= sellButtonX - 0.5 && mouseX <= sellButtonX + buttonWidth + 0.5 &&
-                    mouseY >= sellButtonY - 0.5 && mouseY <= sellButtonY + buttonHeight + 0.5) {
-                    // Debug logging
-                    ServerShop.LOGGER.info("Sell button clicked at ({}, {}) - Button bounds: ({}, {}) to ({}, {})", 
-                        mouseX, mouseY, sellButtonX, sellButtonY, sellButtonX + buttonWidth, sellButtonY + buttonHeight);
+                if (mouseX >= sellButtonX - 2.0 && mouseX <= sellButtonX + buttonWidth + 2.0 &&
+                    mouseY >= sellButtonY - 2.0 && mouseY <= sellButtonY + buttonHeight + 2.0) {
                     
-                    // Handle sell button click (only if not in cooldown)
-                    if (!isSellButtonInCooldown(item) && sellItem(item)) {
+                    // Handle sell button click
+                    if (sellItem(item)) {
                         // Success - item was sold
                         return true;
                     }
@@ -819,20 +813,19 @@ public class MarketplaceContainer implements Renderable {
      * Validates balance, deducts money, and spawns item in inventory or on ground.
      */
     private boolean buyItem(MarketplaceItem item) {
-        // Check cooldown for this specific item
-        if (isBuyButtonInCooldown(item)) {
-            return false; // Still in cooldown
-        }
+        // Set cooldown immediately to prevent rapid clicking
+        long currentTime = System.currentTimeMillis();
+        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
+        
+        // Debug: Check if cooldown was set
+        boolean testCooldown = isBuyButtonInCooldown(item);
+        System.out.println("Buy cooldown set for " + item.getItemName() + " GUID: " + item.getGuid() + " - Cooldown active: " + testCooldown);
         
         // Check if player has enough money
         if (!WalletHandler.hasEnoughMoney(item.getBuyPrice())) {
             // TODO: Show error message to player
             return false;
         }
-        
-        // Set cooldown for this specific item
-        long currentTime = System.currentTimeMillis();
-        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
         
         // Get the player
         Minecraft minecraft = Minecraft.getInstance();
@@ -891,34 +884,21 @@ public class MarketplaceContainer implements Renderable {
         
         // Apply component data if present
         String componentData = item.getComponentData();
-        ServerShop.LOGGER.info("Creating item with component data: {}", componentData);
         
         if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
-            ServerShop.LOGGER.info("Applying component data to item: {}", componentData);
-            
             // Try to use server-side processing for proper registry access
             Minecraft minecraft = Minecraft.getInstance();
             var singleplayerServer = minecraft.getSingleplayerServer();
             
-            ServerShop.LOGGER.info("Checking server availability: singleplayerServer = {}", singleplayerServer != null ? "AVAILABLE" : "NULL");
-            
             if (singleplayerServer != null) {
-                ServerShop.LOGGER.info("✅ Using server-side processing for component data application");
                 // Use server-side handler with registry access
                 ItemStack result = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
                     baseItemStack, componentData, singleplayerServer);
-                ServerShop.LOGGER.info("✅ Server-side processing completed, returning result");
                 return result;
             } else {
-                ServerShop.LOGGER.warn("❌ No server available, falling back to client-side processing");
                 // Fallback to client-side processing
                 ItemComponentHandler.applyComponentData(baseItemStack, componentData);
             }
-            
-            ServerShop.LOGGER.info("Component data applied. Item now has components: {}", 
-                ItemComponentHandler.hasComponentData(baseItemStack));
-        } else {
-            ServerShop.LOGGER.info("No component data to apply for item: {}", item.getItemName());
         }
         
         return baseItemStack;
@@ -930,7 +910,9 @@ public class MarketplaceContainer implements Renderable {
     private boolean isBuyButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
-        return cooldownEnd != null && currentTime < cooldownEnd;
+        boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
+        System.out.println("Buy cooldown check for " + item.getItemName() + " - End time: " + cooldownEnd + ", Current: " + currentTime + ", In cooldown: " + inCooldown);
+        return inCooldown;
     }
     
     /**
@@ -938,12 +920,13 @@ public class MarketplaceContainer implements Renderable {
      * Validates inventory, removes item, and adds money to wallet.
      */
     private boolean sellItem(MarketplaceItem item) {
-        // Check cooldown for this specific item
+        // Set cooldown immediately to prevent rapid clicking
         long currentTime = System.currentTimeMillis();
-        Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
-        if (cooldownEnd != null && currentTime < cooldownEnd) {
-            return false; // Still in cooldown
-        }
+        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
+        
+        // Debug: Check if cooldown was set
+        boolean testCooldown = isSellButtonInCooldown(item);
+        System.out.println("Sell cooldown set for " + item.getItemName() + " GUID: " + item.getGuid() + " - Cooldown active: " + testCooldown);
         
         // Get the player
         Minecraft minecraft = Minecraft.getInstance();
@@ -969,9 +952,6 @@ public class MarketplaceContainer implements Renderable {
             // TODO: Show error message to player
             return false;
         }
-        
-        // Set cooldown for this specific item
-        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
         
         // Remove item from inventory
         removeItemFromInventory(playerForInventory, itemToSell);
@@ -1120,7 +1100,9 @@ public class MarketplaceContainer implements Renderable {
     private boolean isSellButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
-        return cooldownEnd != null && currentTime < cooldownEnd;
+        boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
+        System.out.println("Sell cooldown check for " + item.getItemName() + " - End time: " + cooldownEnd + ", Current: " + currentTime + ", In cooldown: " + inCooldown);
+        return inCooldown;
     }
     
     /**

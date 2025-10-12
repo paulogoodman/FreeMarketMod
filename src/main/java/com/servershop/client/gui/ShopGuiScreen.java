@@ -3,6 +3,8 @@ package com.servershop.client.gui;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
+import net.minecraft.client.Minecraft;
+import net.minecraft.server.level.ServerLevel;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -12,6 +14,7 @@ import com.servershop.ServerShop;
 import com.servershop.client.data.ClientMarketplaceDataManager;
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.WalletHandler;
+import com.servershop.server.data.MarketplaceDataManager;
 
 /**
  * Semi-transparent dark overlay GUI for the ServerShop mod.
@@ -34,10 +37,24 @@ public class ShopGuiScreen extends Screen {
     }
     
     private void loadMarketplaceItemsFromFile() {
-        // Load marketplace items from JSON file (now with caching)
+        // Try to use server-side loading first (with SavedData attachments)
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.getSingleplayerServer() != null) {
+            try {
+                ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                if (serverLevel != null) {
+                    List<MarketplaceItem> serverItems = MarketplaceDataManager.loadMarketplaceItems(serverLevel);
+                    this.marketplaceItems = serverItems;
+                    return;
+                }
+            } catch (Exception e) {
+                // Failed to load from server-side, will fall back to client-side
+            }
+        }
+        
+        // Fallback to client-side loading (for multiplayer or when server is not available)
         List<MarketplaceItem> loadedItems = ClientMarketplaceDataManager.loadMarketplaceItems();
         this.marketplaceItems = loadedItems;
-        ServerShop.LOGGER.debug("Loaded {} marketplace items from JSON file", loadedItems.size());
     }
     
     /**
@@ -68,11 +85,27 @@ public class ShopGuiScreen extends Screen {
      * @param preserveScrollPosition If true, preserves the current scroll position
      */
     public void refreshMarketplace(boolean preserveScrollPosition) {
-        int currentScrollPosition = 0;
-        if (preserveScrollPosition && marketplaceContainer != null) {
-            currentScrollPosition = marketplaceContainer.getScrollPosition();
+        // Try to use server-side loading first (with SavedData attachments)
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.getSingleplayerServer() != null) {
+            try {
+                ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                if (serverLevel != null) {
+                    List<MarketplaceItem> serverItems = MarketplaceDataManager.loadMarketplaceItems(serverLevel);
+                    this.marketplaceItems = serverItems;
+                    
+                    // Update the marketplace container with new data
+                    if (marketplaceContainer != null) {
+                        marketplaceContainer.updateMarketplaceItems(marketplaceItems, preserveScrollPosition);
+                    }
+                    return;
+                }
+            } catch (Exception e) {
+                // Failed to refresh from server-side, will fall back to client-side
+            }
         }
         
+        // Fallback to client-side loading
         ClientMarketplaceDataManager.invalidateCache();
         loadMarketplaceItemsFromFile();
         

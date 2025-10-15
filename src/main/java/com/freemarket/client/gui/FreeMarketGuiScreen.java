@@ -39,9 +39,10 @@ public class FreeMarketGuiScreen extends Screen {
     private void loadFreeMarketItemsFromFile() {
         // Try to use server-side loading first (with SavedData attachments)
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.getSingleplayerServer() != null) {
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
             try {
-                ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                ServerLevel serverLevel = singleplayerServer.getLevel(net.minecraft.world.level.Level.OVERWORLD);
                 if (serverLevel != null) {
                     List<FreeMarketItem> serverItems = FreeMarketDataManager.loadFreeMarketItems(serverLevel);
                     this.freeMarketItems = serverItems;
@@ -87,9 +88,10 @@ public class FreeMarketGuiScreen extends Screen {
     public void refreshMarketplace(boolean preserveScrollPosition) {
         // Try to use server-side loading first (with SavedData attachments)
         Minecraft minecraft = Minecraft.getInstance();
-        if (minecraft.getSingleplayerServer() != null) {
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
             try {
-                ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+                ServerLevel serverLevel = singleplayerServer.getLevel(net.minecraft.world.level.Level.OVERWORLD);
                 if (serverLevel != null) {
                     List<FreeMarketItem> serverItems = FreeMarketDataManager.loadFreeMarketItems(serverLevel);
                     this.freeMarketItems = serverItems;

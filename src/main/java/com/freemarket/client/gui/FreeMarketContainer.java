@@ -725,13 +725,7 @@ public class FreeMarketContainer implements Renderable {
                     }
                 }
                 
-                // Check buy/sell button clicks (now vertically stacked) - OUTSIDE admin mode check
-                int margin = GuiScalingHelper.responsiveWidth(5, 4, 8);
-                int buttonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
-                int buttonSpacing = GuiScalingHelper.responsiveHeight(4, 3, 6);
-                int buttonWidth = calculatedItemWidth - (margin * 2);
-                int buttonStartY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
-                
+
                 // Buy button (top) - with floating point tolerance
                 int buyButtonX = itemX + GuiScalingHelper.responsiveWidth(5, 4, 8);
                 int buyButtonY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
@@ -1119,7 +1113,7 @@ public class FreeMarketContainer implements Renderable {
         boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
         
         // Only log when there's an active cooldown
-        if (inCooldown) {
+        if (inCooldown && cooldownEnd != null) {
             long remaining = cooldownEnd - currentTime;
             System.out.println("SELL CHECK: " + item.getItemName() + " cooldown " + remaining + "ms remaining");
         }

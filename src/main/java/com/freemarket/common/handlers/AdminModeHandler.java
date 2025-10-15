@@ -1,9 +1,9 @@
-package com.servershop.common.handlers;
+package com.freemarket.common.handlers;
 
-import com.servershop.ServerShop;
+import com.freemarket.FreeMarket;
 
 /**
- * Handles admin mode state for the ServerShop mod.
+ * Handles admin mode state for the FreeMarket mod.
  * This class manages whether admin mode is enabled or disabled.
  */
 public class AdminModeHandler {
@@ -15,7 +15,7 @@ public class AdminModeHandler {
      */
     public static void setAdminMode(boolean enabled) {
         adminMode = enabled;
-        ServerShop.LOGGER.info("Admin mode {} for ServerShop", enabled ? "enabled" : "disabled");
+        FreeMarket.LOGGER.info("Admin mode {} for FreeMarket", enabled ? "enabled" : "disabled");
     }
     
     /**
@@ -32,7 +32,7 @@ public class AdminModeHandler {
      */
     public static boolean toggleAdminMode() {
         adminMode = !adminMode;
-        ServerShop.LOGGER.info("Admin mode {} for ServerShop", adminMode ? "enabled" : "disabled");
+        FreeMarket.LOGGER.info("Admin mode {} for FreeMarket", adminMode ? "enabled" : "disabled");
         return adminMode;
     }
 }

@@ -1,4 +1,4 @@
-package com.servershop.client;
+package com.freemarket.client;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -15,22 +15,22 @@ import net.neoforged.neoforge.client.gui.IConfigScreenFactory;
 import net.neoforged.neoforge.client.event.InputEvent;
 import org.lwjgl.glfw.GLFW;
 
-import com.servershop.ServerShop;
-import com.servershop.client.gui.ShopGuiScreen;
+import com.freemarket.FreeMarket;
+import com.freemarket.client.gui.FreeMarketGuiScreen;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
-@Mod(value = ServerShop.MODID, dist = Dist.CLIENT)
+@Mod(value = FreeMarket.MODID, dist = Dist.CLIENT)
 // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent
-@EventBusSubscriber(modid = ServerShop.MODID, value = Dist.CLIENT)
-public class ServerShopClient {
+@EventBusSubscriber(modid = FreeMarket.MODID, value = Dist.CLIENT)
+public class FreeMarketClient {
     // Keybind for opening the shop GUI
     public static final KeyMapping OPEN_SHOP_KEY = new KeyMapping(
-        "key.servershop.open_shop",
+        "key.FreeMarket.open_shop",
         GLFW.GLFW_KEY_O,
-        "key.categories.servershop"
+        "key.categories.FreeMarket"
     );
     
-    public ServerShopClient(ModContainer container, IEventBus modEventBus) {
+    public FreeMarketClient(ModContainer container, IEventBus modEventBus) {
         // Allows NeoForge to create a config screen for this mod's configs.
         // The config screen is accessed by going to the Mods screen > clicking on your mod > clicking on config.
         // Do not forget to add translations for your config options to the en_us.json file.
@@ -42,8 +42,8 @@ public class ServerShopClient {
     @SubscribeEvent
     public static void onClientSetup(FMLClientSetupEvent event) {
         // Some client setup code
-        ServerShop.LOGGER.info("HELLO FROM CLIENT SETUP");
-        ServerShop.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+        FreeMarket.LOGGER.info("HELLO FROM CLIENT SETUP");
+        FreeMarket.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
     }
     
     @SubscribeEvent
@@ -59,10 +59,10 @@ public class ServerShopClient {
         // Check if the keybind was pressed and we're in-game
         if (OPEN_SHOP_KEY.consumeClick() && minecraft.player != null) {
             // Toggle the shop GUI - if it's already open, close it; otherwise open it
-            if (minecraft.screen instanceof ShopGuiScreen) {
+            if (minecraft.screen instanceof FreeMarketGuiScreen) {
                 minecraft.setScreen(null); // Close the GUI
             } else {
-                minecraft.setScreen(new ShopGuiScreen()); // Open the GUI
+                minecraft.setScreen(new FreeMarketGuiScreen()); // Open the GUI
             }
         }
     }

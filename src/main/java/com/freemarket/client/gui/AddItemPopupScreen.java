@@ -1,4 +1,4 @@
-package com.servershop.client.gui;
+package com.freemarket.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -12,10 +12,10 @@ import net.minecraft.resources.ResourceLocation;
 
 import javax.annotation.Nonnull;
 
-import com.servershop.ServerShop;
-import com.servershop.common.data.MarketplaceItem;
-import com.servershop.client.data.ClientMarketplaceDataManager;
-import com.servershop.common.attachments.ItemComponentHandler;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.client.data.ClientFreeMarketDataManager;
+import com.freemarket.common.attachments.ItemComponentHandler;
 
 /**
  * Popup screen for adding items to the marketplace.
@@ -23,7 +23,7 @@ import com.servershop.common.attachments.ItemComponentHandler;
  */
 public class AddItemPopupScreen extends Screen {
     
-    private final ShopGuiScreen parentScreen;
+    private final FreeMarketGuiScreen parentScreen;
     private EditBox itemIdBox;
     private EditBox buyPriceBox;
     private EditBox sellPriceBox;
@@ -37,8 +37,8 @@ public class AddItemPopupScreen extends Screen {
     private String itemIdError = null;
     private String componentDataError = null;
     
-    public AddItemPopupScreen(ShopGuiScreen parent) {
-        super(Component.translatable("gui.servershop.add_item.title"));
+    public AddItemPopupScreen(FreeMarketGuiScreen parent) {
+        super(Component.translatable("gui.FreeMarket.add_item.title"));
         this.parentScreen = parent;
     }
     
@@ -55,7 +55,7 @@ public class AddItemPopupScreen extends Screen {
         // Item ID input
         this.itemIdBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 
             GuiScalingHelper.responsiveWidth(200, 160, 250), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.item_id"));
+            Component.translatable("gui.FreeMarket.add_item.item_id"));
         this.itemIdBox.setValue("minecraft:diamond");
         this.itemIdBox.setResponder(this::onItemIdChanged);
         this.addRenderableWidget(this.itemIdBox);
@@ -66,28 +66,28 @@ public class AddItemPopupScreen extends Screen {
         // Buy price input
         this.buyPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(90, 75, 110), 
             GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.buy_price"));
+            Component.translatable("gui.FreeMarket.add_item.buy_price"));
         this.buyPriceBox.setValue("100");
         this.addRenderableWidget(this.buyPriceBox);
         
         // Sell price input
         this.sellPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(130, 110, 150), 
             GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.sell_price"));
+            Component.translatable("gui.FreeMarket.add_item.sell_price"));
         this.sellPriceBox.setValue("80");
         this.addRenderableWidget(this.sellPriceBox);
         
         // Quantity input
         this.quantityBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(170, 145, 190), 
             GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.quantity"));
+            Component.translatable("gui.FreeMarket.add_item.quantity"));
         this.quantityBox.setValue("1");
         this.addRenderableWidget(this.quantityBox);
         
         // Component data input (optional) - stores all item components as JSON
         this.componentDataBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(210, 175, 230), 
             GuiScalingHelper.responsiveWidth(450, 360, 550), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.servershop.add_item.component_data"));
+            Component.translatable("gui.FreeMarket.add_item.component_data"));
         this.componentDataBox.setValue(""); // Start empty - users can add their own
         this.componentDataBox.setResponder(this::onComponentDataChanged);
         this.componentDataBox.setMaxLength(Integer.MAX_VALUE);
@@ -95,7 +95,7 @@ public class AddItemPopupScreen extends Screen {
         
         // Add button
         this.addButton = Button.builder(
-            Component.translatable("gui.servershop.add_item.add"),
+            Component.translatable("gui.FreeMarket.add_item.add"),
             button -> addItemToList()
         ).bounds(popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
             GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
@@ -103,7 +103,7 @@ public class AddItemPopupScreen extends Screen {
         
         // Cancel button
         this.cancelButton = Button.builder(
-            Component.translatable("gui.servershop.add_item.cancel"),
+            Component.translatable("gui.FreeMarket.add_item.cancel"),
             button -> onClose()
         ).bounds(popupX + GuiScalingHelper.responsiveWidth(120, 100, 150), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
             GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
@@ -150,12 +150,12 @@ public class AddItemPopupScreen extends Screen {
         
         // Apply component data if provided
         if (componentDataString != null && !componentDataString.trim().isEmpty()) {
-            ServerShop.LOGGER.info("Applying component data to item: {}", componentDataString);
+            FreeMarket.LOGGER.info("Applying component data to item: {}", componentDataString);
             ItemComponentHandler.applyComponentData(itemStack, componentDataString);
-            ServerShop.LOGGER.info("Component data applied. Item now has components: {}", 
+            FreeMarket.LOGGER.info("Component data applied. Item now has components: {}", 
                 ItemComponentHandler.hasComponentData(itemStack));
         } else {
-            ServerShop.LOGGER.info("No component data provided for item");
+            FreeMarket.LOGGER.info("No component data provided for item");
         }
         
         return itemStack;
@@ -174,12 +174,12 @@ public class AddItemPopupScreen extends Screen {
             
             // Validate inputs
             if (itemId.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
-                ServerShop.LOGGER.warn("All fields must be filled");
+                FreeMarket.LOGGER.warn("All fields must be filled");
                 return;
             }
             
             if (selectedItem == null) {
-                ServerShop.LOGGER.warn("Please enter a valid item ID");
+                FreeMarket.LOGGER.warn("Please enter a valid item ID");
                 return;
             }
             
@@ -189,13 +189,13 @@ public class AddItemPopupScreen extends Screen {
                 sellPrice = Integer.parseInt(sellPriceStr);
                 quantity = Integer.parseInt(quantityStr);
             } catch (NumberFormatException e) {
-                ServerShop.LOGGER.warn("Invalid number format in price or quantity fields");
+                FreeMarket.LOGGER.warn("Invalid number format in price or quantity fields");
                 return;
             }
             
             // Validate component data if provided
             if (componentDataError != null) {
-                ServerShop.LOGGER.warn("Component data validation failed: {}", componentDataError);
+                FreeMarket.LOGGER.warn("Component data validation failed: {}", componentDataError);
                 return;
             }
             
@@ -204,7 +204,7 @@ public class AddItemPopupScreen extends Screen {
                 this.componentDataBox.getValue());
             
             // Create marketplace item with component data
-            MarketplaceItem marketplaceItem = new MarketplaceItem(
+            FreeMarketItem FreeMarketItem = new FreeMarketItem(
                 itemStack, 
                 buyPrice, 
                 sellPrice, 
@@ -215,16 +215,16 @@ public class AddItemPopupScreen extends Screen {
             );
             
             // Add to marketplace via client data manager
-            ClientMarketplaceDataManager.addMarketplaceItem(marketplaceItem);
+            ClientFreeMarketDataManager.addFreeMarketItem(FreeMarketItem);
             
-            ServerShop.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
+            FreeMarket.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
                 itemStack.getItem().getDescription().getString(), buyPrice, sellPrice, quantity);
             
             // Close the popup
             onClose();
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to add item to marketplace", e);
+            FreeMarket.LOGGER.error("Failed to add item to marketplace", e);
         }
     }
     
@@ -239,7 +239,7 @@ public class AddItemPopupScreen extends Screen {
         // Call super.render() FIRST to draw the blur overlay behind everything
         super.render(guiGraphics, mouseX, mouseY, partialTick);
         
-        // Draw popup background on top of the blur (matching MarketplaceContainer colors)
+        // Draw popup background on top of the blur (matching FreeMarketContainer colors)
         guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF1E1E1E);
         guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF2A2A2A);
         
@@ -265,15 +265,15 @@ public class AddItemPopupScreen extends Screen {
         guiGraphics.drawString(this.font, this.title, titleX, popupY + GuiScalingHelper.responsiveHeight(10, 8, 15), 0xFFFFFF);
         
         // Draw labels (after widgets to ensure they're on top)
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.item_id"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.item_id"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(40, 32, 50), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.buy_price"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.buy_price"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(80, 65, 95), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.sell_price"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.sell_price"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(120, 95, 140), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.quantity"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.quantity"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(160, 130, 180), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.servershop.add_item.component_data"), 
+        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.component_data"), 
             popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(200, 165, 200), 0xCCCCCC);
         
         // Draw item preview and error messages
@@ -283,7 +283,7 @@ public class AddItemPopupScreen extends Screen {
             int itemPreviewX = popupX + GuiScalingHelper.responsiveWidth(300, 250, 350);
             int itemPreviewY = popupY + GuiScalingHelper.responsiveHeight(50, 40, 65);
             
-            // Draw item icon with scaling (similar to MarketplaceContainer)
+            // Draw item icon with scaling (similar to FreeMarketContainer)
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(itemPreviewX, itemPreviewY, 0);
             float scale = (float) itemPreviewSize / 16f; // Scale to fit the responsive size

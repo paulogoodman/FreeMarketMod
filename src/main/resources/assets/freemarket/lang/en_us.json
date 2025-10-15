@@ -1,0 +1,63 @@
+{
+  "itemGroup.freemarket": "FreeMarket",
+  "block.freemarket.example_block": "Market Block",
+  "item.freemarket.example_item": "Coin",
+
+  "freemarket.configuration.title": "FreeMarket Configs",
+  "freemarket.configuration.section.freemarket.common.toml": "FreeMarket Configs",
+  "freemarket.configuration.section.freemarket.common.toml.title": "FreeMarket Configs",
+  "freemarket.configuration.items": "Item List",
+  "freemarket.configuration.logDirtBlock": "Log Dirt Block",
+  "freemarket.configuration.magicNumberIntroduction": "Magic Number Text",
+  "freemarket.configuration.magicNumber": "Magic Number",
+
+  "gui.FreeMarket.shop.title": "Free Market",
+  "gui.FreeMarket.shop.instruction": "Press ESC to close",
+  "gui.FreeMarket.admin_mode": "Admin Mode Active",
+  "gui.FreeMarket.wallet": "Wallet: %d coins",
+  "gui.FreeMarket.marketplace.title": "Free Market",
+  "gui.FreeMarket.marketplace.search": "Search items...",
+  "gui.FreeMarket.marketplace.search_placeholder": "Type to search...",
+  "gui.FreeMarket.marketplace.count": "Showing %d of %d items",
+  
+  "gui.FreeMarket.add_item.title": "Add Item to Free Market",
+  "gui.FreeMarket.add_item.item_id": "Item ID",
+  "gui.FreeMarket.add_item.item_name": "Item Name",
+  "gui.FreeMarket.add_item.buy_price": "Buy Price",
+  "gui.FreeMarket.add_item.sell_price": "Sell Price",
+  "gui.FreeMarket.add_item.quantity": "Quantity",
+  "gui.FreeMarket.add_item.component_data": "Component Data (Optional)",
+  "gui.FreeMarket.add_item.add": "Add Item",
+  "gui.FreeMarket.add_item.cancel": "Cancel",
+
+  "key.freemarket.open_shop": "Open Free Market",
+  "key.categories.freemarket": "FreeMarket",
+
+  "command.FreeMarket.adminmode.set": "Admin mode %s",
+  "command.FreeMarket.adminmode.toggle": "Admin mode %s",
+
+  "command.FreeMarket.economy.balance": "%s's balance: %d coins",
+  "command.FreeMarket.economy.add.success": "Added %d coins to %s. New balance: %d",
+  "command.FreeMarket.economy.add.notify": "You received %d coins! New balance: %d",
+  "command.FreeMarket.economy.remove.success": "Removed %d coins from %s. New balance: %d",
+  "command.FreeMarket.economy.remove.notify": "%d coins were removed from your account. New balance: %d",
+  "command.FreeMarket.economy.remove.insufficient": "Cannot remove %d coins from %s. Current balance: %d",
+  "command.FreeMarket.economy.set.success": "Set %s's balance from %d to %d coins",
+  "command.FreeMarket.economy.set.notify": "Your balance has been set to %d coins",
+  "command.FreeMarket.economy.player_not_found": "Player %s not found or not online.",
+  "command.FreeMarket.economy.not_player": "This command can only be executed by a player.",
+  
+  "command.FreeMarket.freemarket.clear.success": "Marketplace cleared successfully",
+  "command.FreeMarket.freemarket.additem.success": "Added %s (x%d) to marketplace - Buy: %d, Sell: %d",
+  "command.FreeMarket.freemarket.additem.invalid_item": "Invalid item ID: %s",
+  "command.FreeMarket.freemarket.additem.error": "Error adding item: %s",
+  "command.FreeMarket.freemarket.testdata.success": "Generated %d test items in marketplace",
+  
+  "command.FreeMarket.freemarket.pay.sender_success": "Sent %d coins to %s. Your balance: %d",
+  "command.FreeMarket.freemarket.pay.target_notify": "You received %d coins from %s! Your balance: %d",
+  "command.FreeMarket.freemarket.pay.insufficient": "Insufficient funds. You need %d coins but only have %d",
+  "command.FreeMarket.freemarket.pay.self": "You cannot pay yourself",
+  "command.FreeMarket.freemarket.pay.failed": "Payment failed. Please try again",
+  
+  "command.FreeMarket.freemarket.itemdata.no_item": "You must be holding an item to get its data"
+}

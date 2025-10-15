@@ -1,4 +1,4 @@
-package com.servershop.client.data;
+package com.freemarket.client.data;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
@@ -15,21 +15,21 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.servershop.ServerShop;
-import com.servershop.common.data.MarketplaceItem;
-import com.servershop.common.attachments.ItemComponentHandler;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.attachments.ItemComponentHandler;
 
 /**
  * Client-side marketplace data manager for reading marketplace data from world files.
  * This allows the client to load marketplace items from the JSON file in the world data directory.
  * Includes caching to reduce frequent file reads.
  */
-public class ClientMarketplaceDataManager {
+public class ClientFreeMarketDataManager {
     
     private static final String MARKETPLACE_FILE_NAME = "marketplace.json";
     
     // Cache for marketplace items to reduce file reads
-    private static List<MarketplaceItem> cachedItems = null;
+    private static List<FreeMarketItem> cachedItems = null;
     private static long lastCacheUpdate = 0;
     private static String lastWorldPath = null;
     private static final long CACHE_DURATION_MS = 5000; // Cache for 5 seconds
@@ -38,7 +38,7 @@ public class ClientMarketplaceDataManager {
      * Loads marketplace items from the current world's JSON file with caching.
      * Returns cached data if available and recent, otherwise reads from file.
      */
-    public static List<MarketplaceItem> loadMarketplaceItems() {
+    public static List<FreeMarketItem> loadFreeMarketItems() {
         // Get current world path for cache validation
         String currentWorldPath = getCurrentWorldPath();
         if (currentWorldPath == null) {
@@ -54,7 +54,7 @@ public class ClientMarketplaceDataManager {
         }
         
         // Cache is invalid or expired, reload from file
-        List<MarketplaceItem> items = loadMarketplaceItemsFromFile();
+        List<FreeMarketItem> items = loadFreeMarketItemsFromFile();
         
         // Update cache
         cachedItems = new ArrayList<>(items);
@@ -105,7 +105,7 @@ public class ClientMarketplaceDataManager {
                 }
             }
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Could not determine current world path: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Could not determine current world path: {}", e.getMessage());
         }
         
         return null;
@@ -115,8 +115,8 @@ public class ClientMarketplaceDataManager {
      * Loads marketplace items from the current world's JSON file (without caching).
      * This is the actual file reading implementation.
      */
-    private static List<MarketplaceItem> loadMarketplaceItemsFromFile() {
-        List<MarketplaceItem> items = new ArrayList<>();
+    private static List<FreeMarketItem> loadFreeMarketItemsFromFile() {
+        List<FreeMarketItem> items = new ArrayList<>();
         
         try {
             Minecraft minecraft = Minecraft.getInstance();
@@ -167,7 +167,7 @@ public class ClientMarketplaceDataManager {
             JsonElement jsonElement = JsonParser.parseString(new String(java.nio.file.Files.readAllBytes(marketplaceFile)));
             
             if (!jsonElement.isJsonObject()) {
-                ServerShop.LOGGER.error("Invalid marketplace file format: {}", marketplaceFile);
+                FreeMarket.LOGGER.error("Invalid marketplace file format: {}", marketplaceFile);
                 return items;
             }
             
@@ -177,7 +177,7 @@ public class ClientMarketplaceDataManager {
             if (itemsArray != null) {
                 for (JsonElement itemElement : itemsArray) {
                     if (itemElement.isJsonObject()) {
-                        MarketplaceItem item = deserializeMarketplaceItem(itemElement.getAsJsonObject());
+                        FreeMarketItem item = deserializeFreeMarketItem(itemElement.getAsJsonObject());
                         if (item != null) {
                             items.add(item);
                         }
@@ -186,16 +186,16 @@ public class ClientMarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to load marketplace items from world", e);
+            FreeMarket.LOGGER.error("Failed to load marketplace items from world", e);
         }
         
         return items;
     }
     
     /**
-     * Deserializes a MarketplaceItem from JSON.
+     * Deserializes a FreeMarketItem from JSON.
      */
-    private static MarketplaceItem deserializeMarketplaceItem(JsonObject itemJson) {
+    private static FreeMarketItem deserializeFreeMarketItem(JsonObject itemJson) {
         try {
             // Deserialize ItemStack
             String itemIdStr = itemJson.get("itemId").getAsString();
@@ -221,7 +221,7 @@ public class ClientMarketplaceDataManager {
                         
                         if (singleplayerServer != null) {
                             // Use server-side handler with registry access
-                            itemStack = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
+                            itemStack = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
                                 itemStack, componentDataString, singleplayerServer);
                         } else {
                             // No server available, component data will be applied when item is purchased
@@ -245,10 +245,10 @@ public class ClientMarketplaceDataManager {
                 guid = java.util.UUID.randomUUID().toString();
             }
 
-            return new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
+            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
             return null;
         }
     }
@@ -257,7 +257,7 @@ public class ClientMarketplaceDataManager {
      * Adds a new marketplace item to the JSON file.
      * This is a client-side operation for admin mode.
      */
-    public static void addMarketplaceItem(MarketplaceItem item) {
+    public static void addFreeMarketItem(FreeMarketItem item) {
         try {
             Minecraft minecraft = Minecraft.getInstance();
             var level = minecraft.level;
@@ -289,37 +289,37 @@ public class ClientMarketplaceDataManager {
                         }
                     }
                 } catch (Exception e) {
-                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                    FreeMarket.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
                 }
             }
             
             // If we still can't get the world path, we can't proceed
             if (marketplaceFile == null) {
-                ServerShop.LOGGER.error("Could not determine current world path - cannot add marketplace item");
+                FreeMarket.LOGGER.error("Could not determine current world path - cannot add marketplace item");
                 return;
             }
             
             // Load existing items
-            List<MarketplaceItem> existingItems = loadMarketplaceItems();
+            List<FreeMarketItem> existingItems = loadFreeMarketItems();
             
             // Add new item
             existingItems.add(item);
             
             // Save back to file
-            saveMarketplaceItems(marketplaceFile, existingItems);
+            saveFreeMarketItems(marketplaceFile, existingItems);
             
             // Invalidate cache since we modified the marketplace
             invalidateCache();
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to add marketplace item", e);
+            FreeMarket.LOGGER.error("Failed to add marketplace item", e);
         }
     }
     
     /**
      * Saves marketplace items to the JSON file.
      */
-    private static void saveMarketplaceItems(Path marketplaceFile, List<MarketplaceItem> items) {
+    private static void saveFreeMarketItems(Path marketplaceFile, List<FreeMarketItem> items) {
         try {
             File file = marketplaceFile.toFile();
             
@@ -329,14 +329,14 @@ public class ClientMarketplaceDataManager {
             JsonObject marketplaceData = new JsonObject();
             JsonArray itemsArray = new JsonArray();
             
-            for (MarketplaceItem item : items) {
-                JsonObject itemJson = serializeMarketplaceItem(item);
+            for (FreeMarketItem item : items) {
+                JsonObject itemJson = serializeFreeMarketItem(item);
                 itemsArray.add(itemJson);
             }
             
             marketplaceData.add("items", itemsArray);
             marketplaceData.addProperty("version", "1.0");
-            marketplaceData.addProperty("description", "ServerShop Marketplace Data");
+            marketplaceData.addProperty("description", "FreeMarket Marketplace Data");
             marketplaceData.addProperty("lastUpdated", System.currentTimeMillis());
             
             // Write to file
@@ -346,14 +346,14 @@ public class ClientMarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to save marketplace items", e);
+            FreeMarket.LOGGER.error("Failed to save marketplace items", e);
         }
     }
     
     /**
-     * Serializes a MarketplaceItem to JSON.
+     * Serializes a FreeMarketItem to JSON.
      */
-    private static JsonObject serializeMarketplaceItem(MarketplaceItem item) {
+    private static JsonObject serializeFreeMarketItem(FreeMarketItem item) {
         JsonObject itemJson = new JsonObject();
         
         // Serialize ItemStack
@@ -362,7 +362,7 @@ public class ClientMarketplaceDataManager {
         itemJson.addProperty("itemId", itemId.toString());
         itemJson.addProperty("count", itemStack.getCount());
         
-        // Serialize component data (use stored component data from MarketplaceItem)
+        // Serialize component data (use stored component data from FreeMarketItem)
         String componentData = item.getComponentData();
         itemJson.addProperty("componentData", componentData);
         
@@ -380,7 +380,7 @@ public class ClientMarketplaceDataManager {
          * Removes a marketplace item from the JSON file.
          * This is a client-side operation for admin mode.
          */
-        public static void removeMarketplaceItem(MarketplaceItem itemToRemove) {
+        public static void removeFreeMarketItem(FreeMarketItem itemToRemove) {
             try {
                 Minecraft minecraft = Minecraft.getInstance();
                 var level = minecraft.level;
@@ -412,18 +412,18 @@ public class ClientMarketplaceDataManager {
                             }
                         }
                     } catch (Exception e) {
-                        ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                        FreeMarket.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
                     }
                 }
 
                 // If we still can't get the world path, we can't proceed
                 if (marketplaceFile == null) {
-                    ServerShop.LOGGER.error("Could not determine current world path - cannot remove marketplace item");
+                    FreeMarket.LOGGER.error("Could not determine current world path - cannot remove marketplace item");
                     return;
                 }
 
                 // Load existing items
-                List<MarketplaceItem> existingItems = loadMarketplaceItems();
+                List<FreeMarketItem> existingItems = loadFreeMarketItems();
 
                 // Remove the item by GUID (exact match)
                 boolean removed = existingItems.removeIf(item -> 
@@ -432,7 +432,7 @@ public class ClientMarketplaceDataManager {
 
                 if (removed) {
                     // Save back to file
-                    saveMarketplaceItems(marketplaceFile, existingItems);
+                    saveFreeMarketItems(marketplaceFile, existingItems);
                     
                     // Invalidate cache since we modified the marketplace
                     invalidateCache();
@@ -442,7 +442,7 @@ public class ClientMarketplaceDataManager {
                 }
 
             } catch (Exception e) {
-                ServerShop.LOGGER.error("Failed to remove marketplace item", e);
+                FreeMarket.LOGGER.error("Failed to remove marketplace item", e);
             }
         }
     public static boolean marketplaceFileExists() {
@@ -477,20 +477,20 @@ public class ClientMarketplaceDataManager {
                         }
                     }
                 } catch (Exception e) {
-                    ServerShop.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
+                    FreeMarket.LOGGER.error("Could not determine world path from level server: {}", e.getMessage());
                 }
             }
             
             // If we still can't get the world path, we can't proceed
             if (marketplaceFile == null) {
-                ServerShop.LOGGER.error("Could not determine current world path - cannot check marketplace file");
+                FreeMarket.LOGGER.error("Could not determine current world path - cannot check marketplace file");
                 return false;
             }
             
             return marketplaceFile.toFile().exists();
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to check marketplace file existence", e);
+            FreeMarket.LOGGER.error("Failed to check marketplace file existence", e);
             return false;
         }
     }

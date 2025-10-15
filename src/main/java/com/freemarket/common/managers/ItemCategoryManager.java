@@ -1,4 +1,4 @@
-package com.servershop.common.managers;
+package com.freemarket.common.managers;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -9,7 +9,7 @@ import net.minecraft.world.item.ItemStack;
 
 import java.util.*;
 
-import com.servershop.common.data.MarketplaceItem;
+import com.freemarket.common.data.FreeMarketItem;
 
 /**
  * Manages item categorization based entirely on Forge item tags and NBT data.
@@ -188,7 +188,7 @@ public class ItemCategoryManager {
     /**
      * Filters a list of marketplace items by category.
      */
-    public static List<MarketplaceItem> filterItemsByCategory(List<MarketplaceItem> items, Category category) {
+    public static List<FreeMarketItem> filterItemsByCategory(List<FreeMarketItem> items, Category category) {
         if (category == Category.ALL) {
             return new ArrayList<>(items);
         }
@@ -201,7 +201,7 @@ public class ItemCategoryManager {
     /**
      * Gets the count of items in each category.
      */
-    public static Map<Category, Integer> getCategoryCounts(List<MarketplaceItem> items) {
+    public static Map<Category, Integer> getCategoryCounts(List<FreeMarketItem> items) {
         Map<Category, Integer> counts = new HashMap<>();
         
         for (Category category : Category.values()) {

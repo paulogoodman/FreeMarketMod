@@ -1,4 +1,4 @@
-package com.servershop;
+package com.freemarket;
 
 import java.util.List;
 

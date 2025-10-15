@@ -1,4 +1,4 @@
-package com.servershop.server.data;
+package com.freemarket.server.data;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -13,7 +13,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.storage.LevelResource;
-import com.servershop.ServerShop;
+import com.freemarket.FreeMarket;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -22,17 +22,17 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.servershop.ServerShop;
-import com.servershop.common.data.MarketplaceItem;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.data.FreeMarketItem;
 
 /**
  * Manages marketplace data persistence using JSON files in world data directory.
  * Creates empty marketplace.json file on world creation and handles reading/writing marketplace items.
  */
-public class MarketplaceDataManager {
+public class FreeMarketDataManager {
     
     private static final String MARKETPLACE_FILE_NAME = "marketplace.json";
-    private static final String INITIALIZATION_FLAG_FILE_NAME = "servershop_initialized.json";
+    private static final String INITIALIZATION_FLAG_FILE_NAME = "FreeMarket_initialized.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -58,7 +58,7 @@ public class MarketplaceDataManager {
             JsonObject marketplaceData = new JsonObject();
             marketplaceData.add("items", new JsonArray());
             marketplaceData.addProperty("version", "1.0");
-            marketplaceData.addProperty("description", "ServerShop Marketplace Data");
+            marketplaceData.addProperty("description", "FreeMarket Marketplace Data");
             
             // Write to file
             try (FileWriter writer = new FileWriter(file)) {
@@ -66,7 +66,7 @@ public class MarketplaceDataManager {
             }
             
         } catch (IOException e) {
-            ServerShop.LOGGER.error("Failed to create marketplace.json file for world: {}", level.dimension().location(), e);
+            FreeMarket.LOGGER.error("Failed to create marketplace.json file for world: {}", level.dimension().location(), e);
         }
     }
     
@@ -74,8 +74,8 @@ public class MarketplaceDataManager {
      * Loads marketplace items from the JSON file.
      * Returns empty list if file doesn't exist or is invalid.
      */
-    public static List<MarketplaceItem> loadMarketplaceItems(ServerLevel level) {
-        List<MarketplaceItem> items = new ArrayList<>();
+    public static List<FreeMarketItem> loadFreeMarketItems(ServerLevel level) {
+        List<FreeMarketItem> items = new ArrayList<>();
         
         try {
             Path marketplaceFile = getMarketplaceFilePath(level);
@@ -88,7 +88,7 @@ public class MarketplaceDataManager {
             JsonElement jsonElement = JsonParser.parseString(new String(java.nio.file.Files.readAllBytes(marketplaceFile)));
             
             if (!jsonElement.isJsonObject()) {
-                ServerShop.LOGGER.error("Invalid marketplace file format: {}", marketplaceFile);
+                FreeMarket.LOGGER.error("Invalid marketplace file format: {}", marketplaceFile);
                 return items;
             }
             
@@ -98,7 +98,7 @@ public class MarketplaceDataManager {
             if (itemsArray != null) {
                 for (JsonElement itemElement : itemsArray) {
                     if (itemElement.isJsonObject()) {
-                        MarketplaceItem item = deserializeMarketplaceItem(itemElement.getAsJsonObject());
+                        FreeMarketItem item = deserializeFreeMarketItem(itemElement.getAsJsonObject());
                         if (item != null) {
                             items.add(item);
                         }
@@ -107,7 +107,7 @@ public class MarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to load marketplace items from world: {}", level.dimension().location(), e);
+            FreeMarket.LOGGER.error("Failed to load marketplace items from world: {}", level.dimension().location(), e);
         }
         
         // Auto-generate test data if marketplace is empty
@@ -115,9 +115,9 @@ public class MarketplaceDataManager {
             generateInitialTestData(level);
             // Reload after generating test data
             try {
-                items = loadMarketplaceItemsFromFile(level);
+                items = loadFreeMarketItemsFromFile(level);
             } catch (Exception e) {
-                ServerShop.LOGGER.error("Failed to reload marketplace items after generating test data: {}", e.getMessage());
+                FreeMarket.LOGGER.error("Failed to reload marketplace items after generating test data: {}", e.getMessage());
             }
         }
         
@@ -128,8 +128,8 @@ public class MarketplaceDataManager {
      * Internal method to load marketplace items from file without auto-generation.
      * Used to reload after generating test data to avoid infinite recursion.
      */
-    private static List<MarketplaceItem> loadMarketplaceItemsFromFile(ServerLevel level) {
-        List<MarketplaceItem> items = new ArrayList<>();
+    private static List<FreeMarketItem> loadFreeMarketItemsFromFile(ServerLevel level) {
+        List<FreeMarketItem> items = new ArrayList<>();
         
         try {
             Path marketplaceFile = getMarketplaceFilePath(level);
@@ -151,7 +151,7 @@ public class MarketplaceDataManager {
             if (itemsArray != null) {
                 for (JsonElement itemElement : itemsArray) {
                     if (itemElement.isJsonObject()) {
-                        MarketplaceItem item = deserializeMarketplaceItem(itemElement.getAsJsonObject());
+                        FreeMarketItem item = deserializeFreeMarketItem(itemElement.getAsJsonObject());
                         if (item != null) {
                             items.add(item);
                         }
@@ -160,7 +160,7 @@ public class MarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to load marketplace items from file: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to load marketplace items from file: {}", e.getMessage());
         }
         
         return items;
@@ -169,7 +169,7 @@ public class MarketplaceDataManager {
     /**
      * Saves marketplace items to the JSON file.
      */
-    public static void saveMarketplaceItems(ServerLevel level, List<MarketplaceItem> items) {
+    public static void saveFreeMarketItems(ServerLevel level, List<FreeMarketItem> items) {
         try {
             Path marketplaceFile = getMarketplaceFilePath(level);
             File file = marketplaceFile.toFile();
@@ -180,14 +180,14 @@ public class MarketplaceDataManager {
             JsonObject marketplaceData = new JsonObject();
             JsonArray itemsArray = new JsonArray();
             
-            for (MarketplaceItem item : items) {
-                JsonObject itemJson = serializeMarketplaceItem(item);
+            for (FreeMarketItem item : items) {
+                JsonObject itemJson = serializeFreeMarketItem(item);
                 itemsArray.add(itemJson);
             }
             
             marketplaceData.add("items", itemsArray);
             marketplaceData.addProperty("version", "1.0");
-            marketplaceData.addProperty("description", "ServerShop Marketplace Data");
+            marketplaceData.addProperty("description", "FreeMarket Marketplace Data");
             marketplaceData.addProperty("lastUpdated", System.currentTimeMillis());
             
             // Write to file
@@ -196,14 +196,14 @@ public class MarketplaceDataManager {
             }
             
         } catch (IOException e) {
-            ServerShop.LOGGER.error("Failed to save marketplace items to world: {}", level.dimension().location(), e);
+            FreeMarket.LOGGER.error("Failed to save marketplace items to world: {}", level.dimension().location(), e);
         }
     }
     
     /**
-     * Serializes a MarketplaceItem to JSON.
+     * Serializes a FreeMarketItem to JSON.
      */
-    private static JsonObject serializeMarketplaceItem(MarketplaceItem item) {
+    private static JsonObject serializeFreeMarketItem(FreeMarketItem item) {
         JsonObject itemJson = new JsonObject();
         
         // Serialize ItemStack
@@ -224,9 +224,9 @@ public class MarketplaceDataManager {
     }
     
     /**
-     * Deserializes a MarketplaceItem from JSON.
+     * Deserializes a FreeMarketItem from JSON.
      */
-    private static MarketplaceItem deserializeMarketplaceItem(JsonObject itemJson) {
+    private static FreeMarketItem deserializeFreeMarketItem(JsonObject itemJson) {
         try {
             // Deserialize ItemStack
             String itemIdStr = itemJson.get("itemId").getAsString();
@@ -254,10 +254,10 @@ public class MarketplaceDataManager {
                 guid = java.util.UUID.randomUUID().toString();
             }
             
-            return new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
+            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
             return null;
         }
     }
@@ -271,7 +271,7 @@ public class MarketplaceDataManager {
     }
     
     /**
-     * Checks if ServerShop has been initialized for this world (test data generated).
+     * Checks if FreeMarket has been initialized for this world (test data generated).
      */
     private static boolean isModInitialized(ServerLevel level) {
         try {
@@ -283,7 +283,7 @@ public class MarketplaceDataManager {
     }
     
     /**
-     * Marks ServerShop as initialized for this world.
+     * Marks FreeMarket as initialized for this world.
      */
     private static void markModAsInitialized(ServerLevel level) {
         try {
@@ -304,7 +304,7 @@ public class MarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to mark mod as initialized: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to mark mod as initialized: {}", e.getMessage());
         }
     }
     
@@ -326,48 +326,48 @@ public class MarketplaceDataManager {
                 return;
             }
             
-            List<MarketplaceItem> existingItems = loadMarketplaceItemsFromFile(level);
+            List<FreeMarketItem> existingItems = loadFreeMarketItemsFromFile(level);
             
             // Only generate test data if marketplace is empty AND mod hasn't been initialized
             if (existingItems.isEmpty()) {
-                List<MarketplaceItem> testItems = new ArrayList<>();
-                String seller = "ServerShop";
+                List<FreeMarketItem> testItems = new ArrayList<>();
+                String seller = "FreeMarket";
                 
                 // Add various test items
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.DIAMOND, 1), 100, 80, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.IRON_INGOT, 1), 10, 8, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.GOLD_INGOT, 1), 20, 16, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.EMERALD, 1), 50, 40, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.DIAMOND_SWORD, 1), 200, 160, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.DIAMOND_PICKAXE, 1), 150, 120, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:efficiency\",\"lvl\":5}}}}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.APPLE, 1), 2, 1, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
-                testItems.add(new MarketplaceItem(
+                testItems.add(new FreeMarketItem(
                     new ItemStack(Items.BREAD, 1), 3, 2, 1, seller, 
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
                 // Save test data
-                saveMarketplaceItems(level, testItems);
+                saveFreeMarketItems(level, testItems);
                 
                 // Mark mod as initialized to prevent future auto-generation
                 markModAsInitialized(level);
@@ -378,7 +378,7 @@ public class MarketplaceDataManager {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to generate initial test data: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to generate initial test data: {}", e.getMessage());
         }
     }
 }

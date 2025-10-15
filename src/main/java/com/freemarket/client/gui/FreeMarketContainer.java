@@ -1,4 +1,4 @@
-package com.servershop.client.gui;
+package com.freemarket.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -14,25 +14,25 @@ import java.util.List;
 import java.util.Map;
 
 
-import com.servershop.Config;
-import com.servershop.common.data.MarketplaceItem;
-import com.servershop.common.handlers.AdminModeHandler;
-import com.servershop.common.handlers.WalletHandler;
-import com.servershop.common.managers.ItemCategoryManager;
-import com.servershop.common.attachments.ItemComponentHandler;
-import com.servershop.client.data.ClientMarketplaceDataManager;
+import com.freemarket.Config;
+import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.handlers.AdminModeHandler;
+import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.common.managers.ItemCategoryManager;
+import com.freemarket.common.attachments.ItemComponentHandler;
+import com.freemarket.client.data.ClientFreeMarketDataManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * A scrollable container for displaying marketplace items with search functionality.
+ * A scrollable container for displaying free market items with search functionality.
  */
-public class MarketplaceContainer implements Renderable {
+public class FreeMarketContainer implements Renderable {
     
     private final int x, y, width, height;
-    private List<MarketplaceItem> allItems;
-    private final ShopGuiScreen parentScreen;
+    private List<FreeMarketItem> allItems;
+    private final FreeMarketGuiScreen parentScreen;
     private EditBox searchBox;
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
@@ -43,13 +43,13 @@ public class MarketplaceContainer implements Renderable {
     
     // Buy button state tracking - per item
     private final java.util.Map<String, Long> buyButtonCooldowns = new java.util.HashMap<>();
-    private static final long BUY_COOLDOWN_MS = 1000; // 1 second cooldown
+    private static final long BUY_COOLDOWN_MS = 250; // 250ms cooldown
     
     // Sell button state tracking - per item
     private final java.util.Map<String, Long> sellButtonCooldowns = new java.util.HashMap<>();
-    private static final long SELL_COOLDOWN_MS = 1000; // 1 second cooldown
+    private static final long SELL_COOLDOWN_MS = 250; // 250ms cooldown
     
-    public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
+    public FreeMarketContainer(int x, int y, int width, int height, List<FreeMarketItem> items, FreeMarketGuiScreen parentScreen) {
         this.x = x;
         this.y = y;
         this.width = width;
@@ -72,7 +72,7 @@ public class MarketplaceContainer implements Renderable {
      * @param newItems The new list of marketplace items
      * @param preserveScrollPosition If true, preserves the current scroll position
      */
-    public void updateMarketplaceItems(List<MarketplaceItem> newItems, boolean preserveScrollPosition) {
+    public void updateFreeMarketItems(List<FreeMarketItem> newItems, boolean preserveScrollPosition) {
         this.allItems = new ArrayList<>(newItems);
         if (!preserveScrollPosition) {
             // Reset scroll position when items change (default behavior)
@@ -85,8 +85,8 @@ public class MarketplaceContainer implements Renderable {
      * Updates the marketplace items list (default behavior - resets scroll).
      * @param newItems The new list of marketplace items
      */
-    public void updateMarketplaceItems(List<MarketplaceItem> newItems) {
-        updateMarketplaceItems(newItems, false);
+    public void updateFreeMarketItems(List<FreeMarketItem> newItems) {
+        updateFreeMarketItems(newItems, false);
     }
     
     private void calculateResponsiveDimensions() {
@@ -134,7 +134,7 @@ public class MarketplaceContainer implements Renderable {
         this.searchBox = new EditBox(
             net.minecraft.client.Minecraft.getInstance().font,
             searchX, searchY, searchWidth, searchHeight,
-            Component.translatable("gui.servershop.marketplace.search_placeholder")
+            Component.translatable("gui.FreeMarket.marketplace.search_placeholder")
         );
         this.searchBox.setResponder(this::onSearchChanged);
         this.searchBox.setMaxLength(50); // Set max length for search
@@ -150,17 +150,17 @@ public class MarketplaceContainer implements Renderable {
         scrollOffset = 0; // Reset scroll when searching
     }
     
-    public void addItem(MarketplaceItem item) {
+    public void addItem(FreeMarketItem item) {
         allItems.add(item);
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
     }
     
-    public void removeItem(MarketplaceItem item) {
+    public void removeItem(FreeMarketItem item) {
         allItems.remove(item);
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
     }
     
-    public void updateItems(List<MarketplaceItem> newItems) {
+    public void updateItems(List<FreeMarketItem> newItems) {
         allItems.clear();
         allItems.addAll(newItems);
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
@@ -209,7 +209,7 @@ public class MarketplaceContainer implements Renderable {
         renderCategorySidebar(guiGraphics, mouseX, mouseY);
         
         // Get items to render based on selected category and search
-        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        List<FreeMarketItem> itemsToRender = getItemsToRender();
         
         // Draw items with modern styling (adjusted for sidebar)
         int sidebarWidth = GuiScalingHelper.responsiveWidth(120, 100, 150);
@@ -220,7 +220,7 @@ public class MarketplaceContainer implements Renderable {
         
         for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
             for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
-                MarketplaceItem item = itemsToRender.get(i + j);
+                FreeMarketItem item = itemsToRender.get(i + j);
                 int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
@@ -237,7 +237,7 @@ public class MarketplaceContainer implements Renderable {
         if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
             actualItemCount--; // Subtract 1 for the add item
         }
-        Component countText = Component.translatable("gui.servershop.marketplace.count", actualItemCount, allItems.size());
+        Component countText = Component.translatable("gui.FreeMarket.marketplace.count", actualItemCount, allItems.size());
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + GuiScalingHelper.responsiveWidth(10, 8, 15), y + height - GuiScalingHelper.responsiveHeight(15, 12, 20), 0xCCCCCC);
     }
     
@@ -302,22 +302,22 @@ public class MarketplaceContainer implements Renderable {
      * Creates a special marketplace item entry for adding new items.
      * This item has a special GUID that identifies it as the add button.
      */
-    private MarketplaceItem createAddItemEntry() {
+    private FreeMarketItem createAddItemEntry() {
         // Create a dummy item stack (we won't actually use it for rendering)
         net.minecraft.world.item.ItemStack dummyStack = net.minecraft.world.item.Items.AIR.getDefaultInstance();
-        return new MarketplaceItem(dummyStack, 0, 0, 0, "admin", "ADD_ITEM_SPECIAL");
+        return new FreeMarketItem(dummyStack, 0, 0, 0, "admin", "ADD_ITEM_SPECIAL");
     }
     
     /**
      * Checks if a marketplace item is the special "add item" entry.
      */
-    private boolean isAddItemEntry(MarketplaceItem item) {
+    private boolean isAddItemEntry(FreeMarketItem item) {
         return "ADD_ITEM_SPECIAL".equals(item.getGuid());
     }
     
-    private List<MarketplaceItem> getItemsToRender() {
+    private List<FreeMarketItem> getItemsToRender() {
         // First filter by category
-        List<MarketplaceItem> categoryFiltered = ItemCategoryManager.filterItemsByCategory(allItems, selectedCategory);
+        List<FreeMarketItem> categoryFiltered = ItemCategoryManager.filterItemsByCategory(allItems, selectedCategory);
         
         // Then filter by search text
         if (searchBox != null && !searchBox.getValue().isEmpty()) {
@@ -330,14 +330,14 @@ public class MarketplaceContainer implements Renderable {
         // Add special "add item" entry if in admin mode and not searching
         if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
             // Create a special marketplace item for adding new items
-            MarketplaceItem addItem = createAddItemEntry();
+            FreeMarketItem addItem = createAddItemEntry();
             categoryFiltered.add(addItem);
         }
         
         return categoryFiltered;
     }
     
-    private void renderModernItemCard(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
+    private void renderModernItemCard(GuiGraphics guiGraphics, FreeMarketItem item, int itemX, int itemY, int mouseX, int mouseY, int itemIndex) {
         // Check if this is the special add item entry
         if (isAddItemEntry(item)) {
             renderAddItemCard(guiGraphics, itemX, itemY, mouseX, mouseY);
@@ -462,7 +462,7 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "🗑", iconX, iconY, iconColor);
     }
     
-    private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
+    private void renderActionButtons(GuiGraphics guiGraphics, FreeMarketItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
@@ -606,7 +606,7 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0x80000000);
         
         // Calculate thumb position and size
-        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        List<FreeMarketItem> itemsToRender = getItemsToRender();
         int thumbHeight = Math.max(20, (scrollBarHeight * scrollBarHeight) / (itemsToRender.size() * itemHeight / itemsPerRow + scrollBarHeight));
         int thumbY = scrollBarY + (scrollBarHeight - thumbHeight) * scrollOffset / maxScroll;
         
@@ -628,7 +628,7 @@ public class MarketplaceContainer implements Renderable {
     }
     
     private int getMaxScroll() {
-        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        List<FreeMarketItem> itemsToRender = getItemsToRender();
         return Math.max(0, (itemsToRender.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
     }
     
@@ -684,11 +684,11 @@ public class MarketplaceContainer implements Renderable {
         int startX = x + sidebarWidth + GuiScalingHelper.responsiveWidth(20, 15, 30); // Start after sidebar
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
-        List<MarketplaceItem> itemsToRender = getItemsToRender();
+        List<FreeMarketItem> itemsToRender = getItemsToRender();
         
         for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
             for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
-                MarketplaceItem item = itemsToRender.get(i + j);
+                FreeMarketItem item = itemsToRender.get(i + j);
                 int itemX = startX + j * itemSpacing;
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 
@@ -713,7 +713,7 @@ public class MarketplaceContainer implements Renderable {
                         if (mouseX >= deleteButtonX - 2.0 && mouseX <= deleteButtonX + deleteButtonSize + 2.0 &&
                             mouseY >= deleteButtonY - 2.0 && mouseY <= deleteButtonY + deleteButtonSize + 2.0) {
                             // Delete item from marketplace
-                            ClientMarketplaceDataManager.removeMarketplaceItem(item);
+                            ClientFreeMarketDataManager.removeFreeMarketItem(item);
                             
                             // Refresh the marketplace display (preserve scroll position)
                             if (parentScreen != null) {
@@ -814,7 +814,7 @@ public class MarketplaceContainer implements Renderable {
      * Handles buying an item from the marketplace.
      * Validates balance, deducts money, and spawns item in inventory or on ground.
      */
-    private boolean buyItem(MarketplaceItem item) {
+    private boolean buyItem(FreeMarketItem item) {
         // Check if button is in cooldown first
         if (isBuyButtonInCooldown(item)) {
             return false; // Don't process transaction during cooldown
@@ -885,7 +885,7 @@ public class MarketplaceContainer implements Renderable {
      * Creates an ItemStack with component data applied from the marketplace item.
      * Uses server-side processing for proper registry access.
      */
-    private ItemStack createItemWithComponentData(MarketplaceItem item) {
+    private ItemStack createItemWithComponentData(FreeMarketItem item) {
         ItemStack baseItemStack = item.getItemStack().copy();
         
         // Apply component data if present
@@ -898,7 +898,7 @@ public class MarketplaceContainer implements Renderable {
             
             if (singleplayerServer != null) {
                 // Use server-side handler with registry access
-                ItemStack result = com.servershop.server.handlers.ServerItemHandler.createItemWithComponentData(
+                ItemStack result = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
                     baseItemStack, componentData, singleplayerServer);
                 return result;
             } else {
@@ -913,7 +913,7 @@ public class MarketplaceContainer implements Renderable {
     /**
      * Checks if buy button is in cooldown for an item.
      */
-    private boolean isBuyButtonInCooldown(MarketplaceItem item) {
+    private boolean isBuyButtonInCooldown(FreeMarketItem item) {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
         return cooldownEnd != null && currentTime < cooldownEnd;
@@ -923,7 +923,7 @@ public class MarketplaceContainer implements Renderable {
      * Handles selling an item to the marketplace.
      * Validates inventory, removes item, and adds money to wallet.
      */
-    private boolean sellItem(MarketplaceItem item) {
+    private boolean sellItem(FreeMarketItem item) {
         System.out.println("SELL: Attempting to sell " + item.getItemName());
         
         // Check if button is in cooldown first
@@ -1113,7 +1113,7 @@ public class MarketplaceContainer implements Renderable {
     /**
      * Checks if sell button is in cooldown for an item.
      */
-    private boolean isSellButtonInCooldown(MarketplaceItem item) {
+    private boolean isSellButtonInCooldown(FreeMarketItem item) {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
         boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
@@ -1130,7 +1130,7 @@ public class MarketplaceContainer implements Renderable {
     /**
      * Checks if the player can sell the specified item (has it in inventory).
      */
-    private boolean canSellItem(MarketplaceItem item) {
+    private boolean canSellItem(FreeMarketItem item) {
         Minecraft minecraft = Minecraft.getInstance();
         Player clientPlayer = minecraft.player;
         if (clientPlayer == null) {

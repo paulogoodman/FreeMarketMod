@@ -1,4 +1,4 @@
-package com.servershop.server.commands;
+package com.freemarket.server.commands;
 
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
@@ -7,10 +7,10 @@ import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.servershop.common.handlers.WalletHandler;
-import com.servershop.common.handlers.AdminModeHandler;
-import com.servershop.server.data.MarketplaceDataManager;
-import com.servershop.common.data.MarketplaceItem;
+import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.common.handlers.AdminModeHandler;
+import com.freemarket.server.data.FreeMarketDataManager;
+import com.freemarket.common.data.FreeMarketItem;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -23,17 +23,17 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
-import com.servershop.ServerShop;
-import com.servershop.common.attachments.ItemComponentHandler;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.attachments.ItemComponentHandler;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Marketplace-related commands for the ServerShop mod.
+ * Marketplace-related commands for the FreeMarket mod.
  * These commands allow OPs to manage player money balances and admin mode.
  */
-@EventBusSubscriber(modid = ServerShop.MODID)
-public class MarketplaceCommands {
+@EventBusSubscriber(modid = FreeMarket.MODID)
+public class FreeMarketCommands {
 
     @SubscribeEvent
     public static void onRegisterCommands(net.neoforged.neoforge.event.RegisterCommandsEvent event) {
@@ -46,59 +46,59 @@ public class MarketplaceCommands {
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         // Register main marketplace command
-        registerMarketplaceCommands(dispatcher, "freemarket");
+        registerFreeMarketCommands(dispatcher, "freemarket");
         
         // Register fm alias
-        registerMarketplaceCommands(dispatcher, "fm");
+        registerFreeMarketCommands(dispatcher, "fm");
     }
     
     /**
      * Registers marketplace commands with the given command name.
      */
-    private static void registerMarketplaceCommands(CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
+    private static void registerFreeMarketCommands(CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
         // Commands available to all players
         dispatcher.register(Commands.literal(commandName)
             .then(Commands.literal("balance")
-                .executes(MarketplaceCommands::getOwnBalance)
+                .executes(FreeMarketCommands::getOwnBalance)
                 .then(Commands.argument("player", StringArgumentType.word())
-                    .executes(MarketplaceCommands::getBalance)))
+                    .executes(FreeMarketCommands::getBalance)))
             .then(Commands.literal("pay")
                 .then(Commands.argument("player", StringArgumentType.word())
                     .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                        .executes(MarketplaceCommands::payPlayer))))
+                        .executes(FreeMarketCommands::payPlayer))))
             .then(Commands.literal("itemdata")
-                .executes(MarketplaceCommands::getHeldItemData))
+                .executes(FreeMarketCommands::getHeldItemData))
             .then(Commands.literal("adminmode")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("enabled", BoolArgumentType.bool())
-                    .executes(MarketplaceCommands::executeAdminMode)
+                    .executes(FreeMarketCommands::executeAdminMode)
                 )
-                .executes(MarketplaceCommands::toggleAdminMode))
+                .executes(FreeMarketCommands::toggleAdminMode))
             .then(Commands.literal("add")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("amount", LongArgumentType.longArg(1))
                     .then(Commands.argument("player", StringArgumentType.word())
-                        .executes(MarketplaceCommands::addMoney))))
+                        .executes(FreeMarketCommands::addMoney))))
             .then(Commands.literal("remove")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("player", StringArgumentType.word())
                     .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                        .executes(MarketplaceCommands::removeMoney))))
+                        .executes(FreeMarketCommands::removeMoney))))
             .then(Commands.literal("set")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("player", StringArgumentType.word())
                     .then(Commands.argument("amount", LongArgumentType.longArg(0))
-                        .executes(MarketplaceCommands::setMoney))))
+                        .executes(FreeMarketCommands::setMoney))))
             .then(Commands.literal("clear")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .executes(MarketplaceCommands::clearMarketplace))
+                .executes(FreeMarketCommands::clearMarketplace))
             .then(Commands.literal("additem")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("item", StringArgumentType.word())
                     .then(Commands.argument("buyPrice", IntegerArgumentType.integer(1))
                         .then(Commands.argument("sellPrice", IntegerArgumentType.integer(0))
                             .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
-                                .executes(MarketplaceCommands::addItemToMarketplace)))))));;
+                                .executes(FreeMarketCommands::addItemToMarketplace)))))));;
     }
 
     /**
@@ -109,12 +109,12 @@ public class MarketplaceCommands {
         
         if (source.getEntity() instanceof ServerPlayer player) {
             long balance = WalletHandler.getPlayerMoney(player);
-            Component message = Component.translatable("command.servershop.economy.balance", 
+            Component message = Component.translatable("command.FreeMarket.economy.balance", 
                 player.getName().getString(), balance);
             source.sendSuccess(() -> message, false);
             return 1;
         } else {
-            Component message = Component.translatable("command.servershop.economy.not_player");
+            Component message = Component.translatable("command.FreeMarket.economy.not_player");
             source.sendFailure(message);
             return 0;
         }
@@ -132,12 +132,12 @@ public class MarketplaceCommands {
         if (player != null) {
             // Player found - get balance from NBT
             long balance = WalletHandler.getPlayerMoney(player);
-            Component message = Component.translatable("command.servershop.economy.balance", 
+            Component message = Component.translatable("command.FreeMarket.economy.balance", 
                 playerName, balance);
             source.sendSuccess(() -> message, false);
         } else {
             // Player not found
-            Component message = Component.translatable("command.servershop.economy.player_not_found", 
+            Component message = Component.translatable("command.FreeMarket.economy.player_not_found", 
                 playerName);
             source.sendFailure(message);
         }
@@ -160,17 +160,17 @@ public class MarketplaceCommands {
             WalletHandler.addMoney(player, amount);
             long newBalance = WalletHandler.getPlayerMoney(player);
             
-            Component message = Component.translatable("command.servershop.economy.add.success", 
+            Component message = Component.translatable("command.FreeMarket.economy.add.success", 
                 amount, playerName, newBalance);
             source.sendSuccess(() -> message, false);
             
             // Notify the player
-            Component playerMessage = Component.translatable("command.servershop.economy.add.notify", 
+            Component playerMessage = Component.translatable("command.FreeMarket.economy.add.notify", 
                 amount, newBalance);
             player.sendSystemMessage(playerMessage);
         } else {
             // Player not found
-            Component message = Component.translatable("command.servershop.economy.player_not_found", 
+            Component message = Component.translatable("command.FreeMarket.economy.player_not_found", 
                 playerName);
             source.sendFailure(message);
         }
@@ -195,24 +195,24 @@ public class MarketplaceCommands {
             if (success) {
                 long newBalance = WalletHandler.getPlayerMoney(player);
                 
-                Component message = Component.translatable("command.servershop.economy.remove.success", 
+                Component message = Component.translatable("command.FreeMarket.economy.remove.success", 
                     amount, playerName, newBalance);
                 source.sendSuccess(() -> message, false);
                 
                 // Notify the player
-                Component playerMessage = Component.translatable("command.servershop.economy.remove.notify", 
+                Component playerMessage = Component.translatable("command.FreeMarket.economy.remove.notify", 
                     amount, newBalance);
                 player.sendSystemMessage(playerMessage);
             } else {
                 long currentBalance = WalletHandler.getPlayerMoney(player);
                 
-                Component message = Component.translatable("command.servershop.economy.remove.insufficient", 
+                Component message = Component.translatable("command.FreeMarket.economy.remove.insufficient", 
                     amount, playerName, currentBalance);
                 source.sendFailure(message);
             }
         } else {
             // Player not found
-            Component message = Component.translatable("command.servershop.economy.player_not_found", 
+            Component message = Component.translatable("command.FreeMarket.economy.player_not_found", 
                 playerName);
             source.sendFailure(message);
         }
@@ -235,17 +235,17 @@ public class MarketplaceCommands {
             long oldBalance = WalletHandler.getPlayerMoney(player);
             WalletHandler.setPlayerMoney(player, amount);
             
-            Component message = Component.translatable("command.servershop.economy.set.success", 
+            Component message = Component.translatable("command.FreeMarket.economy.set.success", 
                 playerName, oldBalance, amount);
             source.sendSuccess(() -> message, false);
             
             // Notify the player
-            Component playerMessage = Component.translatable("command.servershop.economy.set.notify", 
+            Component playerMessage = Component.translatable("command.FreeMarket.economy.set.notify", 
                 amount);
             player.sendSystemMessage(playerMessage);
         } else {
             // Player not found
-            Component message = Component.translatable("command.servershop.economy.player_not_found", 
+            Component message = Component.translatable("command.FreeMarket.economy.player_not_found", 
                 playerName);
             source.sendFailure(message);
         }
@@ -305,7 +305,7 @@ public class MarketplaceCommands {
         boolean enabled = BoolArgumentType.getBool(context, "enabled");
         AdminModeHandler.setAdminMode(enabled);
         
-        Component message = Component.translatable("command.servershop.adminmode.set", 
+        Component message = Component.translatable("command.FreeMarket.adminmode.set", 
             enabled ? "enabled" : "disabled");
         context.getSource().sendSuccess(() -> message, true);
         
@@ -320,7 +320,7 @@ public class MarketplaceCommands {
     private static int toggleAdminMode(CommandContext<CommandSourceStack> context) {
         boolean newState = AdminModeHandler.toggleAdminMode();
         
-        Component message = Component.translatable("command.servershop.adminmode.toggle", 
+        Component message = Component.translatable("command.FreeMarket.adminmode.toggle", 
             newState ? "enabled" : "disabled");
         context.getSource().sendSuccess(() -> message, true);
         
@@ -336,7 +336,7 @@ public class MarketplaceCommands {
         CommandSourceStack source = context.getSource();
         
         if (!(source.getEntity() instanceof ServerPlayer sender)) {
-            Component message = Component.translatable("command.servershop.economy.not_player");
+            Component message = Component.translatable("command.FreeMarket.economy.not_player");
             source.sendFailure(message);
             return 0;
         }
@@ -344,7 +344,7 @@ public class MarketplaceCommands {
         // Check if sender has enough money
         if (!WalletHandler.hasEnoughMoney(sender, amount)) {
             long currentBalance = WalletHandler.getPlayerMoney(sender);
-            Component message = Component.translatable("command.servershop.freemarket.pay.insufficient", 
+            Component message = Component.translatable("command.FreeMarket.freemarket.pay.insufficient", 
                 amount, currentBalance);
             source.sendFailure(message);
             return 0;
@@ -353,14 +353,14 @@ public class MarketplaceCommands {
         // Find target player
         ServerPlayer targetPlayer = findPlayer(source, targetPlayerName);
         if (targetPlayer == null) {
-            Component message = Component.translatable("command.servershop.economy.player_not_found", targetPlayerName);
+            Component message = Component.translatable("command.FreeMarket.economy.player_not_found", targetPlayerName);
             source.sendFailure(message);
             return 0;
         }
         
         // Check if trying to pay yourself
         if (sender.getUUID().equals(targetPlayer.getUUID())) {
-            Component message = Component.translatable("command.servershop.freemarket.pay.self");
+            Component message = Component.translatable("command.FreeMarket.freemarket.pay.self");
             source.sendFailure(message);
             return 0;
         }
@@ -368,7 +368,7 @@ public class MarketplaceCommands {
         // Perform the transaction
         boolean success = WalletHandler.removeMoney(sender, amount);
         if (!success) {
-            Component message = Component.translatable("command.servershop.freemarket.pay.failed");
+            Component message = Component.translatable("command.FreeMarket.freemarket.pay.failed");
             source.sendFailure(message);
             return 0;
         }
@@ -380,12 +380,12 @@ public class MarketplaceCommands {
         long targetBalance = WalletHandler.getPlayerMoney(targetPlayer);
         
         // Send success message to sender
-        Component senderMessage = Component.translatable("command.servershop.freemarket.pay.sender_success", 
+        Component senderMessage = Component.translatable("command.FreeMarket.freemarket.pay.sender_success", 
             amount, targetPlayerName, senderBalance);
         source.sendSuccess(() -> senderMessage, false);
         
         // Send notification to target player
-        Component targetMessage = Component.translatable("command.servershop.freemarket.pay.target_notify", 
+        Component targetMessage = Component.translatable("command.FreeMarket.freemarket.pay.target_notify", 
             amount, sender.getName().getString(), targetBalance);
         targetPlayer.sendSystemMessage(targetMessage);
         
@@ -399,7 +399,7 @@ public class MarketplaceCommands {
         CommandSourceStack source = context.getSource();
         
         if (!(source.getEntity() instanceof ServerPlayer player)) {
-            Component message = Component.translatable("command.servershop.economy.not_player");
+            Component message = Component.translatable("command.FreeMarket.economy.not_player");
             source.sendFailure(message);
             return 0;
         }
@@ -407,7 +407,7 @@ public class MarketplaceCommands {
         ItemStack heldItem = player.getMainHandItem();
         
         if (heldItem.isEmpty()) {
-            Component message = Component.translatable("command.servershop.freemarket.itemdata.no_item");
+            Component message = Component.translatable("command.FreeMarket.freemarket.itemdata.no_item");
             source.sendFailure(message);
             return 0;
         }
@@ -438,9 +438,9 @@ public class MarketplaceCommands {
         ServerLevel level = source.getLevel();
         
         // Clear marketplace using JSON system
-        MarketplaceDataManager.saveMarketplaceItems(level, new ArrayList<>());
+        FreeMarketDataManager.saveFreeMarketItems(level, new ArrayList<>());
         
-        Component message = Component.translatable("command.servershop.freemarket.clear.success");
+        Component message = Component.translatable("command.FreeMarket.freemarket.clear.success");
         source.sendSuccess(() -> message, true);
         
         return 1;
@@ -463,7 +463,7 @@ public class MarketplaceCommands {
             // Parse item ID
             ResourceLocation itemLocation = ResourceLocation.parse(itemId);
             if (!BuiltInRegistries.ITEM.containsKey(itemLocation)) {
-                Component message = Component.translatable("command.servershop.freemarket.additem.invalid_item", itemId);
+                Component message = Component.translatable("command.FreeMarket.freemarket.additem.invalid_item", itemId);
                 source.sendFailure(message);
                 return 0;
             }
@@ -471,22 +471,22 @@ public class MarketplaceCommands {
             // Create ItemStack
             ItemStack itemStack = new ItemStack(BuiltInRegistries.ITEM.get(itemLocation), quantity);
             
-            // Create MarketplaceItem
+            // Create FreeMarketItem
             String seller = source.getTextName();
             String guid = java.util.UUID.randomUUID().toString();
-            MarketplaceItem marketplaceItem = new MarketplaceItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, "{}");
+            FreeMarketItem FreeMarketItem = new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, "{}");
             
             // Add item using JSON system
-            List<MarketplaceItem> existingItems = MarketplaceDataManager.loadMarketplaceItems(level);
-            existingItems.add(marketplaceItem);
-            MarketplaceDataManager.saveMarketplaceItems(level, existingItems);
+            List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
+            existingItems.add(FreeMarketItem);
+            FreeMarketDataManager.saveFreeMarketItems(level, existingItems);
             
-            Component message = Component.translatable("command.servershop.freemarket.additem.success", 
+            Component message = Component.translatable("command.FreeMarket.freemarket.additem.success", 
                 itemId, quantity, buyPrice, sellPrice);
             source.sendSuccess(() -> message, true);
             
         } catch (Exception e) {
-            Component message = Component.translatable("command.servershop.freemarket.additem.error", e.getMessage());
+            Component message = Component.translatable("command.FreeMarket.freemarket.additem.error", e.getMessage());
             source.sendFailure(message);
             return 0;
         }

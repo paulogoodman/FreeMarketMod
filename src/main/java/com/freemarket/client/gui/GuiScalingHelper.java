@@ -1,4 +1,4 @@
-package com.servershop.client.gui;
+package com.freemarket.client.gui;
 
 import net.minecraft.client.Minecraft;
 

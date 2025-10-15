@@ -1,11 +1,11 @@
-package com.servershop.common.handlers;
+package com.freemarket.common.handlers;
 
-import com.servershop.ServerShop;
-import com.servershop.common.attachments.PlayerWalletAttachment;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.attachments.PlayerWalletAttachment;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Handles player wallet/money system for the ServerShop mod.
+ * Handles player wallet/money system for the FreeMarket mod.
  * This class manages player money balances using NeoForge Data Attachments.
  * Uses PlayerWalletAttachment for proper persistence across deaths.
  */
@@ -18,7 +18,7 @@ public class WalletHandler {
      */
     public static long getPlayerMoney(Player player) {
         if (player == null) {
-            ServerShop.LOGGER.warn("Cannot get money for null player");
+            FreeMarket.LOGGER.warn("Cannot get money for null player");
             return 0;
         }
         
@@ -35,7 +35,7 @@ public class WalletHandler {
      */
     public static void setPlayerMoney(Player player, long amount) {
         if (player == null) {
-            ServerShop.LOGGER.warn("Cannot set money for null player");
+            FreeMarket.LOGGER.warn("Cannot set money for null player");
             return;
         }
         
@@ -43,7 +43,7 @@ public class WalletHandler {
         wallet.setBalance(amount);
         
         // Only log significant wallet changes, not every set operation
-        ServerShop.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
+        FreeMarket.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
     
     /**
@@ -53,14 +53,14 @@ public class WalletHandler {
      */
     public static void addMoney(Player player, long amount) {
         if (player == null) {
-            ServerShop.LOGGER.warn("Cannot add money for null player");
+            FreeMarket.LOGGER.warn("Cannot add money for null player");
             return;
         }
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         wallet.addBalance(amount);
         
-        ServerShop.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
+        FreeMarket.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
     }
     
     /**
@@ -71,17 +71,17 @@ public class WalletHandler {
      */
     public static boolean removeMoney(Player player, long amount) {
         if (player == null) {
-            ServerShop.LOGGER.warn("Cannot remove money for null player");
+            FreeMarket.LOGGER.warn("Cannot remove money for null player");
             return false;
         }
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         if (wallet.removeBalance(amount)) {
-            ServerShop.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
+            FreeMarket.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
             return true;
         }
         
-        ServerShop.LOGGER.info("Insufficient funds for {}. Required: {}, Available: {}", player.getName().getString(), amount, wallet.getBalance());
+        FreeMarket.LOGGER.info("Insufficient funds for {}. Required: {}, Available: {}", player.getName().getString(), amount, wallet.getBalance());
         return false;
     }
     
@@ -126,15 +126,15 @@ public class WalletHandler {
                 long balance = getPlayerMoney(clientPlayer);
                 return balance;
             } else {
-                ServerShop.LOGGER.warn("Client player is null");
+                FreeMarket.LOGGER.warn("Client player is null");
             }
         } catch (Exception e) {
             // If we can't get the player, log the error
-            ServerShop.LOGGER.error("Could not get client player money: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Could not get client player money: {}", e.getMessage());
         }
         
         // Never fall back to hardcoded value - return 0 if we can't get the player
-        ServerShop.LOGGER.warn("Could not access client player, returning 0");
+        FreeMarket.LOGGER.warn("Could not access client player, returning 0");
         return 0;
     }
     

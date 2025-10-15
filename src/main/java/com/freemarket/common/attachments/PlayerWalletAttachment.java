@@ -1,4 +1,4 @@
-package com.servershop.common.attachments;
+package com.freemarket.common.attachments;
 
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -14,7 +14,7 @@ import java.util.function.Supplier;
 public class PlayerWalletAttachment {
     
     public static final DeferredRegister<AttachmentType<?>> ATTACHMENT_TYPES = 
-        DeferredRegister.create(net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES, "servershop");
+        DeferredRegister.create(net.neoforged.neoforge.registries.NeoForgeRegistries.ATTACHMENT_TYPES, "freemarket");
     
     // Codec for serialization
     public static final Codec<PlayerWalletAttachment> CODEC = RecordCodecBuilder.create(instance ->

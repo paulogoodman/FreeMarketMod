@@ -1,20 +1,20 @@
-package com.servershop.common.data;
+package com.freemarket.common.data;
 
 import net.minecraft.world.item.ItemStack;
 
 /**
- * Represents an item in the marketplace with its details.
+ * Represents an item in the free market with its details.
  */
-public class MarketplaceItem {
+public class FreeMarketItem {
     private final ItemStack itemStack;
     private final long buyPrice;
     private final long sellPrice;
     private final int quantity;
     private final String seller;
-    private final String guid; // Unique identifier for this marketplace entry
+    private final String guid; // Unique identifier for this free market entry
     private final String componentData; // Component data as JSON string
     
-    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
@@ -24,7 +24,7 @@ public class MarketplaceItem {
         this.componentData = "{}"; // Default empty component data
     }
     
-    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
@@ -34,7 +34,7 @@ public class MarketplaceItem {
         this.componentData = "{}"; // Default empty component data
     }
     
-    public MarketplaceItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid, String componentData) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid, String componentData) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
@@ -45,7 +45,7 @@ public class MarketplaceItem {
     }
     
     /**
-     * Generates a completely random GUID for new marketplace entries.
+     * Generates a completely random GUID for new free market entries.
      * This ensures each item has a unique identifier regardless of properties.
      */
     private String generateRandomGuid() {

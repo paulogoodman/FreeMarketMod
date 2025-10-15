@@ -1,4 +1,4 @@
-package com.servershop.common.attachments;
+package com.freemarket.common.attachments;
 
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponentPatch;
@@ -10,7 +10,7 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
 
-import com.servershop.ServerShop;
+import com.freemarket.FreeMarket;
 
 /**
  * Handles Data Components for marketplace items in NeoForge 1.21.
@@ -29,29 +29,29 @@ public class ItemComponentHandler {
             try {
                 // Parse the component data JSON string
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
-                ServerShop.LOGGER.info("Parsed component tag: {}", componentTag);
+                FreeMarket.LOGGER.info("Parsed component tag: {}", componentTag);
                 
                 // The issue is that DataComponentPatch.CODEC.parse() needs registry context
                 // but NbtOps.INSTANCE doesn't have it. We need to find a different approach.
-                ServerShop.LOGGER.info("Attempting DataComponentPatch parsing with NbtOps.INSTANCE...");
+                FreeMarket.LOGGER.info("Attempting DataComponentPatch parsing with NbtOps.INSTANCE...");
                 
                 var result = DataComponentPatch.CODEC.parse(NbtOps.INSTANCE, componentTag);
                 
                 if (result.isSuccess()) {
                     DataComponentPatch patch = result.getOrThrow();
                     itemStack.applyComponents(patch);
-                    ServerShop.LOGGER.info("Successfully applied component data via DataComponentPatch: {}", componentDataString);
+                    FreeMarket.LOGGER.info("Successfully applied component data via DataComponentPatch: {}", componentDataString);
                     return;
                 } else {
-                    ServerShop.LOGGER.warn("DataComponentPatch parsing failed: {}", result.error().get().message());
-                    ServerShop.LOGGER.warn("This confirms the registry context issue - NbtOps.INSTANCE lacks enchantment registry access");
+                    FreeMarket.LOGGER.warn("DataComponentPatch parsing failed: {}", result.error().get().message());
+                    FreeMarket.LOGGER.warn("This confirms the registry context issue - NbtOps.INSTANCE lacks enchantment registry access");
                 }
                 
                 // Fallback: Apply components directly
                 applyComponentsDirectly(itemStack, componentTag);
                 
             } catch (Exception e) {
-                ServerShop.LOGGER.error("Failed to apply component data: {}", e.getMessage());
+                FreeMarket.LOGGER.error("Failed to apply component data: {}", e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -71,36 +71,36 @@ public class ItemComponentHandler {
                     customNameStr = customNameStr.substring(1, customNameStr.length() - 1);
                 }
                 itemStack.set(DataComponents.CUSTOM_NAME, Component.literal(customNameStr));
-                ServerShop.LOGGER.info("Applied custom name: {}", customNameStr);
+                FreeMarket.LOGGER.info("Applied custom name: {}", customNameStr);
             }
             
             // Apply enchantments if present
             if (componentTag.contains("minecraft:enchantments")) {
                 try {
                     CompoundTag enchantmentsTag = componentTag.getCompound("minecraft:enchantments");
-                    ServerShop.LOGGER.info("Parsing enchantments tag: {}", enchantmentsTag);
+                    FreeMarket.LOGGER.info("Parsing enchantments tag: {}", enchantmentsTag);
                     
                     // Try to parse enchantments with better error handling
                     var result = ItemEnchantments.CODEC.parse(NbtOps.INSTANCE, enchantmentsTag);
                     if (result.isSuccess()) {
                         ItemEnchantments enchantments = result.getOrThrow();
                         itemStack.set(DataComponents.ENCHANTMENTS, enchantments);
-                        ServerShop.LOGGER.info("Applied enchantments: {}", enchantments);
+                        FreeMarket.LOGGER.info("Applied enchantments: {}", enchantments);
                     } else {
-                        ServerShop.LOGGER.warn("Failed to parse enchantments: {}", result.error().get().message());
+                        FreeMarket.LOGGER.warn("Failed to parse enchantments: {}", result.error().get().message());
                         // Try alternative approach - create enchantments manually
                         tryCreateEnchantmentsManually(itemStack, enchantmentsTag);
                     }
                 } catch (Exception enchantError) {
-                    ServerShop.LOGGER.warn("Failed to apply enchantments: {}", enchantError.getMessage());
+                    FreeMarket.LOGGER.warn("Failed to apply enchantments: {}", enchantError.getMessage());
                     enchantError.printStackTrace();
                 }
             }
             
-            ServerShop.LOGGER.info("Applied component data directly: {}", componentTag);
+            FreeMarket.LOGGER.info("Applied component data directly: {}", componentTag);
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to apply components directly: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to apply components directly: {}", e.getMessage());
         }
     }
     
@@ -133,7 +133,7 @@ public class ItemComponentHandler {
                         resultTag.put("minecraft:enchantments", (CompoundTag) enchantmentsTag);
                     }
                 } catch (Exception enchantError) {
-                    ServerShop.LOGGER.warn("Failed to serialize enchantments: {}", enchantError.getMessage());
+                    FreeMarket.LOGGER.warn("Failed to serialize enchantments: {}", enchantError.getMessage());
                 }
             }
             
@@ -146,7 +146,7 @@ public class ItemComponentHandler {
                         resultTag.put("minecraft:trim", (CompoundTag) trimTag);
                     }
                 } catch (Exception trimError) {
-                    ServerShop.LOGGER.warn("Failed to serialize armor trim: {}", trimError.getMessage());
+                    FreeMarket.LOGGER.warn("Failed to serialize armor trim: {}", trimError.getMessage());
                 }
             }
             
@@ -168,7 +168,7 @@ public class ItemComponentHandler {
             return resultTag.toString();
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to serialize component data: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to serialize component data: {}", e.getMessage());
             return "{}";
         }
     }
@@ -199,7 +199,7 @@ public class ItemComponentHandler {
             
             return json;
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to create enchantment JSON: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to create enchantment JSON: {}", e.getMessage());
             return "{}";
         }
     }
@@ -236,7 +236,7 @@ public class ItemComponentHandler {
             String result = json.toString();
             return result;
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Failed to create component data JSON: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Failed to create component data JSON: {}", e.getMessage());
             return "{}";
         }
     }
@@ -247,15 +247,15 @@ public class ItemComponentHandler {
      */
     private static void tryCreateEnchantmentsManually(net.minecraft.world.item.ItemStack itemStack, CompoundTag enchantmentsTag) {
         try {
-            ServerShop.LOGGER.warn("Manual enchantment creation not yet implemented");
-            ServerShop.LOGGER.warn("The CODEC parsing failed due to registry access issues");
-            ServerShop.LOGGER.warn("Enchantments will not be applied to this item");
-            ServerShop.LOGGER.info("Enchantment data that failed to apply: {}", enchantmentsTag);
+            FreeMarket.LOGGER.warn("Manual enchantment creation not yet implemented");
+            FreeMarket.LOGGER.warn("The CODEC parsing failed due to registry access issues");
+            FreeMarket.LOGGER.warn("Enchantments will not be applied to this item");
+            FreeMarket.LOGGER.info("Enchantment data that failed to apply: {}", enchantmentsTag);
             
             // Enchantment application failed - component data will be applied server-side
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Manual enchantment creation failed: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Manual enchantment creation failed: {}", e.getMessage());
         }
     }
 }

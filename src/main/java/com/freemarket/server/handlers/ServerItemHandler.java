@@ -1,4 +1,4 @@
-package com.servershop.server.handlers;
+package com.freemarket.server.handlers;
 
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.component.DataComponents;
@@ -12,7 +12,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.core.registries.Registries;
-import com.servershop.ServerShop;
+import com.freemarket.FreeMarket;
 
 /**
  * Server-side handler for creating items with component data.
@@ -42,7 +42,7 @@ public class ServerItemHandler {
                 applyComponentsDirectly(itemStack, componentTag, server.registryAccess());
                 
             } catch (Exception e) {
-                ServerShop.LOGGER.error("Server-side: Failed to apply component data: {}", e.getMessage());
+                FreeMarket.LOGGER.error("Server-side: Failed to apply component data: {}", e.getMessage());
                 e.printStackTrace();
             }
         }
@@ -66,7 +66,7 @@ public class ServerItemHandler {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.error("Server-side: Failed to apply components directly: {}", e.getMessage());
+            FreeMarket.LOGGER.error("Server-side: Failed to apply components directly: {}", e.getMessage());
         }
     }
     
@@ -111,7 +111,7 @@ public class ServerItemHandler {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply component {}: {}", componentKey, e.getMessage());
+            FreeMarket.LOGGER.warn("Server-side: Failed to apply component {}: {}", componentKey, e.getMessage());
         }
     }
     
@@ -189,7 +189,7 @@ public class ServerItemHandler {
             }
             
         } catch (Exception e) {
-            ServerShop.LOGGER.warn("Server-side: Failed to apply unknown component {}: {}", componentKey, e.getMessage());
+            FreeMarket.LOGGER.warn("Server-side: Failed to apply unknown component {}: {}", componentKey, e.getMessage());
         }
     }
     

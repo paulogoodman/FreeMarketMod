@@ -1,4 +1,4 @@
-package com.servershop.client.gui;
+package com.freemarket.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -10,41 +10,41 @@ import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.servershop.Config;
-import com.servershop.client.data.ClientMarketplaceDataManager;
-import com.servershop.common.data.MarketplaceItem;
-import com.servershop.common.handlers.WalletHandler;
-import com.servershop.server.data.MarketplaceDataManager;
+import com.freemarket.Config;
+import com.freemarket.client.data.ClientFreeMarketDataManager;
+import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.server.data.FreeMarketDataManager;
 
 /**
- * Semi-transparent dark overlay GUI for the ServerShop mod.
+ * Semi-transparent dark overlay GUI for the FreeMarket mod.
  * Opens with the O keybind and displays a dark overlay with conditional admin button and marketplace.
  */
-public class ShopGuiScreen extends Screen {
+public class FreeMarketGuiScreen extends Screen {
     
-    private List<MarketplaceItem> marketplaceItems;
-    private MarketplaceContainer marketplaceContainer;
+    private List<FreeMarketItem> freeMarketItems;
+    private FreeMarketContainer freeMarketContainer;
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
     private long lastBalanceUpdate = 0;
     private static final long BALANCE_CACHE_DURATION = 1000; // Update every 1 second
     
-    public ShopGuiScreen() {
+    public FreeMarketGuiScreen() {
         super(Component.literal(Config.MARKETPLACE_NAME.get()));
-        this.marketplaceItems = new ArrayList<>();
+        this.freeMarketItems = new ArrayList<>();
         // Don't load items here - let init() handle it with caching
     }
     
-    private void loadMarketplaceItemsFromFile() {
+    private void loadFreeMarketItemsFromFile() {
         // Try to use server-side loading first (with SavedData attachments)
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.getSingleplayerServer() != null) {
             try {
                 ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
                 if (serverLevel != null) {
-                    List<MarketplaceItem> serverItems = MarketplaceDataManager.loadMarketplaceItems(serverLevel);
-                    this.marketplaceItems = serverItems;
+                    List<FreeMarketItem> serverItems = FreeMarketDataManager.loadFreeMarketItems(serverLevel);
+                    this.freeMarketItems = serverItems;
                     return;
                 }
             } catch (Exception e) {
@@ -53,8 +53,8 @@ public class ShopGuiScreen extends Screen {
         }
         
         // Fallback to client-side loading (for multiplayer or when server is not available)
-        List<MarketplaceItem> loadedItems = ClientMarketplaceDataManager.loadMarketplaceItems();
-        this.marketplaceItems = loadedItems;
+        List<FreeMarketItem> loadedItems = ClientFreeMarketDataManager.loadFreeMarketItems();
+        this.freeMarketItems = loadedItems;
     }
     
     /**
@@ -91,12 +91,12 @@ public class ShopGuiScreen extends Screen {
             try {
                 ServerLevel serverLevel = minecraft.getSingleplayerServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
                 if (serverLevel != null) {
-                    List<MarketplaceItem> serverItems = MarketplaceDataManager.loadMarketplaceItems(serverLevel);
-                    this.marketplaceItems = serverItems;
+                    List<FreeMarketItem> serverItems = FreeMarketDataManager.loadFreeMarketItems(serverLevel);
+                    this.freeMarketItems = serverItems;
                     
                     // Update the marketplace container with new data
-                    if (marketplaceContainer != null) {
-                        marketplaceContainer.updateMarketplaceItems(marketplaceItems, preserveScrollPosition);
+                    if (freeMarketContainer != null) {
+                        freeMarketContainer.updateFreeMarketItems(freeMarketItems, preserveScrollPosition);
                     }
                     return;
                 }
@@ -106,12 +106,12 @@ public class ShopGuiScreen extends Screen {
         }
         
         // Fallback to client-side loading
-        ClientMarketplaceDataManager.invalidateCache();
-        loadMarketplaceItemsFromFile();
+        ClientFreeMarketDataManager.invalidateCache();
+        loadFreeMarketItemsFromFile();
         
         // Update the marketplace container with new data
-        if (marketplaceContainer != null) {
-            marketplaceContainer.updateMarketplaceItems(marketplaceItems, preserveScrollPosition);
+        if (freeMarketContainer != null) {
+            freeMarketContainer.updateFreeMarketItems(freeMarketItems, preserveScrollPosition);
         }
     }
     
@@ -129,7 +129,7 @@ public class ShopGuiScreen extends Screen {
         super.init();
         
         // Refresh marketplace items from file in case they were updated
-        loadMarketplaceItemsFromFile();
+        loadFreeMarketItemsFromFile();
         
         // Plus button is now handled inside the marketplace container
         
@@ -139,8 +139,8 @@ public class ShopGuiScreen extends Screen {
         int containerX = GuiScalingHelper.centerX(containerWidth);
         int containerY = GuiScalingHelper.centerY(containerHeight);
         
-        this.marketplaceContainer = new MarketplaceContainer(containerX, containerY, containerWidth, containerHeight, marketplaceItems, this);
-        this.marketplaceContainer.init();
+        this.freeMarketContainer = new FreeMarketContainer(containerX, containerY, containerWidth, containerHeight, freeMarketItems, this);
+        this.freeMarketContainer.init();
     }
     
     @Override
@@ -155,8 +155,8 @@ public class ShopGuiScreen extends Screen {
         renderWalletDisplay(guiGraphics);
         
         // Render marketplace container (it will draw its own background)
-        if (marketplaceContainer != null) {
-            marketplaceContainer.render(guiGraphics, mouseX, mouseY, partialTick);
+        if (freeMarketContainer != null) {
+            freeMarketContainer.render(guiGraphics, mouseX, mouseY, partialTick);
         }
     }
     
@@ -232,7 +232,7 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (marketplaceContainer != null && marketplaceContainer.mouseClicked(mouseX, mouseY, button)) {
+        if (freeMarketContainer != null && freeMarketContainer.mouseClicked(mouseX, mouseY, button)) {
             return true;
         }
         return super.mouseClicked(mouseX, mouseY, button);
@@ -240,7 +240,7 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (marketplaceContainer != null && marketplaceContainer.keyPressed(keyCode, scanCode, modifiers)) {
+        if (freeMarketContainer != null && freeMarketContainer.keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -248,7 +248,7 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (marketplaceContainer != null && marketplaceContainer.charTyped(codePoint, modifiers)) {
+        if (freeMarketContainer != null && freeMarketContainer.charTyped(codePoint, modifiers)) {
             return true;
         }
         return super.charTyped(codePoint, modifiers);
@@ -256,10 +256,10 @@ public class ShopGuiScreen extends Screen {
     
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        if (marketplaceContainer != null) {
+        if (freeMarketContainer != null) {
             // Use smoother scrolling with smaller increments
             int scrollAmount = (int) (-deltaY * 2); // Multiply by 2 for smoother scrolling
-            marketplaceContainer.scroll(scrollAmount);
+            freeMarketContainer.scroll(scrollAmount);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);

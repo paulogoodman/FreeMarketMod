@@ -24,6 +24,7 @@ import com.freemarket.client.data.ClientFreeMarketDataManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.component.DataComponents;
 
 /**
  * A scrollable container for displaying free market items with search functionality.
@@ -360,7 +361,8 @@ public class FreeMarketContainer implements Renderable {
         }
         
         // Create item stack with the marketplace quantity for display
-        net.minecraft.world.item.ItemStack displayStack = item.getItemStack().copy();
+        // Create display stack with component data applied
+        net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
         displayStack.setCount(item.getQuantity());
         
         // Calculate centered position for item stack
@@ -463,7 +465,7 @@ public class FreeMarketContainer implements Renderable {
     }
     
     private void renderActionButtons(GuiGraphics guiGraphics, FreeMarketItem item, int itemX, int itemY, int mouseX, int mouseY) {
-        boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
+        boolean canBuy = canBuyItem(item);
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
         // Buy button
@@ -752,7 +754,6 @@ public class FreeMarketContainer implements Renderable {
                 if (mouseX >= sellButtonX - 2.0 && mouseX <= sellButtonX + sellButtonWidth + 2.0 &&
                     mouseY >= sellButtonY - 2.0 && mouseY <= sellButtonY + sellButtonHeight + 2.0) {
                     
-                    System.out.println("CLICK: Sell button clicked for " + item.getItemName());
                     // Handle sell button click
                     if (sellItem(item)) {
                         // Success - item was sold
@@ -918,11 +919,8 @@ public class FreeMarketContainer implements Renderable {
      * Validates inventory, removes item, and adds money to wallet.
      */
     private boolean sellItem(FreeMarketItem item) {
-        System.out.println("SELL: Attempting to sell " + item.getItemName());
-        
         // Check if button is in cooldown first
         if (isSellButtonInCooldown(item)) {
-            System.out.println("SELL: Blocked by cooldown for " + item.getItemName());
             return false; // Don't process transaction during cooldown
         }
         
@@ -935,7 +933,8 @@ public class FreeMarketContainer implements Renderable {
         }
         
         // Check if player has the item in inventory - use server player for persistence
-        ItemStack itemToSell = item.getItemStack().copy();
+        // Create item with component data applied to ensure proper matching
+        ItemStack itemToSell = createItemWithComponentData(item);
         Player playerForInventory = clientPlayer;
         
         // In singleplayer, use server player for inventory operations to ensure persistence
@@ -948,17 +947,13 @@ public class FreeMarketContainer implements Renderable {
         }
         
         if (!hasItemInInventory(playerForInventory, itemToSell)) {
-            System.out.println("SELL: Don't have item " + item.getItemName() + " in inventory");
             // TODO: Show error message to player
             return false;
         }
         
-        System.out.println("SELL: Validation passed for " + item.getItemName());
-        
         // Set cooldown for this specific item (only after validation passes)
         long currentTime = System.currentTimeMillis();
         sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
-        System.out.println("SELL: Set cooldown for " + item.getItemName() + " until " + (currentTime + SELL_COOLDOWN_MS));
         
         // Remove item from inventory
         removeItemFromInventory(playerForInventory, itemToSell);
@@ -975,8 +970,8 @@ public class FreeMarketContainer implements Renderable {
         
         WalletHandler.addMoney(playerForMoney, item.getSellPrice());
         
-        // Play sell sound effect
-        clientPlayer.playSound(SoundEvents.VILLAGER_YES, 1.0F, 1.0F);
+        // Play sell sound effect (lower pitch note block)
+        clientPlayer.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 0.5F);
         
         // Refresh wallet display and marketplace (preserve scroll position)
         if (parentScreen != null) {
@@ -1112,19 +1107,18 @@ public class FreeMarketContainer implements Renderable {
         Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
         boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
         
-        // Only log when there's an active cooldown
-        if (inCooldown && cooldownEnd != null) {
-            long remaining = cooldownEnd - currentTime;
-            System.out.println("SELL CHECK: " + item.getItemName() + " cooldown " + remaining + "ms remaining");
-        }
-        
         return inCooldown;
     }
     
     /**
-     * Checks if the player can sell the specified item (has it in inventory).
+     * Checks if the player can sell the specified item (has it in inventory and sell price > 0).
      */
     private boolean canSellItem(FreeMarketItem item) {
+        // First check if sell price is greater than 0
+        if (item.getSellPrice() <= 0) {
+            return false;
+        }
+        
         Minecraft minecraft = Minecraft.getInstance();
         Player clientPlayer = minecraft.player;
         if (clientPlayer == null) {
@@ -1141,7 +1135,37 @@ public class FreeMarketContainer implements Renderable {
             }
         }
         
-        return hasItemInInventory(playerForCheck, item.getItemStack());
+        // Create item with component data applied to ensure proper matching
+        ItemStack itemToCheck = item.getItemStack().copy();
+        
+        // Apply component data if present (same logic as createItemWithComponentData)
+        String componentData = item.getComponentData();
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            // Try to use server-side processing for proper registry access
+            if (singleplayerServer != null) {
+                // Use server-side handler with registry access
+                itemToCheck = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    itemToCheck, componentData, singleplayerServer);
+            } else {
+                // Fallback to client-side processing
+                ItemComponentHandler.applyComponentData(itemToCheck, componentData);
+            }
+        }
+        
+        return hasItemInInventory(playerForCheck, itemToCheck);
+    }
+    
+    /**
+     * Checks if the player can buy the specified item (has enough money and buy price > 0).
+     */
+    private boolean canBuyItem(FreeMarketItem item) {
+        // First check if buy price is greater than 0
+        if (item.getBuyPrice() <= 0) {
+            return false;
+        }
+        
+        // Then check if player has enough money
+        return WalletHandler.hasEnoughMoney(item.getBuyPrice());
     }
     
     

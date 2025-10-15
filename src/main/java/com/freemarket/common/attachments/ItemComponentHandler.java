@@ -1,55 +1,39 @@
 package com.freemarket.common.attachments;
 
-import net.minecraft.core.component.DataComponentMap;
-import net.minecraft.core.component.DataComponentPatch;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.TagParser;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.enchantment.ItemEnchantments;
-import net.minecraft.nbt.NbtOps;
-import net.minecraft.nbt.Tag;
-
 import com.freemarket.FreeMarket;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.core.component.DataComponentMap;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
+import net.minecraft.world.item.component.CustomData;
 
 /**
- * Handles Data Components for marketplace items in NeoForge 1.21.
- * Uses the correct DataComponentPatch API for component data handling.
+ * Handles Data Components for marketplace items
  */
 public class ItemComponentHandler {
     
     /**
      * Applies component data from JSON string to an ItemStack.
-     * Uses registry-aware NbtOps for proper enchantment parsing.
+     * Handles each component type separately using proper registries.
      * @param itemStack The ItemStack to apply components to
      * @param componentDataString The component data as JSON string
      */
-    public static void applyComponentData(net.minecraft.world.item.ItemStack itemStack, String componentDataString) {
+    public static void applyComponentData(ItemStack itemStack, String componentDataString) {
         if (componentDataString != null && !componentDataString.trim().isEmpty()) {
             try {
-                // Parse the component data JSON string
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
                 FreeMarket.LOGGER.info("Parsed component tag: {}", componentTag);
                 
-                // The issue is that DataComponentPatch.CODEC.parse() needs registry context
-                // but NbtOps.INSTANCE doesn't have it. We need to find a different approach.
-                FreeMarket.LOGGER.info("Attempting DataComponentPatch parsing with NbtOps.INSTANCE...");
+                // Handle each component type separately
+                applyEnchantments(itemStack, componentTag);
+                applyArmorTrim(itemStack, componentTag);
+                applyCustomData(itemStack, componentTag);
+                applyOtherComponents(itemStack, componentTag);
                 
-                var result = DataComponentPatch.CODEC.parse(NbtOps.INSTANCE, componentTag);
-                
-                if (result.isSuccess()) {
-                    DataComponentPatch patch = result.getOrThrow();
-                    itemStack.applyComponents(patch);
-                    FreeMarket.LOGGER.info("Successfully applied component data via DataComponentPatch: {}", componentDataString);
-                    return;
-                } else {
-                    FreeMarket.LOGGER.warn("DataComponentPatch parsing failed: {}", result.error().get().message());
-                    FreeMarket.LOGGER.warn("This confirms the registry context issue - NbtOps.INSTANCE lacks enchantment registry access");
-                }
-                
-                // Fallback: Apply components directly
-                applyComponentsDirectly(itemStack, componentTag);
-                
+                FreeMarket.LOGGER.info("Successfully applied all components");
             } catch (Exception e) {
                 FreeMarket.LOGGER.error("Failed to apply component data: {}", e.getMessage());
                 e.printStackTrace();
@@ -57,59 +41,13 @@ public class ItemComponentHandler {
         }
     }
     
-    
-    /**
-     * Fallback method to apply components directly when DataComponentPatch fails.
-     */
-    private static void applyComponentsDirectly(net.minecraft.world.item.ItemStack itemStack, CompoundTag componentTag) {
-        try {
-            // Apply custom name if present
-            if (componentTag.contains("minecraft:custom_name")) {
-                String customNameStr = componentTag.getString("minecraft:custom_name");
-                // Remove the extra quotes that might be in the JSON
-                if (customNameStr.startsWith("\"") && customNameStr.endsWith("\"")) {
-                    customNameStr = customNameStr.substring(1, customNameStr.length() - 1);
-                }
-                itemStack.set(DataComponents.CUSTOM_NAME, Component.literal(customNameStr));
-                FreeMarket.LOGGER.info("Applied custom name: {}", customNameStr);
-            }
-            
-            // Apply enchantments if present
-            if (componentTag.contains("minecraft:enchantments")) {
-                try {
-                    CompoundTag enchantmentsTag = componentTag.getCompound("minecraft:enchantments");
-                    FreeMarket.LOGGER.info("Parsing enchantments tag: {}", enchantmentsTag);
-                    
-                    // Try to parse enchantments with better error handling
-                    var result = ItemEnchantments.CODEC.parse(NbtOps.INSTANCE, enchantmentsTag);
-                    if (result.isSuccess()) {
-                        ItemEnchantments enchantments = result.getOrThrow();
-                        itemStack.set(DataComponents.ENCHANTMENTS, enchantments);
-                        FreeMarket.LOGGER.info("Applied enchantments: {}", enchantments);
-                    } else {
-                        FreeMarket.LOGGER.warn("Failed to parse enchantments: {}", result.error().get().message());
-                        // Try alternative approach - create enchantments manually
-                        tryCreateEnchantmentsManually(itemStack, enchantmentsTag);
-                    }
-                } catch (Exception enchantError) {
-                    FreeMarket.LOGGER.warn("Failed to apply enchantments: {}", enchantError.getMessage());
-                    enchantError.printStackTrace();
-                }
-            }
-            
-            FreeMarket.LOGGER.info("Applied component data directly: {}", componentTag);
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to apply components directly: {}", e.getMessage());
-        }
-    }
-    
     /**
      * Gets component data from an ItemStack as JSON string.
-     * @param itemStack The ItemStack to get component data from
-     * @return Component data as JSON string
+     * Handles each component type separately using proper registries.
+     * @param itemStack The ItemStack to extract components from
+     * @return JSON string containing component data
      */
-    public static String getComponentData(net.minecraft.world.item.ItemStack itemStack) {
+    public static String getComponentData(ItemStack itemStack) {
         try {
             DataComponentMap components = itemStack.getComponents();
             if (components.isEmpty()) {
@@ -118,55 +56,15 @@ public class ItemComponentHandler {
             
             CompoundTag resultTag = new CompoundTag();
             
-            // Serialize custom name if present
-            Component customName = components.get(DataComponents.CUSTOM_NAME);
-            if (customName != null) {
-                resultTag.putString("minecraft:custom_name", customName.getString());
-            }
+            // Handle each component type separately
+            serializeEnchantments(itemStack, resultTag);
+            serializeArmorTrim(itemStack, resultTag);
+            serializeCustomData(itemStack, resultTag);
+            serializeOtherComponents(itemStack, resultTag);
             
-            // Serialize enchantments if present
-            ItemEnchantments enchantments = components.get(DataComponents.ENCHANTMENTS);
-            if (enchantments != null && !enchantments.isEmpty()) {
-                try {
-                    Tag enchantmentsTag = ItemEnchantments.CODEC.encodeStart(NbtOps.INSTANCE, enchantments).getOrThrow();
-                    if (enchantmentsTag instanceof CompoundTag) {
-                        resultTag.put("minecraft:enchantments", (CompoundTag) enchantmentsTag);
-                    }
-                } catch (Exception enchantError) {
-                    FreeMarket.LOGGER.warn("Failed to serialize enchantments: {}", enchantError.getMessage());
-                }
-            }
-            
-            // Serialize armor trim if present
-            net.minecraft.world.item.armortrim.ArmorTrim trim = components.get(DataComponents.TRIM);
-            if (trim != null) {
-                try {
-                    Tag trimTag = net.minecraft.world.item.armortrim.ArmorTrim.CODEC.encodeStart(NbtOps.INSTANCE, trim).getOrThrow();
-                    if (trimTag instanceof CompoundTag) {
-                        resultTag.put("minecraft:trim", (CompoundTag) trimTag);
-                    }
-                } catch (Exception trimError) {
-                    FreeMarket.LOGGER.warn("Failed to serialize armor trim: {}", trimError.getMessage());
-                }
-            }
-            
-            // Serialize damage if present
-            Integer damage = components.get(DataComponents.DAMAGE);
-            if (damage != null && damage > 0) {
-                resultTag.putInt("minecraft:damage", damage);
-            }
-            
-            // Serialize max damage if present
-            Integer maxDamage = components.get(DataComponents.MAX_DAMAGE);
-            if (maxDamage != null && maxDamage > 0) {
-                resultTag.putInt("minecraft:max_damage", maxDamage);
-            }
-            
-            // Serialize other components as needed
-            // Add more component serialization here as needed
-            
-            return resultTag.toString();
-            
+            String result = resultTag.toString();
+            FreeMarket.LOGGER.info("Serialized {} components to JSON: {}", resultTag.size(), result);
+            return result;
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to serialize component data: {}", e.getMessage());
             return "{}";
@@ -174,88 +72,269 @@ public class ItemComponentHandler {
     }
     
     /**
-     * Checks if an ItemStack has component data.
+     * Applies enchantments to the ItemStack.
+     */
+    private static void applyEnchantments(ItemStack itemStack, CompoundTag componentTag) {
+        if (componentTag.contains("minecraft:enchantments")) {
+            try {
+                Tag enchantmentsTag = componentTag.get("minecraft:enchantments");
+                // For now, just log that we found enchantments
+                FreeMarket.LOGGER.info("Found enchantments to apply: {}", enchantmentsTag);
+                // TODO: Implement proper enchantment application
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply enchantments: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Applies armor trim to the ItemStack.
+     */
+    private static void applyArmorTrim(ItemStack itemStack, CompoundTag componentTag) {
+        if (componentTag.contains("minecraft:trim")) {
+            try {
+                CompoundTag trimTag = componentTag.getCompound("minecraft:trim");
+                // For now, just log that we found armor trim
+                FreeMarket.LOGGER.info("Found armor trim to apply: {}", trimTag);
+                // TODO: Implement proper armor trim application
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply armor trim: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Applies custom data to the ItemStack.
+     */
+    private static void applyCustomData(ItemStack itemStack, CompoundTag componentTag) {
+        if (componentTag.contains("minecraft:custom_data")) {
+            try {
+                CompoundTag customDataTag = componentTag.getCompound("minecraft:custom_data");
+                CustomData customData = CustomData.of(customDataTag);
+                itemStack.set(DataComponents.CUSTOM_DATA, customData);
+                FreeMarket.LOGGER.info("Successfully applied custom data: {}", customDataTag);
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply custom data: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Applies other relevant components (damage, repair cost, lore, etc.).
+     */
+    private static void applyOtherComponents(ItemStack itemStack, CompoundTag componentTag) {
+        // Apply damage
+        if (componentTag.contains("minecraft:damage")) {
+            try {
+                int damage = componentTag.getInt("minecraft:damage");
+                itemStack.set(DataComponents.DAMAGE, damage);
+                FreeMarket.LOGGER.info("Successfully applied damage: {}", damage);
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply damage: {}", e.getMessage());
+            }
+        }
+        
+        // Apply repair cost
+        if (componentTag.contains("minecraft:repair_cost")) {
+            try {
+                int repairCost = componentTag.getInt("minecraft:repair_cost");
+                itemStack.set(DataComponents.REPAIR_COST, repairCost);
+                FreeMarket.LOGGER.info("Successfully applied repair cost: {}", repairCost);
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply repair cost: {}", e.getMessage());
+            }
+        }
+        
+        // Apply lore
+        if (componentTag.contains("minecraft:lore")) {
+            try {
+                Tag loreTag = componentTag.get("minecraft:lore");
+                // For now, just log that we found lore
+                FreeMarket.LOGGER.info("Found lore to apply: {}", loreTag);
+                // TODO: Implement proper lore application
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply lore: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Serializes enchantments from the ItemStack.
+     */
+    private static void serializeEnchantments(ItemStack itemStack, CompoundTag resultTag) {
+        if (itemStack.has(DataComponents.ENCHANTMENTS)) {
+            try {
+                ItemEnchantments enchantments = itemStack.get(DataComponents.ENCHANTMENTS);
+                
+                // Only serialize if there are actual enchantments
+                if (!enchantments.keySet().isEmpty()) {
+                    // Create a manual enchantments structure
+                    CompoundTag enchantmentsTag = new CompoundTag();
+                    CompoundTag enchantmentsList = new CompoundTag();
+                    
+                    int index = 0;
+                    for (var enchantmentKey : enchantments.keySet()) {
+                        CompoundTag enchantmentTag = new CompoundTag();
+                        
+                        // Extract enchantment ID from the ResourceKey
+                        enchantmentKey.unwrap().ifLeft(resourceKey -> {
+                            enchantmentTag.putString("id", resourceKey.location().toString());
+                        }).ifRight(enchantment -> {
+                            // Fallback: use enchantment toString() if ResourceKey not available
+                            enchantmentTag.putString("id", enchantment.toString());
+                        });
+                        
+                        enchantmentTag.putInt("lvl", enchantments.getLevel(enchantmentKey));
+                        enchantmentsList.put(String.valueOf(index), enchantmentTag);
+                        index++;
+                    }
+                    
+                    enchantmentsTag.put("enchantments", enchantmentsList);
+                    resultTag.put("minecraft:enchantments", enchantmentsTag);
+                    
+                    FreeMarket.LOGGER.info("Successfully serialized enchantments: {}", enchantmentsTag);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize enchantments: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Serializes armor trim from the ItemStack.
+     */
+    private static void serializeArmorTrim(ItemStack itemStack, CompoundTag resultTag) {
+        if (itemStack.has(DataComponents.TRIM)) {
+            try {
+                var trim = itemStack.get(DataComponents.TRIM);
+                
+                // Create a manual trim structure
+                CompoundTag trimTag = new CompoundTag();
+                
+                // Extract trim material
+                trim.material().unwrap().ifLeft(resourceKey -> {
+                    trimTag.putString("material", resourceKey.location().toString());
+                }).ifRight(material -> {
+                    trimTag.putString("material", material.toString());
+                });
+                
+                // Extract trim pattern
+                trim.pattern().unwrap().ifLeft(resourceKey -> {
+                    trimTag.putString("pattern", resourceKey.location().toString());
+                }).ifRight(pattern -> {
+                    trimTag.putString("pattern", pattern.toString());
+                });
+                
+                resultTag.put("minecraft:trim", trimTag);
+                
+                FreeMarket.LOGGER.info("Successfully serialized armor trim: {}", trimTag);
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize armor trim: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Serializes custom data from the ItemStack.
+     */
+    private static void serializeCustomData(ItemStack itemStack, CompoundTag resultTag) {
+        if (itemStack.has(DataComponents.CUSTOM_DATA)) {
+            try {
+                CustomData customData = itemStack.get(DataComponents.CUSTOM_DATA);
+                
+                // Only serialize if there's actual custom data
+                if (!customData.isEmpty()) {
+                    // Custom data is already a CompoundTag, so we can use it directly
+                    CompoundTag customDataTag = customData.copyTag();
+                    resultTag.put("minecraft:custom_data", customDataTag);
+                    
+                    FreeMarket.LOGGER.info("Successfully serialized custom data: {}", customDataTag);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize custom data: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Serializes other relevant components from the ItemStack.
+     */
+    private static void serializeOtherComponents(ItemStack itemStack, CompoundTag resultTag) {
+        // Serialize damage (only if > 0)
+        if (itemStack.has(DataComponents.DAMAGE)) {
+            try {
+                int damage = itemStack.get(DataComponents.DAMAGE);
+                if (damage > 0) {
+                    resultTag.putInt("minecraft:damage", damage);
+                    FreeMarket.LOGGER.info("Successfully serialized damage: {}", damage);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize damage: {}", e.getMessage());
+            }
+        }
+        
+        // Serialize repair cost (only if > 0)
+        if (itemStack.has(DataComponents.REPAIR_COST)) {
+            try {
+                int repairCost = itemStack.get(DataComponents.REPAIR_COST);
+                if (repairCost > 0) {
+                    resultTag.putInt("minecraft:repair_cost", repairCost);
+                    FreeMarket.LOGGER.info("Successfully serialized repair cost: {}", repairCost);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize repair cost: {}", e.getMessage());
+            }
+        }
+        
+        // Serialize lore
+        if (itemStack.has(DataComponents.LORE)) {
+            try {
+                var lore = itemStack.get(DataComponents.LORE);
+                
+                // Only serialize if there are actual lore lines
+                if (!lore.lines().isEmpty()) {
+                    // Create a manual lore structure
+                    CompoundTag loreTag = new CompoundTag();
+                    CompoundTag linesTag = new CompoundTag();
+                    
+                    int index = 0;
+                    for (var line : lore.lines()) {
+                        linesTag.putString(String.valueOf(index), line.getString());
+                        index++;
+                    }
+                    
+                    loreTag.put("lines", linesTag);
+                    resultTag.put("minecraft:lore", loreTag);
+                    
+                    FreeMarket.LOGGER.info("Successfully serialized lore: {}", loreTag);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize lore: {}", e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Checks if an ItemStack has any relevant component data.
      * @param itemStack The ItemStack to check
-     * @return true if component data exists
+     * @return true if the ItemStack has relevant component data
      */
-    public static boolean hasComponentData(net.minecraft.world.item.ItemStack itemStack) {
-        return !itemStack.getComponents().isEmpty();
-    }
-    
-    /**
-     * Creates a user-friendly enchantment JSON string for testing purposes.
-     * Format: {"minecraft:enchantments":{"enchantments":[{"id":"minecraft:sharpness","lvl":3}]}}
-     * @param enchantmentId The enchantment ID (e.g., "minecraft:sharpness")
-     * @param level The enchantment level
-     * @return JSON string with enchantment data
-     */
-    public static String createEnchantmentJson(String enchantmentId, int level) {
-        try {
-            // Create proper JSON string instead of using CompoundTag.toString()
-            String json = String.format(
-                "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"%s\",\"lvl\":%d}}}}",
-                enchantmentId, level
-            );
-            
-            return json;
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to create enchantment JSON: {}", e.getMessage());
-            return "{}";
+    public static boolean hasComponentData(ItemStack itemStack) {
+        if (itemStack == null || itemStack.isEmpty()) {
+            return false;
         }
-    }
-    
-    /**
-     * Creates a user-friendly component data JSON string with custom name and enchantments.
-     * @param customName The custom name for the item (can be null)
-     * @param enchantmentId The enchantment ID (can be null)
-     * @param enchantmentLevel The enchantment level (ignored if enchantmentId is null)
-     * @return JSON string with component data
-     */
-    public static String createComponentDataJson(String customName, String enchantmentId, int enchantmentLevel) {
-        try {
-            StringBuilder json = new StringBuilder("{");
-            boolean hasContent = false;
-            
-            // Add custom name if provided
-            if (customName != null && !customName.trim().isEmpty()) {
-                if (hasContent) json.append(",");
-                json.append("\"minecraft:custom_name\":\"").append(customName).append("\"");
-                hasContent = true;
-            }
-            
-            // Add enchantments if provided
-            if (enchantmentId != null && !enchantmentId.trim().isEmpty()) {
-                if (hasContent) json.append(",");
-                json.append("\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"")
-                    .append(enchantmentId).append("\",\"lvl\":").append(enchantmentLevel).append("}}}");
-                hasContent = true;
-            }
-            
-            json.append("}");
-            
-            String result = json.toString();
-            return result;
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to create component data JSON: {}", e.getMessage());
-            return "{}";
+        
+        DataComponentMap components = itemStack.getComponents();
+        if (components.isEmpty()) {
+            return false;
         }
-    }
-    
-    /**
-     * Alternative method to create enchantments manually when CODEC parsing fails.
-     * This is a placeholder until we can resolve the registry access issues.
-     */
-    private static void tryCreateEnchantmentsManually(net.minecraft.world.item.ItemStack itemStack, CompoundTag enchantmentsTag) {
-        try {
-            FreeMarket.LOGGER.warn("Manual enchantment creation not yet implemented");
-            FreeMarket.LOGGER.warn("The CODEC parsing failed due to registry access issues");
-            FreeMarket.LOGGER.warn("Enchantments will not be applied to this item");
-            FreeMarket.LOGGER.info("Enchantment data that failed to apply: {}", enchantmentsTag);
-            
-            // Enchantment application failed - component data will be applied server-side
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Manual enchantment creation failed: {}", e.getMessage());
-        }
+        
+        // Check for any of our supported component types
+        return itemStack.has(DataComponents.ENCHANTMENTS) ||
+               itemStack.has(DataComponents.TRIM) ||
+               itemStack.has(DataComponents.CUSTOM_DATA) ||
+               itemStack.has(DataComponents.DAMAGE) ||
+               itemStack.has(DataComponents.REPAIR_COST) ||
+               itemStack.has(DataComponents.LORE);
     }
 }

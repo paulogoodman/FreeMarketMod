@@ -57,6 +57,8 @@ public class FreeMarketCommands {
     private static void registerFreeMarketCommands(CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
         // Commands available to all players
         dispatcher.register(Commands.literal(commandName)
+            .then(Commands.literal("help")
+                .executes(FreeMarketCommands::showHelp))
             .then(Commands.literal("balance")
                 .executes(FreeMarketCommands::getOwnBalance)
                 .then(Commands.argument("player", StringArgumentType.word())
@@ -67,6 +69,12 @@ public class FreeMarketCommands {
                         .executes(FreeMarketCommands::payPlayer))))
             .then(Commands.literal("itemdata")
                 .executes(FreeMarketCommands::getHeldItemData))
+            .then(Commands.literal("list")
+                .requires(source -> source.hasPermission(2)) // OP level 2 required
+                .then(Commands.literal("hand")
+                    .then(Commands.argument("buyPrice", LongArgumentType.longArg(1))
+                        .then(Commands.argument("sellPrice", LongArgumentType.longArg(1))
+                            .executes(FreeMarketCommands::listHeldItem)))))
             .then(Commands.literal("adminmode")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("enabled", BoolArgumentType.bool())
@@ -393,6 +401,7 @@ public class FreeMarketCommands {
     
     /**
      * Gets the component data for the held item in a copy-pastable format.
+     * Shows detailed information about enchantments, armor trims, and other component data.
      */
     private static int getHeldItemData(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
@@ -411,18 +420,58 @@ public class FreeMarketCommands {
             return 0;
         }
         
-        // Get item ID
-        String itemId = BuiltInRegistries.ITEM.getKey(heldItem.getItem()).toString();
-        
-        // Get component data
-        String componentData = ItemComponentHandler.getComponentData(heldItem);
-        
-        // Format the output for easy copy-pasting
-        String output = String.format("Item ID: %s\nComponent Data: %s", itemId, componentData);
-        
-        // Send the formatted data to the player
-        Component message = Component.literal(output);
-        source.sendSuccess(() -> message, false);
+        try {
+            // Get item ID
+            String itemId = BuiltInRegistries.ITEM.getKey(heldItem.getItem()).toString();
+            
+            // Get component data
+            String componentData = ItemComponentHandler.getComponentData(heldItem);
+            
+            // Get item display name
+            String itemName = heldItem.getDisplayName().getString();
+            
+            // Check if item has component data
+            boolean hasComponents = ItemComponentHandler.hasComponentData(heldItem);
+            
+            // Send header
+            source.sendSuccess(() -> Component.literal("§6=== Item Data ===§r"), false);
+            
+            // Send basic item info
+            source.sendSuccess(() -> Component.literal("§eItem Name: §f" + itemName), false);
+            source.sendSuccess(() -> Component.literal("§eItem ID: §f" + itemId), false);
+            source.sendSuccess(() -> Component.literal("§eCount: §f" + heldItem.getCount()), false);
+            
+            // Send component data if it exists
+            if (hasComponents && !componentData.equals("{}")) {
+                source.sendSuccess(() -> Component.literal("§eComponent Data:§r"), false);
+                
+                // Split long component data into multiple messages if needed
+                if (componentData.length() > 200) {
+                    // Send in chunks
+                    String[] lines = componentData.split("(?<=\\})");
+                    for (String line : lines) {
+                        if (!line.trim().isEmpty()) {
+                            source.sendSuccess(() -> Component.literal("§7" + line.trim()), false);
+                        }
+                    }
+                } else {
+                    source.sendSuccess(() -> Component.literal("§7" + componentData), false);
+                }
+                
+                // Log detailed component info for debugging
+                FreeMarket.LOGGER.info("ItemData command - Item: {}, Components: {}", itemId, componentData);
+                
+            } else {
+                source.sendSuccess(() -> Component.literal("§7No component data found"), false);
+                FreeMarket.LOGGER.info("ItemData command - Item: {} has no component data", itemId);
+            }
+            
+        } catch (Exception e) {
+            Component message = Component.translatable("command.FreeMarket.freemarket.itemdata.error", e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Error getting item data: {}", e.getMessage(), e);
+            return 0;
+        }
         
         return 1;
     }
@@ -487,6 +536,122 @@ public class FreeMarketCommands {
         } catch (Exception e) {
             Component message = Component.translatable("command.FreeMarket.freemarket.additem.error", e.getMessage());
             source.sendFailure(message);
+            return 0;
+        }
+        
+        return 1;
+    }
+    
+    /**
+     * Shows help information for all available FreeMarket commands.
+     * @param context the command context
+     * @return command result
+     */
+    private static int showHelp(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        // Send header
+        source.sendSuccess(() -> Component.literal("§6=== FreeMarket Commands ===§r"), false);
+        
+        // Player commands (available to all)
+        source.sendSuccess(() -> Component.literal("§ePlayer Commands:§r"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket help§r - Shows this help message"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket balance§r - Shows your balance"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket pay <player> <amount>§r - Pay money to another player"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
+        
+        // Admin commands (OP only)
+        if (source.hasPermission(2)) {
+            source.sendSuccess(() -> Component.literal("§cAdmin Commands (OP Required):§r"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket adminmode [true/false]§r - Enable/disable admin mode"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket list hand§r - Add the item in your hand to marketplace"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket add <amount> <player>§r - Add money to a player"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket remove <player> <amount>§r - Remove money from a player"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket set <player> <amount>§r - Set a player's money"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket clear§r - Clear all marketplace items"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket additem <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace"), false);
+        }
+        
+        source.sendSuccess(() -> Component.literal("§6Use §e/fm§6 as a shortcut for §e/freemarket§r"), false);
+        
+        return 1;
+    }
+    
+    /**
+     * Lists the item currently held in the player's hand to the marketplace.
+     * Captures all NBT data including enchantments and armor trims.
+     * @param context the command context
+     * @return command result
+     */
+    private static int listHeldItem(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        CommandSourceStack source = context.getSource();
+        
+        if (!(source.getEntity() instanceof ServerPlayer player)) {
+            Component message = Component.translatable("command.FreeMarket.economy.not_player");
+            source.sendFailure(message);
+            return 0;
+        }
+        
+        ItemStack heldItem = player.getMainHandItem();
+        
+        if (heldItem.isEmpty()) {
+            Component message = Component.translatable("command.FreeMarket.list.hand.empty");
+            source.sendFailure(message);
+            return 0;
+        }
+        
+        try {
+            ServerLevel level = source.getLevel();
+            
+            // Get buy and sell prices from command arguments
+            long buyPrice = LongArgumentType.getLong(context, "buyPrice");
+            long sellPrice = LongArgumentType.getLong(context, "sellPrice");
+            
+            // Create a copy of the item with all NBT data preserved
+            ItemStack itemToSell = heldItem.copy();
+            
+            // Create FreeMarketItem with the exact item data (including NBT)
+            String seller = player.getName().getString();
+            String guid = java.util.UUID.randomUUID().toString();
+            
+            // Serialize the item with all NBT data
+            String itemData = ItemComponentHandler.getComponentData(itemToSell);
+            
+            // Create marketplace item with provided prices
+            FreeMarketItem marketplaceItem = new FreeMarketItem(
+                itemToSell, 
+                buyPrice,  // Buy price from argument
+                sellPrice, // Sell price from argument
+                itemToSell.getCount(), 
+                seller, 
+                guid, 
+                itemData
+            );
+            
+            // Add to marketplace
+            List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
+            existingItems.add(marketplaceItem);
+            FreeMarketDataManager.saveFreeMarketItems(level, existingItems);
+            
+            // Get item display name for confirmation message
+            String itemName = itemToSell.getDisplayName().getString();
+            String itemId = BuiltInRegistries.ITEM.getKey(itemToSell.getItem()).toString();
+            
+            Component message = Component.translatable("command.FreeMarket.list.hand.success", 
+                itemName, itemToSell.getCount(), itemId);
+            source.sendSuccess(() -> message, true);
+            
+            // Log additional details about component data
+            if (ItemComponentHandler.hasComponentData(itemToSell)) {
+                FreeMarket.LOGGER.info("Listed item with component data: {} - Components: {}", 
+                    itemId, itemData);
+            }
+            
+        } catch (Exception e) {
+            Component message = Component.translatable("command.FreeMarket.list.hand.error", e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Error listing held item: {}", e.getMessage(), e);
             return 0;
         }
         

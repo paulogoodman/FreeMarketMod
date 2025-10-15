@@ -125,7 +125,6 @@ public class FreeMarketGuiScreen extends Screen {
         refreshMarketplace(false);
     }
     
-    
     @Override
     protected void init() {
         super.init();

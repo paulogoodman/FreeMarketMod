@@ -59,5 +59,10 @@
   "command.FreeMarket.freemarket.pay.self": "You cannot pay yourself",
   "command.FreeMarket.freemarket.pay.failed": "Payment failed. Please try again",
   
-  "command.FreeMarket.freemarket.itemdata.no_item": "You must be holding an item to get its data"
+  "command.FreeMarket.freemarket.itemdata.no_item": "You must be holding an item to get its data",
+  "command.FreeMarket.freemarket.itemdata.error": "Error getting item data: %s",
+  
+  "command.FreeMarket.list.hand.empty": "You must be holding an item to list it",
+  "command.FreeMarket.list.hand.success": "Successfully listed %s (x%d) - %s",
+  "command.FreeMarket.list.hand.error": "Error listing item: %s"
 }

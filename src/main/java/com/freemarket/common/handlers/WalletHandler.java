@@ -59,8 +59,6 @@ public class WalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         wallet.addBalance(amount);
-        
-        FreeMarket.LOGGER.info("Added {} coins to {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
     }
     
     /**
@@ -77,7 +75,6 @@ public class WalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         if (wallet.removeBalance(amount)) {
-            FreeMarket.LOGGER.info("Removed {} coins from {}. New balance: {}", amount, player.getName().getString(), wallet.getBalance());
             return true;
         }
         

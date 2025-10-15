@@ -17,7 +17,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -303,7 +302,7 @@ public class FreeMarketCommands {
      */
     private static int executeAdminMode(CommandContext<CommandSourceStack> context) {
         boolean enabled = BoolArgumentType.getBool(context, "enabled");
-        AdminModeHandler.setAdminMode(enabled);
+        AdminModeHandler.setAdminMode(enabled, context.getSource().getServer());
         
         Component message = Component.translatable("command.FreeMarket.adminmode.set", 
             enabled ? "enabled" : "disabled");
@@ -318,7 +317,7 @@ public class FreeMarketCommands {
      * @return command result
      */
     private static int toggleAdminMode(CommandContext<CommandSourceStack> context) {
-        boolean newState = AdminModeHandler.toggleAdminMode();
+        boolean newState = AdminModeHandler.toggleAdminMode(context.getSource().getServer());
         
         Component message = Component.translatable("command.FreeMarket.adminmode.toggle", 
             newState ? "enabled" : "disabled");

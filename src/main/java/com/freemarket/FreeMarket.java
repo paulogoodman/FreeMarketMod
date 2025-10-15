@@ -35,8 +35,9 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 
 import com.freemarket.server.data.FreeMarketDataManager;
 import com.freemarket.server.commands.FreeMarketCommands;
-import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
+import com.freemarket.common.network.AdminModeNetworkHandler;
+import com.freemarket.server.events.ServerEventHandler;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(FreeMarket.MODID)
@@ -90,6 +91,12 @@ public class FreeMarket {
         // Note that this is necessary if and only if we want *this* class (FreeMarket) to respond directly to events.
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
+        
+        // Register network handler for admin mode synchronization
+        modEventBus.addListener(AdminModeNetworkHandler::register);
+        
+        // Register server event handler for player join events
+        NeoForge.EVENT_BUS.register(ServerEventHandler.class);
 
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);

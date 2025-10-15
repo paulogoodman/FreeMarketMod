@@ -3,6 +3,7 @@ package com.servershop.server.commands;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
@@ -45,10 +46,10 @@ public class MarketplaceCommands {
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         // Register main marketplace command
-        registerMarketplaceCommands(dispatcher, "marketplace");
+        registerMarketplaceCommands(dispatcher, "freemarket");
         
-        // Register mp alias
-        registerMarketplaceCommands(dispatcher, "mp");
+        // Register fm alias
+        registerMarketplaceCommands(dispatcher, "fm");
     }
     
     /**
@@ -63,7 +64,7 @@ public class MarketplaceCommands {
                     .executes(MarketplaceCommands::getBalance)))
             .then(Commands.literal("pay")
                 .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                    .then(Commands.argument("amount", LongArgumentType.longArg(1))
                         .executes(MarketplaceCommands::payPlayer))))
             .then(Commands.literal("itemdata")
                 .executes(MarketplaceCommands::getHeldItemData))
@@ -75,18 +76,18 @@ public class MarketplaceCommands {
                 .executes(MarketplaceCommands::toggleAdminMode))
             .then(Commands.literal("add")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                .then(Commands.argument("amount", LongArgumentType.longArg(1))
+                    .then(Commands.argument("player", StringArgumentType.word())
                         .executes(MarketplaceCommands::addMoney))))
             .then(Commands.literal("remove")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", IntegerArgumentType.integer(1))
+                    .then(Commands.argument("amount", LongArgumentType.longArg(1))
                         .executes(MarketplaceCommands::removeMoney))))
             .then(Commands.literal("set")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", IntegerArgumentType.integer(0))
+                    .then(Commands.argument("amount", LongArgumentType.longArg(0))
                         .executes(MarketplaceCommands::setMoney))))
             .then(Commands.literal("clear")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
@@ -148,8 +149,8 @@ public class MarketplaceCommands {
      * Adds money to a player by name.
      */
     private static int addMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
+        long amount = LongArgumentType.getLong(context, "amount");
         String playerName = StringArgumentType.getString(context, "player");
-        int amount = IntegerArgumentType.getInteger(context, "amount");
         CommandSourceStack source = context.getSource();
 
         ServerPlayer player = findPlayer(source, playerName);
@@ -182,7 +183,7 @@ public class MarketplaceCommands {
      */
     private static int removeMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
-        int amount = IntegerArgumentType.getInteger(context, "amount");
+        long amount = LongArgumentType.getLong(context, "amount");
         CommandSourceStack source = context.getSource();
 
         ServerPlayer player = findPlayer(source, playerName);
@@ -224,7 +225,7 @@ public class MarketplaceCommands {
      */
     private static int setMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
-        int amount = IntegerArgumentType.getInteger(context, "amount");
+        long amount = LongArgumentType.getLong(context, "amount");
         CommandSourceStack source = context.getSource();
 
         ServerPlayer player = findPlayer(source, playerName);
@@ -331,7 +332,7 @@ public class MarketplaceCommands {
      */
     private static int payPlayer(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String targetPlayerName = StringArgumentType.getString(context, "player");
-        int amount = IntegerArgumentType.getInteger(context, "amount");
+        long amount = LongArgumentType.getLong(context, "amount");
         CommandSourceStack source = context.getSource();
         
         if (!(source.getEntity() instanceof ServerPlayer sender)) {
@@ -343,7 +344,7 @@ public class MarketplaceCommands {
         // Check if sender has enough money
         if (!WalletHandler.hasEnoughMoney(sender, amount)) {
             long currentBalance = WalletHandler.getPlayerMoney(sender);
-            Component message = Component.translatable("command.servershop.marketplace.pay.insufficient", 
+            Component message = Component.translatable("command.servershop.freemarket.pay.insufficient", 
                 amount, currentBalance);
             source.sendFailure(message);
             return 0;
@@ -359,7 +360,7 @@ public class MarketplaceCommands {
         
         // Check if trying to pay yourself
         if (sender.getUUID().equals(targetPlayer.getUUID())) {
-            Component message = Component.translatable("command.servershop.marketplace.pay.self");
+            Component message = Component.translatable("command.servershop.freemarket.pay.self");
             source.sendFailure(message);
             return 0;
         }
@@ -367,7 +368,7 @@ public class MarketplaceCommands {
         // Perform the transaction
         boolean success = WalletHandler.removeMoney(sender, amount);
         if (!success) {
-            Component message = Component.translatable("command.servershop.marketplace.pay.failed");
+            Component message = Component.translatable("command.servershop.freemarket.pay.failed");
             source.sendFailure(message);
             return 0;
         }
@@ -379,12 +380,12 @@ public class MarketplaceCommands {
         long targetBalance = WalletHandler.getPlayerMoney(targetPlayer);
         
         // Send success message to sender
-        Component senderMessage = Component.translatable("command.servershop.marketplace.pay.sender_success", 
+        Component senderMessage = Component.translatable("command.servershop.freemarket.pay.sender_success", 
             amount, targetPlayerName, senderBalance);
         source.sendSuccess(() -> senderMessage, false);
         
         // Send notification to target player
-        Component targetMessage = Component.translatable("command.servershop.marketplace.pay.target_notify", 
+        Component targetMessage = Component.translatable("command.servershop.freemarket.pay.target_notify", 
             amount, sender.getName().getString(), targetBalance);
         targetPlayer.sendSystemMessage(targetMessage);
         
@@ -406,7 +407,7 @@ public class MarketplaceCommands {
         ItemStack heldItem = player.getMainHandItem();
         
         if (heldItem.isEmpty()) {
-            Component message = Component.translatable("command.servershop.marketplace.itemdata.no_item");
+            Component message = Component.translatable("command.servershop.freemarket.itemdata.no_item");
             source.sendFailure(message);
             return 0;
         }
@@ -439,7 +440,7 @@ public class MarketplaceCommands {
         // Clear marketplace using JSON system
         MarketplaceDataManager.saveMarketplaceItems(level, new ArrayList<>());
         
-        Component message = Component.translatable("command.servershop.marketplace.clear.success");
+        Component message = Component.translatable("command.servershop.freemarket.clear.success");
         source.sendSuccess(() -> message, true);
         
         return 1;
@@ -462,7 +463,7 @@ public class MarketplaceCommands {
             // Parse item ID
             ResourceLocation itemLocation = ResourceLocation.parse(itemId);
             if (!BuiltInRegistries.ITEM.containsKey(itemLocation)) {
-                Component message = Component.translatable("command.servershop.marketplace.additem.invalid_item", itemId);
+                Component message = Component.translatable("command.servershop.freemarket.additem.invalid_item", itemId);
                 source.sendFailure(message);
                 return 0;
             }
@@ -480,12 +481,12 @@ public class MarketplaceCommands {
             existingItems.add(marketplaceItem);
             MarketplaceDataManager.saveMarketplaceItems(level, existingItems);
             
-            Component message = Component.translatable("command.servershop.marketplace.additem.success", 
+            Component message = Component.translatable("command.servershop.freemarket.additem.success", 
                 itemId, quantity, buyPrice, sellPrice);
             source.sendSuccess(() -> message, true);
             
         } catch (Exception e) {
-            Component message = Component.translatable("command.servershop.marketplace.additem.error", e.getMessage());
+            Component message = Component.translatable("command.servershop.freemarket.additem.error", e.getMessage());
             source.sendFailure(message);
             return 0;
         }

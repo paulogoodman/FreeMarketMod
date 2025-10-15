@@ -11,16 +11,16 @@
   "servershop.configuration.magicNumberIntroduction": "Magic Number Text",
   "servershop.configuration.magicNumber": "Magic Number",
 
-  "gui.servershop.shop.title": "Server Shop",
+  "gui.servershop.shop.title": "Free Market",
   "gui.servershop.shop.instruction": "Press ESC to close",
   "gui.servershop.admin_mode": "Admin Mode Active",
   "gui.servershop.wallet": "Wallet: %d coins",
-  "gui.servershop.marketplace.title": "Marketplace",
+  "gui.servershop.marketplace.title": "Free Market",
   "gui.servershop.marketplace.search": "Search items...",
   "gui.servershop.marketplace.search_placeholder": "Type to search...",
   "gui.servershop.marketplace.count": "Showing %d of %d items",
   
-  "gui.servershop.add_item.title": "Add Item to Marketplace",
+  "gui.servershop.add_item.title": "Add Item to Free Market",
   "gui.servershop.add_item.item_id": "Item ID",
   "gui.servershop.add_item.item_name": "Item Name",
   "gui.servershop.add_item.buy_price": "Buy Price",
@@ -30,8 +30,8 @@
   "gui.servershop.add_item.add": "Add Item",
   "gui.servershop.add_item.cancel": "Cancel",
 
-  "key.servershop.open_shop": "Open Server Shop",
-  "key.categories.servershop": "ServerShop",
+  "key.servershop.open_shop": "Open Free Market",
+  "key.categories.servershop": "FreeMarket",
 
   "command.servershop.adminmode.set": "Admin mode %s",
   "command.servershop.adminmode.toggle": "Admin mode %s",
@@ -47,17 +47,17 @@
   "command.servershop.economy.player_not_found": "Player %s not found or not online.",
   "command.servershop.economy.not_player": "This command can only be executed by a player.",
   
-  "command.servershop.marketplace.clear.success": "Marketplace cleared successfully",
-  "command.servershop.marketplace.additem.success": "Added %s (x%d) to marketplace - Buy: %d, Sell: %d",
-  "command.servershop.marketplace.additem.invalid_item": "Invalid item ID: %s",
-  "command.servershop.marketplace.additem.error": "Error adding item: %s",
-  "command.servershop.marketplace.testdata.success": "Generated %d test items in marketplace",
+  "command.servershop.freemarket.clear.success": "Marketplace cleared successfully",
+  "command.servershop.freemarket.additem.success": "Added %s (x%d) to marketplace - Buy: %d, Sell: %d",
+  "command.servershop.freemarket.additem.invalid_item": "Invalid item ID: %s",
+  "command.servershop.freemarket.additem.error": "Error adding item: %s",
+  "command.servershop.freemarket.testdata.success": "Generated %d test items in marketplace",
   
-  "command.servershop.marketplace.pay.sender_success": "Sent %d coins to %s. Your balance: %d",
-  "command.servershop.marketplace.pay.target_notify": "You received %d coins from %s! Your balance: %d",
-  "command.servershop.marketplace.pay.insufficient": "Insufficient funds. You need %d coins but only have %d",
-  "command.servershop.marketplace.pay.self": "You cannot pay yourself",
-  "command.servershop.marketplace.pay.failed": "Payment failed. Please try again",
+  "command.servershop.freemarket.pay.sender_success": "Sent %d coins to %s. Your balance: %d",
+  "command.servershop.freemarket.pay.target_notify": "You received %d coins from %s! Your balance: %d",
+  "command.servershop.freemarket.pay.insufficient": "Insufficient funds. You need %d coins but only have %d",
+  "command.servershop.freemarket.pay.self": "You cannot pay yourself",
+  "command.servershop.freemarket.pay.failed": "Payment failed. Please try again",
   
-  "command.servershop.marketplace.itemdata.no_item": "You must be holding an item to get its data"
+  "command.servershop.freemarket.itemdata.no_item": "You must be holding an item to get its data"
 }

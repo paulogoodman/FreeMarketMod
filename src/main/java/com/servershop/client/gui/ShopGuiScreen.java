@@ -10,7 +10,7 @@ import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.servershop.ServerShop;
+import com.servershop.Config;
 import com.servershop.client.data.ClientMarketplaceDataManager;
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.WalletHandler;
@@ -31,7 +31,7 @@ public class ShopGuiScreen extends Screen {
     private static final long BALANCE_CACHE_DURATION = 1000; // Update every 1 second
     
     public ShopGuiScreen() {
-        super(Component.translatable("gui.servershop.shop.title"));
+        super(Component.literal(Config.MARKETPLACE_NAME.get()));
         this.marketplaceItems = new ArrayList<>();
         // Don't load items here - let init() handle it with caching
     }

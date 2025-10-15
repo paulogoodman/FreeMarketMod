@@ -5,6 +5,7 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 
 import javax.annotation.Nonnull;
 
@@ -13,13 +14,13 @@ import java.util.List;
 import java.util.Map;
 
 
+import com.servershop.Config;
 import com.servershop.common.data.MarketplaceItem;
 import com.servershop.common.handlers.AdminModeHandler;
 import com.servershop.common.handlers.WalletHandler;
 import com.servershop.common.managers.ItemCategoryManager;
 import com.servershop.common.attachments.ItemComponentHandler;
 import com.servershop.client.data.ClientMarketplaceDataManager;
-import com.servershop.ServerShop;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -42,11 +43,11 @@ public class MarketplaceContainer implements Renderable {
     
     // Buy button state tracking - per item
     private final java.util.Map<String, Long> buyButtonCooldowns = new java.util.HashMap<>();
-    private static final long BUY_COOLDOWN_MS = 2000; // 2 second cooldown
+    private static final long BUY_COOLDOWN_MS = 1000; // 1 second cooldown
     
     // Sell button state tracking - per item
     private final java.util.Map<String, Long> sellButtonCooldowns = new java.util.HashMap<>();
-    private static final long SELL_COOLDOWN_MS = 2000; // 2 second cooldown
+    private static final long SELL_COOLDOWN_MS = 1000; // 1 second cooldown
     
     public MarketplaceContainer(int x, int y, int width, int height, List<MarketplaceItem> items, ShopGuiScreen parentScreen) {
         this.x = x;
@@ -189,7 +190,7 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0xFF404040);
         
         // Draw title with better styling and extra margin
-        Component title = Component.translatable("gui.servershop.marketplace.title");
+        Component title = Component.literal(Config.MARKETPLACE_NAME.get());
         int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
         int titleX = x + (width - titleWidth) / 2;
         int titleY = y + GuiScalingHelper.responsiveHeight(15, 12, 20);
@@ -383,8 +384,8 @@ public class MarketplaceContainer implements Renderable {
             renderItemTooltip(guiGraphics, displayStack, mouseX, mouseY);
         }
         
-        // Draw clickable price buttons
-        renderClickablePriceButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
+        // Draw action buttons
+        renderActionButtons(guiGraphics, item, itemX, itemY, mouseX, mouseY);
     }
     
     /**
@@ -461,86 +462,82 @@ public class MarketplaceContainer implements Renderable {
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "🗑", iconX, iconY, iconColor);
     }
     
-    private void renderClickablePriceButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
+    private void renderActionButtons(GuiGraphics guiGraphics, MarketplaceItem item, int itemX, int itemY, int mouseX, int mouseY) {
         boolean canBuy = WalletHandler.hasEnoughMoney(item.getBuyPrice());
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
-        boolean canSellItem = canSellItem(item);
-        boolean isSellCooldown = isSellButtonInCooldown(item);
         
-        int cardWidth = calculatedItemWidth;
-        int margin = GuiScalingHelper.responsiveWidth(5, 4, 8);
-        int buttonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
-        int buttonSpacing = GuiScalingHelper.responsiveHeight(4, 3, 6);
+        // Buy button
+        int buyButtonX = itemX + GuiScalingHelper.responsiveWidth(5, 4, 8);
+        int buyButtonY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
+        int buyButtonWidth = calculatedItemWidth - (GuiScalingHelper.responsiveWidth(5, 4, 8) * 2);
+        int buyButtonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
         
-        // Calculate button dimensions (fill width with margins)
-        int buttonWidth = cardWidth - (margin * 2);
-        int buttonStartY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
-        
-        // Buy button (top)
-        int buyButtonX = itemX + margin;
-        int buyButtonY = buttonStartY;
-        
-        boolean buyHovered = mouseX >= buyButtonX && mouseX <= buyButtonX + buttonWidth &&
-                            mouseY >= buyButtonY && mouseY <= buyButtonY + buttonHeight;
+        boolean buyHovered = mouseX >= buyButtonX && mouseX <= buyButtonX + buyButtonWidth &&
+                            mouseY >= buyButtonY && mouseY <= buyButtonY + buyButtonHeight;
         
         // Determine buy button state and color
         int buyColor;
-        String displayBuyText;
+        String buyText;
         
         if (isBuyCooldown) {
             // In cooldown
             buyColor = 0xFF9E9E9E; // Gray for cooldown
-            displayBuyText = "🔄";
+            buyText = "🔄";
         } else if (canBuy) {
             // Can buy
             buyColor = buyHovered ? 0xFF66BB6A : 0xFF4CAF50;
-            displayBuyText = "Buy: $" + formatPrice(item.getBuyPrice());
+            buyText = "Buy: $" + formatPrice(item.getBuyPrice());
         } else {
             // Cannot buy (insufficient funds)
             buyColor = 0xFF666666;
-            displayBuyText = "Buy: $" + formatPrice(item.getBuyPrice());
+            buyText = "Buy: $" + formatPrice(item.getBuyPrice());
         }
         
         // Draw buy button background
-        guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buttonWidth, buyButtonY + buttonHeight, buyColor);
+        guiGraphics.fill(buyButtonX, buyButtonY, buyButtonX + buyButtonWidth, buyButtonY + buyButtonHeight, buyColor);
         
-        // Draw buy text (centered)
-        int buyTextColor = (isBuyCooldown || canBuy) ? 0xFFFFFFFF : 0xFF999999;
-        int buyTextX = buyButtonX + (buttonWidth - net.minecraft.client.Minecraft.getInstance().font.width(displayBuyText)) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, displayBuyText, buyTextX, buyButtonY + GuiScalingHelper.responsiveHeight(2, 1, 3), buyTextColor);
+        // Draw text with appropriate color
+        int textColor = isBuyCooldown ? 0xFFFFFFFF : (canBuy ? 0xFFFFFFFF : 0xFF999999);
+        int textX = buyButtonX + (buyButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(buyText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, buyText, textX, buyButtonY + GuiScalingHelper.responsiveHeight(2, 1, 3), textColor);
         
-        // Sell button (bottom)
-        int sellButtonX = itemX + margin;
-        int sellButtonY = buttonStartY + buttonHeight + buttonSpacing;
+        // Sell button
+        int sellButtonX = itemX + GuiScalingHelper.responsiveWidth(5, 4, 8);
+        int sellButtonY = buyButtonY + buyButtonHeight + GuiScalingHelper.responsiveHeight(4, 3, 6);
+        int sellButtonWidth = buyButtonWidth;
+        int sellButtonHeight = buyButtonHeight;
         
-        boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + buttonWidth &&
-                             mouseY >= sellButtonY && mouseY <= sellButtonY + buttonHeight;
+        boolean sellHovered = mouseX >= sellButtonX && mouseX <= sellButtonX + sellButtonWidth &&
+                             mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
+        
+        boolean isSellCooldown = isSellButtonInCooldown(item);
+        boolean canSellItem = canSellItem(item);
         
         // Determine sell button state and color
         int sellColor;
-        String displaySellText;
+        String sellText;
         
         if (isSellCooldown) {
             // In cooldown
             sellColor = 0xFF9E9E9E; // Gray for cooldown
-            displaySellText = "🔄";
+            sellText = "🔄";
         } else if (canSellItem) {
             // Can sell
             sellColor = sellHovered ? 0xFFFFB74D : 0xFFFF9800;
-            displaySellText = "Sell: $" + formatPrice(item.getSellPrice());
+            sellText = "Sell: $" + formatPrice(item.getSellPrice());
         } else {
             // Cannot sell (don't have item)
             sellColor = 0xFF666666;
-            displaySellText = "Sell: $" + formatPrice(item.getSellPrice());
+            sellText = "Sell: $" + formatPrice(item.getSellPrice());
         }
         
         // Draw sell button background
-        guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + buttonWidth, sellButtonY + buttonHeight, sellColor);
+        guiGraphics.fill(sellButtonX, sellButtonY, sellButtonX + sellButtonWidth, sellButtonY + sellButtonHeight, sellColor);
         
-        // Draw sell text (centered)
-        int sellTextColor = (isSellCooldown || canSellItem) ? 0xFFFFFFFF : 0xFF999999;
-        int sellTextX = sellButtonX + (buttonWidth - net.minecraft.client.Minecraft.getInstance().font.width(displaySellText)) / 2;
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, displaySellText, sellTextX, sellButtonY + GuiScalingHelper.responsiveHeight(2, 1, 3), sellTextColor);
+        // Draw text with appropriate color
+        int sellTextColor = isSellCooldown ? 0xFFFFFFFF : (canSellItem ? 0xFFFFFFFF : 0xFF999999);
+        int sellTextX = sellButtonX + (sellButtonWidth - net.minecraft.client.Minecraft.getInstance().font.width(sellText)) / 2;
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sellText, sellTextX, sellButtonY + GuiScalingHelper.responsiveHeight(2, 1, 3), sellTextColor);
     }
     
     /**
@@ -713,8 +710,8 @@ public class MarketplaceContainer implements Renderable {
                         int deleteButtonY = itemY + GuiScalingHelper.responsiveHeight(2, 1, 3);
                         int deleteButtonSize = GuiScalingHelper.responsiveWidth(20, 16, 26);
                         
-                        if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
-                            mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
+                        if (mouseX >= deleteButtonX - 2.0 && mouseX <= deleteButtonX + deleteButtonSize + 2.0 &&
+                            mouseY >= deleteButtonY - 2.0 && mouseY <= deleteButtonY + deleteButtonSize + 2.0) {
                             // Delete item from marketplace
                             ClientMarketplaceDataManager.removeMarketplaceItem(item);
                             
@@ -736,11 +733,13 @@ public class MarketplaceContainer implements Renderable {
                 int buttonStartY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
                 
                 // Buy button (top) - with floating point tolerance
-                int buyButtonX = itemX + margin;
-                int buyButtonY = buttonStartY;
+                int buyButtonX = itemX + GuiScalingHelper.responsiveWidth(5, 4, 8);
+                int buyButtonY = itemY + GuiScalingHelper.responsiveHeight(50, 40, 65);
+                int buyButtonWidth = calculatedItemWidth - (GuiScalingHelper.responsiveWidth(5, 4, 8) * 2);
+                int buyButtonHeight = GuiScalingHelper.responsiveHeight(12, 10, 16);
                 
-                if (mouseX >= buyButtonX - 2.0 && mouseX <= buyButtonX + buttonWidth + 2.0 &&
-                    mouseY >= buyButtonY - 2.0 && mouseY <= buyButtonY + buttonHeight + 2.0) {
+                if (mouseX >= buyButtonX - 2.0 && mouseX <= buyButtonX + buyButtonWidth + 2.0 &&
+                    mouseY >= buyButtonY - 2.0 && mouseY <= buyButtonY + buyButtonHeight + 2.0) {
                     
                     // Handle buy button click
                     if (buyItem(item)) {
@@ -751,12 +750,15 @@ public class MarketplaceContainer implements Renderable {
                 }
                 
                 // Sell button (bottom) - with floating point tolerance
-                int sellButtonX = itemX + margin;
-                int sellButtonY = buttonStartY + buttonHeight + buttonSpacing;
+                int sellButtonX = itemX + GuiScalingHelper.responsiveWidth(5, 4, 8);
+                int sellButtonY = buyButtonY + buyButtonHeight + GuiScalingHelper.responsiveHeight(4, 3, 6);
+                int sellButtonWidth = buyButtonWidth;
+                int sellButtonHeight = buyButtonHeight;
                 
-                if (mouseX >= sellButtonX - 2.0 && mouseX <= sellButtonX + buttonWidth + 2.0 &&
-                    mouseY >= sellButtonY - 2.0 && mouseY <= sellButtonY + buttonHeight + 2.0) {
+                if (mouseX >= sellButtonX - 2.0 && mouseX <= sellButtonX + sellButtonWidth + 2.0 &&
+                    mouseY >= sellButtonY - 2.0 && mouseY <= sellButtonY + sellButtonHeight + 2.0) {
                     
+                    System.out.println("CLICK: Sell button clicked for " + item.getItemName());
                     // Handle sell button click
                     if (sellItem(item)) {
                         // Success - item was sold
@@ -813,19 +815,20 @@ public class MarketplaceContainer implements Renderable {
      * Validates balance, deducts money, and spawns item in inventory or on ground.
      */
     private boolean buyItem(MarketplaceItem item) {
-        // Set cooldown immediately to prevent rapid clicking
-        long currentTime = System.currentTimeMillis();
-        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
-        
-        // Debug: Check if cooldown was set
-        boolean testCooldown = isBuyButtonInCooldown(item);
-        System.out.println("Buy cooldown set for " + item.getItemName() + " GUID: " + item.getGuid() + " - Cooldown active: " + testCooldown);
+        // Check if button is in cooldown first
+        if (isBuyButtonInCooldown(item)) {
+            return false; // Don't process transaction during cooldown
+        }
         
         // Check if player has enough money
         if (!WalletHandler.hasEnoughMoney(item.getBuyPrice())) {
             // TODO: Show error message to player
             return false;
         }
+        
+        // Set cooldown for this specific item (only after validation passes)
+        long currentTime = System.currentTimeMillis();
+        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
         
         // Get the player
         Minecraft minecraft = Minecraft.getInstance();
@@ -865,6 +868,9 @@ public class MarketplaceContainer implements Renderable {
         }
         
         WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
+        
+        // Play purchase sound effect
+        clientPlayer.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 1.0F);
         
         // Refresh wallet display and marketplace (preserve scroll position)
         if (parentScreen != null) {
@@ -910,9 +916,7 @@ public class MarketplaceContainer implements Renderable {
     private boolean isBuyButtonInCooldown(MarketplaceItem item) {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
-        boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
-        System.out.println("Buy cooldown check for " + item.getItemName() + " - End time: " + cooldownEnd + ", Current: " + currentTime + ", In cooldown: " + inCooldown);
-        return inCooldown;
+        return cooldownEnd != null && currentTime < cooldownEnd;
     }
     
     /**
@@ -920,18 +924,19 @@ public class MarketplaceContainer implements Renderable {
      * Validates inventory, removes item, and adds money to wallet.
      */
     private boolean sellItem(MarketplaceItem item) {
-        // Set cooldown immediately to prevent rapid clicking
-        long currentTime = System.currentTimeMillis();
-        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
+        System.out.println("SELL: Attempting to sell " + item.getItemName());
         
-        // Debug: Check if cooldown was set
-        boolean testCooldown = isSellButtonInCooldown(item);
-        System.out.println("Sell cooldown set for " + item.getItemName() + " GUID: " + item.getGuid() + " - Cooldown active: " + testCooldown);
+        // Check if button is in cooldown first
+        if (isSellButtonInCooldown(item)) {
+            System.out.println("SELL: Blocked by cooldown for " + item.getItemName());
+            return false; // Don't process transaction during cooldown
+        }
         
         // Get the player
         Minecraft minecraft = Minecraft.getInstance();
         Player clientPlayer = minecraft.player;
         if (clientPlayer == null) {
+            System.out.println("SELL: No client player found");
             return false;
         }
         
@@ -949,9 +954,17 @@ public class MarketplaceContainer implements Renderable {
         }
         
         if (!hasItemInInventory(playerForInventory, itemToSell)) {
+            System.out.println("SELL: Don't have item " + item.getItemName() + " in inventory");
             // TODO: Show error message to player
             return false;
         }
+        
+        System.out.println("SELL: Validation passed for " + item.getItemName());
+        
+        // Set cooldown for this specific item (only after validation passes)
+        long currentTime = System.currentTimeMillis();
+        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
+        System.out.println("SELL: Set cooldown for " + item.getItemName() + " until " + (currentTime + SELL_COOLDOWN_MS));
         
         // Remove item from inventory
         removeItemFromInventory(playerForInventory, itemToSell);
@@ -967,6 +980,9 @@ public class MarketplaceContainer implements Renderable {
         }
         
         WalletHandler.addMoney(playerForMoney, item.getSellPrice());
+        
+        // Play sell sound effect
+        clientPlayer.playSound(SoundEvents.VILLAGER_YES, 1.0F, 1.0F);
         
         // Refresh wallet display and marketplace (preserve scroll position)
         if (parentScreen != null) {
@@ -1101,7 +1117,13 @@ public class MarketplaceContainer implements Renderable {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
         boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
-        System.out.println("Sell cooldown check for " + item.getItemName() + " - End time: " + cooldownEnd + ", Current: " + currentTime + ", In cooldown: " + inCooldown);
+        
+        // Only log when there's an active cooldown
+        if (inCooldown) {
+            long remaining = cooldownEnd - currentTime;
+            System.out.println("SELL CHECK: " + item.getItemName() + " cooldown " + remaining + "ms remaining");
+        }
+        
         return inCooldown;
     }
     

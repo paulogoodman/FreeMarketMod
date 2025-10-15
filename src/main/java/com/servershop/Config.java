@@ -28,6 +28,10 @@ public class Config {
             .comment("A list of items to log on common setup.")
             .defineListAllowEmpty("items", List.of("minecraft:iron_ingot"), () -> "", Config::validateItemName);
 
+    public static final ModConfigSpec.ConfigValue<String> MARKETPLACE_NAME = BUILDER
+            .comment("The display name for the marketplace GUI")
+            .define("marketplaceName", "Free Market");
+
     static final ModConfigSpec SPEC = BUILDER.build();
 
     private static boolean validateItemName(final Object obj) {

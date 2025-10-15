@@ -18,6 +18,7 @@ gradle-app.setting
 # Eclipse
 bin/
 .metadata/
+.eclipse/
 
 # IntelliJ IDEA
 out/
@@ -68,8 +69,15 @@ buildNumber.properties
 .mvn/timing.properties
 .mvn/wrapper/maven-wrapper.jar
 
-# Gradle Wrapper
-gradlew
-gradlew.bat
-gradle/wrapper/gradle-wrapper.jar
-gradle/wrapper/gradle-wrapper.properties
+# Gradle Wrapper (keep these files)
+# gradlew
+# gradlew.bat
+# gradle/wrapper/gradle-wrapper.jar
+# gradle/wrapper/gradle-wrapper.properties
+
+# Additional patterns
+*.orig
+*.rej
+*.swp
+*.swo
+*~

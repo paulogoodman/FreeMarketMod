@@ -17,6 +17,7 @@ import org.lwjgl.glfw.GLFW;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.client.gui.FreeMarketGuiScreen;
+import com.freemarket.client.data.ClientWalletCache;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = FreeMarket.MODID, dist = Dist.CLIENT)
@@ -44,6 +45,14 @@ public class FreeMarketClient {
         // Some client setup code
         FreeMarket.LOGGER.info("HELLO FROM CLIENT SETUP");
         FreeMarket.LOGGER.info("MINECRAFT NAME >> {}", Minecraft.getInstance().getUser().getName());
+        
+        // Initialize wallet cache with current player UUID
+        event.enqueueWork(() -> {
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                ClientWalletCache.setCurrentPlayer(minecraft.player.getUUID().toString());
+            }
+        });
     }
     
     @SubscribeEvent

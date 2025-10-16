@@ -74,8 +74,39 @@ public class ItemComponentHandler {
     private static void applyEnchantments(ItemStack itemStack, CompoundTag componentTag) {
         if (componentTag.contains("minecraft:enchantments")) {
             try {
-                Tag enchantmentsTag = componentTag.get("minecraft:enchantments");
-                // TODO: Implement proper enchantment application
+                CompoundTag enchantmentsTag = componentTag.getCompound("minecraft:enchantments");
+                
+                // Parse enchantments from the tag
+                ItemEnchantments.Mutable mutableEnchantments = new ItemEnchantments.Mutable(ItemEnchantments.EMPTY);
+                
+                if (enchantmentsTag.contains("enchantments")) {
+                    CompoundTag enchantmentsData = enchantmentsTag.getCompound("enchantments");
+                    
+                    for (String key : enchantmentsData.getAllKeys()) {
+                        try {
+                            CompoundTag enchantmentTag = enchantmentsData.getCompound(key);
+                            String enchantmentId = enchantmentTag.getString("id");
+                            int level = enchantmentTag.getInt("lvl");
+                            
+                            // Get enchantment from registry using client's registry access
+                            var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
+                            if (clientLevel != null) {
+                                var registryAccess = clientLevel.registryAccess();
+                                var enchantmentRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+                                var enchantmentHolder = enchantmentRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(enchantmentId));
+                                if (enchantmentHolder.isPresent()) {
+                                    mutableEnchantments.set(enchantmentHolder.get(), level);
+                                }
+                            }
+                        } catch (Exception e) {
+                            FreeMarket.LOGGER.warn("Failed to parse enchantment {}: {}", key, e.getMessage());
+                        }
+                    }
+                }
+                
+                // Apply enchantments to the item stack
+                itemStack.set(DataComponents.ENCHANTMENTS, mutableEnchantments.toImmutable());
+                
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply enchantments: {}", e.getMessage());
             }
@@ -89,9 +120,30 @@ public class ItemComponentHandler {
         if (componentTag.contains("minecraft:trim")) {
             try {
                 CompoundTag trimTag = componentTag.getCompound("minecraft:trim");
-                // For now, just log that we found armor trim
-                FreeMarket.LOGGER.info("Found armor trim to apply: {}", trimTag);
-                // TODO: Implement proper armor trim application
+                
+                // Parse armor trim data
+                if (trimTag.contains("pattern") && trimTag.contains("material")) {
+                    String patternId = trimTag.getString("pattern");
+                    String materialId = trimTag.getString("material");
+                    
+                    // Get pattern and material from registries using client's registry access
+                    var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
+                    if (clientLevel != null) {
+                        var registryAccess = clientLevel.registryAccess();
+                        var patternRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_PATTERN);
+                        var materialRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_MATERIAL);
+                        
+                        var patternHolder = patternRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(patternId));
+                        var materialHolder = materialRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(materialId));
+                        
+                        if (patternHolder.isPresent() && materialHolder.isPresent()) {
+                            // Create armor trim component (material first, then pattern)
+                            var armorTrim = new net.minecraft.world.item.armortrim.ArmorTrim(materialHolder.get(), patternHolder.get());
+                            itemStack.set(DataComponents.TRIM, armorTrim);
+                        }
+                    }
+                }
+                
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply armor trim: {}", e.getMessage());
             }

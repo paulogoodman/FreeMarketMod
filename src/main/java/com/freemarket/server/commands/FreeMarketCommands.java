@@ -7,7 +7,7 @@ import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
-import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.server.handlers.ServerWalletHandler;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 import com.freemarket.common.data.FreeMarketItem;
@@ -115,7 +115,7 @@ public class FreeMarketCommands {
         CommandSourceStack source = context.getSource();
         
         if (source.getEntity() instanceof ServerPlayer player) {
-            long balance = WalletHandler.getPlayerMoney(player);
+            long balance = ServerWalletHandler.getPlayerMoney(player);
             Component message = Component.translatable("command.FreeMarket.economy.balance", 
                 player.getName().getString(), balance);
             source.sendSuccess(() -> message, false);
@@ -138,7 +138,7 @@ public class FreeMarketCommands {
         
         if (player != null) {
             // Player found - get balance from NBT
-            long balance = WalletHandler.getPlayerMoney(player);
+            long balance = ServerWalletHandler.getPlayerMoney(player);
             Component message = Component.translatable("command.FreeMarket.economy.balance", 
                 playerName, balance);
             source.sendSuccess(() -> message, false);
@@ -164,8 +164,8 @@ public class FreeMarketCommands {
         
         if (player != null) {
             // Player found - update NBT data
-            WalletHandler.addMoney(player, amount);
-            long newBalance = WalletHandler.getPlayerMoney(player);
+            ServerWalletHandler.addMoney(player, amount);
+            long newBalance = ServerWalletHandler.getPlayerMoney(player);
             
             Component message = Component.translatable("command.FreeMarket.economy.add.success", 
                 amount, playerName, newBalance);
@@ -197,10 +197,10 @@ public class FreeMarketCommands {
         
         if (player != null) {
             // Player found - update NBT data
-            boolean success = WalletHandler.removeMoney(player, amount);
+            boolean success = ServerWalletHandler.removeMoney(player, amount);
             
             if (success) {
-                long newBalance = WalletHandler.getPlayerMoney(player);
+                long newBalance = ServerWalletHandler.getPlayerMoney(player);
                 
                 Component message = Component.translatable("command.FreeMarket.economy.remove.success", 
                     amount, playerName, newBalance);
@@ -211,7 +211,7 @@ public class FreeMarketCommands {
                     amount, newBalance);
                 player.sendSystemMessage(playerMessage);
             } else {
-                long currentBalance = WalletHandler.getPlayerMoney(player);
+                long currentBalance = ServerWalletHandler.getPlayerMoney(player);
                 
                 Component message = Component.translatable("command.FreeMarket.economy.remove.insufficient", 
                     amount, playerName, currentBalance);
@@ -239,8 +239,8 @@ public class FreeMarketCommands {
         
         if (player != null) {
             // Player found - update NBT data
-            long oldBalance = WalletHandler.getPlayerMoney(player);
-            WalletHandler.setPlayerMoney(player, amount);
+            long oldBalance = ServerWalletHandler.getPlayerMoney(player);
+            ServerWalletHandler.setPlayerMoney(player, amount);
             
             Component message = Component.translatable("command.FreeMarket.economy.set.success", 
                 playerName, oldBalance, amount);
@@ -349,8 +349,8 @@ public class FreeMarketCommands {
         }
         
         // Check if sender has enough money
-        if (!WalletHandler.hasEnoughMoney(sender, amount)) {
-            long currentBalance = WalletHandler.getPlayerMoney(sender);
+        if (!ServerWalletHandler.hasEnoughMoney(sender, amount)) {
+            long currentBalance = ServerWalletHandler.getPlayerMoney(sender);
             Component message = Component.translatable("command.FreeMarket.freemarket.pay.insufficient", 
                 amount, currentBalance);
             source.sendFailure(message);
@@ -373,18 +373,18 @@ public class FreeMarketCommands {
         }
         
         // Perform the transaction
-        boolean success = WalletHandler.removeMoney(sender, amount);
+        boolean success = ServerWalletHandler.removeMoney(sender, amount);
         if (!success) {
             Component message = Component.translatable("command.FreeMarket.freemarket.pay.failed");
             source.sendFailure(message);
             return 0;
         }
         
-        WalletHandler.addMoney(targetPlayer, amount);
+        ServerWalletHandler.addMoney(targetPlayer, amount);
         
         // Get updated balances
-        long senderBalance = WalletHandler.getPlayerMoney(sender);
-        long targetBalance = WalletHandler.getPlayerMoney(targetPlayer);
+        long senderBalance = ServerWalletHandler.getPlayerMoney(sender);
+        long targetBalance = ServerWalletHandler.getPlayerMoney(targetPlayer);
         
         // Send success message to sender
         Component senderMessage = Component.translatable("command.FreeMarket.freemarket.pay.sender_success", 

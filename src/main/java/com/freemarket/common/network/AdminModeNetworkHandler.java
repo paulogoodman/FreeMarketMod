@@ -36,6 +36,34 @@ public class AdminModeNetworkHandler {
             MarketplaceItemOperationPacket.STREAM_CODEC,
             MarketplaceItemOperationHandler::handle
         );
+        
+        // Register wallet request packet
+        registrar.playToServer(
+            WalletRequestPacket.TYPE,
+            WalletRequestPacket.STREAM_CODEC,
+            WalletNetworkHandler::handleWalletRequest
+        );
+        
+        // Register wallet sync packet
+        registrar.playToClient(
+            WalletSyncPacket.TYPE,
+            WalletSyncPacket.STREAM_CODEC,
+            WalletNetworkHandler::handleWalletSync
+        );
+        
+        // Register buy item request packet
+        registrar.playToServer(
+            BuyItemRequestPacket.TYPE,
+            BuyItemRequestPacket.STREAM_CODEC,
+            BuyItemNetworkHandler::handleBuyRequest
+        );
+        
+        // Register buy item response packet
+        registrar.playToClient(
+            BuyItemResponsePacket.TYPE,
+            BuyItemResponsePacket.STREAM_CODEC,
+            BuyItemNetworkHandler::handleBuyResponse
+        );
     }
     
     /**

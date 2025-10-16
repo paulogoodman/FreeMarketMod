@@ -1,15 +1,14 @@
-package com.freemarket.common.handlers;
+package com.freemarket.server.handlers;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
 import net.minecraft.world.entity.player.Player;
 
 /**
- * Handles player wallet/money system for the FreeMarket mod.
- * This class manages player money balances using NeoForge Data Attachments.
- * Uses PlayerWalletAttachment for proper persistence across deaths.
+ * Server-side wallet handler for the FreeMarket mod.
+ * Handles all wallet operations that require server-side data attachments.
  */
-public class WalletHandler {
+public class ServerWalletHandler {
     
     /**
      * Gets the current player money amount from their wallet attachment.
@@ -24,7 +23,6 @@ public class WalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         long balance = wallet.getBalance();
-        // Only log debug messages, not every retrieval
         return balance;
     }
     
@@ -42,7 +40,6 @@ public class WalletHandler {
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         wallet.setBalance(amount);
         
-        // Only log significant wallet changes, not every set operation
         FreeMarket.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
     }
     
@@ -95,53 +92,5 @@ public class WalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         return wallet.hasEnoughBalance(amount);
-    }
-    
-    /**
-     * Client-side method to get money for the current player.
-     * This is used by the GUI when we don't have direct access to the player object.
-     * @return current money amount for the client player
-     */
-    public static long getPlayerMoney() {
-        try {
-            // Try to get the client player
-            net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
-            var clientPlayer = minecraft.player;
-            if (clientPlayer != null) {
-                // In singleplayer, try to get the server player instead of client player
-                var singleplayerServer = minecraft.getSingleplayerServer();
-                if (singleplayerServer != null) {
-                    // We're in singleplayer - get the server player
-                    var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-                    if (serverPlayer != null) {
-                        long balance = getPlayerMoney(serverPlayer);
-                        return balance;
-                    }
-                }
-                
-                // Fallback to client player
-                long balance = getPlayerMoney(clientPlayer);
-                return balance;
-            } else {
-                FreeMarket.LOGGER.warn("Client player is null");
-            }
-        } catch (Exception e) {
-            // If we can't get the player, log the error
-            FreeMarket.LOGGER.error("Could not get client player money: {}", e.getMessage());
-        }
-        
-        // Never fall back to hardcoded value - return 0 if we can't get the player
-        FreeMarket.LOGGER.warn("Could not access client player, returning 0");
-        return 0;
-    }
-    
-    /**
-     * Client-side method to check if player has enough money.
-     * This is used by the GUI when we don't have direct access to the player object.
-     * @param amount the amount to check
-     * @return true if player has enough money
-     */
-    public static boolean hasEnoughMoney(long amount) {
-        return getPlayerMoney() >= amount;
     }
 }

@@ -11,10 +11,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.freemarket.Config;
+import com.freemarket.FreeMarket;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.client.data.ClientMarketplaceCache;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 
 /**
@@ -29,7 +30,6 @@ public class FreeMarketGuiScreen extends Screen {
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
     private long lastBalanceUpdate = 0;
-    private static final long BALANCE_CACHE_DURATION = 1000; // Update every 1 second
     
     public FreeMarketGuiScreen() {
         super(Component.literal(Config.MARKETPLACE_NAME.get()));
@@ -66,16 +66,72 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
-     * Gets the cached wallet balance, updating it only if the cache has expired.
-     * This prevents excessive wallet balance retrieval during rendering.
+     * Gets the cached wallet balance for external access.
+     * @return the cached balance
      */
-    private long getCachedBalance() {
-        long currentTime = System.currentTimeMillis();
-        if (currentTime - lastBalanceUpdate > BALANCE_CACHE_DURATION) {
-            cachedBalance = WalletHandler.getPlayerMoney();
-            lastBalanceUpdate = currentTime;
-        }
+    public long getCachedBalance() {
         return cachedBalance;
+    }
+    
+    
+    /**
+     * Requests wallet balance from server (for multiplayer).
+     * In singleplayer, this will use direct access; in multiplayer, it sends a network request.
+     */
+    private void requestWalletBalance() {
+        try {
+            net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+            var clientPlayer = minecraft.player;
+            if (clientPlayer != null) {
+                // In singleplayer, try to get the server player instead of client player
+                var singleplayerServer = minecraft.getSingleplayerServer();
+                if (singleplayerServer != null) {
+                    // We're in singleplayer - get the server player directly
+                    var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
+                    if (serverPlayer != null) {
+                        long balance = com.freemarket.server.handlers.ServerWalletHandler.getPlayerMoney(serverPlayer);
+                        cachedBalance = balance;
+                        lastBalanceUpdate = System.currentTimeMillis();
+                        return;
+                    }
+                }
+                
+                // In multiplayer, request balance from server
+                com.freemarket.common.network.WalletRequestPacket packet = new com.freemarket.common.network.WalletRequestPacket();
+                net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+            }
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Could not request wallet balance: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * Updates the wallet balance from network sync.
+     * Called when receiving wallet balance from server.
+     * Also updates button states since balance change affects buy/sell availability.
+     */
+    public void updateWalletBalance(long balance) {
+        this.cachedBalance = balance;
+        this.lastBalanceUpdate = System.currentTimeMillis();
+        
+        // Update button states when wallet balance is received from server
+        if (freeMarketContainer != null) {
+            freeMarketContainer.updateButtonStates();
+        }
+    }
+    
+    /**
+     * Updates wallet balance and triggers button state update.
+     * Should only be called when balance changes due to user actions (buy/sell).
+     */
+    public void updateWalletBalanceAndRefreshButtons(long balance) {
+        this.cachedBalance = balance;
+        this.lastBalanceUpdate = System.currentTimeMillis();
+        
+        // Update button states when wallet balance changes due to user actions
+        if (freeMarketContainer != null) {
+            freeMarketContainer.updateButtonStates();
+        }
     }
     
     /**
@@ -83,7 +139,7 @@ public class FreeMarketGuiScreen extends Screen {
      * Call this after transactions to ensure the display is up-to-date.
      */
     public void refreshBalance() {
-        cachedBalance = WalletHandler.getPlayerMoney();
+        cachedBalance = ClientWalletHandler.getPlayerMoney();
         lastBalanceUpdate = System.currentTimeMillis();
     }
     
@@ -163,6 +219,9 @@ public class FreeMarketGuiScreen extends Screen {
         // Refresh marketplace items from file in case they were updated
         loadFreeMarketItemsFromFile();
         
+        // Request wallet balance from server (for multiplayer)
+        requestWalletBalance();
+        
         // Plus button is now handled inside the marketplace container
         
         // Create the marketplace container with responsive positioning
@@ -173,6 +232,9 @@ public class FreeMarketGuiScreen extends Screen {
         
         this.freeMarketContainer = new FreeMarketContainer(containerX, containerY, containerWidth, containerHeight, freeMarketItems, this);
         this.freeMarketContainer.init();
+        
+        // Update button states when GUI opens
+        this.freeMarketContainer.updateButtonStates();
     }
     
     @Override
@@ -194,7 +256,7 @@ public class FreeMarketGuiScreen extends Screen {
     
     private void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
-        long money = getCachedBalance(); // Use cached balance instead of retrieving every frame
+        long money = cachedBalance; // Use only cached balance - no polling
         String formattedMoney = String.format("$%,d", money);
         
         // Create title and money components

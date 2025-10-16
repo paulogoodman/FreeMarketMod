@@ -16,10 +16,11 @@ import java.util.Map;
 
 
 import com.freemarket.Config;
+import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.network.MarketplaceItemOperationPacket;
 import com.freemarket.common.handlers.AdminModeHandler;
-import com.freemarket.common.handlers.WalletHandler;
+import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.common.managers.ItemCategoryManager;
 import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
@@ -40,6 +41,10 @@ public class FreeMarketContainer implements Renderable {
     
     // Caching for processed items with component data
     private final Map<String, ItemStack> processedItemCache = new HashMap<>();
+    
+    // Caching for button states to prevent flickering
+    private final Map<String, Boolean> cachedCanBuyStates = new HashMap<>();
+    private final Map<String, Boolean> cachedCanSellStates = new HashMap<>();
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
     private int itemHeight; // Will be calculated responsively
@@ -171,6 +176,7 @@ public class FreeMarketContainer implements Renderable {
         allItems.addAll(newItems);
         // Clear cache when items are updated
         clearProcessedItemCache();
+        updateButtonStates(); // Update button states when items change
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
     }
     
@@ -472,7 +478,7 @@ public class FreeMarketContainer implements Renderable {
     }
     
     private void renderActionButtons(GuiGraphics guiGraphics, FreeMarketItem item, int itemX, int itemY, int mouseX, int mouseY) {
-        boolean canBuy = canBuyItem(item);
+        boolean canBuy = getCachedCanBuyState(item);
         boolean isBuyCooldown = isBuyButtonInCooldown(item);
         
         // Buy button
@@ -520,7 +526,7 @@ public class FreeMarketContainer implements Renderable {
                              mouseY >= sellButtonY && mouseY <= sellButtonY + sellButtonHeight;
         
         boolean isSellCooldown = isSellButtonInCooldown(item);
-        boolean canSellItem = canSellItem(item);
+        boolean canSellItem = getCachedCanSellState(item);
         
         // Determine sell button state and color
         int sellColor;
@@ -740,12 +746,28 @@ public class FreeMarketContainer implements Renderable {
                 if (mouseX >= buyButtonX - 2.0 && mouseX <= buyButtonX + buyButtonWidth + 2.0 &&
                     mouseY >= buyButtonY - 2.0 && mouseY <= buyButtonY + buyButtonHeight + 2.0) {
                     
-                    // Handle buy button click
-                    if (buyItem(item)) {
-                        // Success - item was bought
-                        return true;
+                    // Check if button is enabled before processing
+                    if (!getCachedCanBuyState(item)) {
+                        return true; // Consume click but don't process - button is disabled
                     }
-                    return true; // Still return true to consume the click
+                    
+                    // Check cooldown before processing
+                    if (isBuyButtonInCooldown(item)) {
+                        return true; // Consume click but don't process
+                    }
+                    
+                    // Set cooldown immediately to prevent spam clicking
+                    long currentTime = System.currentTimeMillis();
+                    buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
+                    
+                    // Send buy request to server via network packet
+                    com.freemarket.common.network.BuyItemRequestPacket packet = new com.freemarket.common.network.BuyItemRequestPacket(item.getGuid());
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    // Update button states after buy operation
+                    updateButtonStates();
+                    
+                    return true; // Consume the click
                 }
                 
                 // Sell button (bottom) - with floating point tolerance
@@ -757,12 +779,28 @@ public class FreeMarketContainer implements Renderable {
                 if (mouseX >= sellButtonX - 2.0 && mouseX <= sellButtonX + sellButtonWidth + 2.0 &&
                     mouseY >= sellButtonY - 2.0 && mouseY <= sellButtonY + sellButtonHeight + 2.0) {
                     
-                    // Handle sell button click
-                    if (sellItem(item)) {
-                        // Success - item was sold
-                        return true;
+                    // Check if button is enabled before processing
+                    if (!getCachedCanSellState(item)) {
+                        return true; // Consume click but don't process - button is disabled
                     }
-                    return true; // Still return true to consume the click
+                    
+                    // Check cooldown before processing
+                    if (isSellButtonInCooldown(item)) {
+                        return true; // Consume click but don't process
+                    }
+                    
+                    // Set cooldown immediately to prevent spam clicking
+                    long currentTime = System.currentTimeMillis();
+                    sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
+                    
+                    // Send sell request to server via network packet
+                    com.freemarket.common.network.SellItemRequestPacket packet = new com.freemarket.common.network.SellItemRequestPacket(item.getGuid());
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    // Update button states after sell operation
+                    updateButtonStates();
+                    
+                    return true; // Consume the click
                 }
                 
                 itemsRendered++;
@@ -809,89 +847,10 @@ public class FreeMarketContainer implements Renderable {
     }
     
     /**
-     * Handles buying an item from the marketplace.
-     * Validates balance, deducts money, and spawns item in inventory or on ground.
-     */
-    private boolean buyItem(FreeMarketItem item) {
-        // Check if button is in cooldown first
-        if (isBuyButtonInCooldown(item)) {
-            return false; // Don't process transaction during cooldown
-        }
-        
-        // Check if player has enough money
-        if (!WalletHandler.hasEnoughMoney(item.getBuyPrice())) {
-            // TODO: Show error message to player
-            return false;
-        }
-        
-        // Set cooldown for this specific item (only after validation passes)
-        long currentTime = System.currentTimeMillis();
-        buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
-        
-        // Get the player
-        Minecraft minecraft = Minecraft.getInstance();
-        Player clientPlayer = minecraft.player;
-        if (clientPlayer == null) {
-            return false;
-        }
-        
-        // Create item with component data applied
-        ItemStack itemToGive = createItemWithComponentData(item);
-        Player playerForInventory = clientPlayer;
-        
-        // In singleplayer, use server player for inventory operations to ensure persistence
-        var singleplayerServer = minecraft.getSingleplayerServer();
-        if (singleplayerServer != null) {
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForInventory = serverPlayer;
-            }
-        }
-        
-        boolean addedToInventory = addItemToInventory(playerForInventory, itemToGive);
-        
-        if (!addedToInventory) {
-            // Drop the item at player's feet
-            playerForInventory.drop(itemToGive, false);
-        }
-        
-        // Deduct money from wallet - use server player if available
-        Player playerForMoney = clientPlayer;
-        if (singleplayerServer != null) {
-            // In singleplayer, get the server player for money operations
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForMoney = serverPlayer;
-            }
-        }
-        
-        WalletHandler.removeMoney(playerForMoney, item.getBuyPrice());
-        
-        // Play purchase sound effect
-        clientPlayer.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 1.0F);
-        
-        // Refresh wallet display and marketplace (preserve scroll position)
-        if (parentScreen != null) {
-            parentScreen.refreshBalance(); // Refresh cached balance
-            parentScreen.refreshMarketplace(true); // Preserve scroll position
-        }
-        
-        return true;
-    }
-    
-    /**
      * Creates an ItemStack with component data applied from the marketplace item.
-     * Uses caching to avoid reprocessing component data every frame.
+     * Always applies component data fresh for rendering to ensure visual effects work.
      */
     private ItemStack createItemWithComponentData(FreeMarketItem item) {
-        // Create cache key from item properties
-        String cacheKey = item.getGuid() + "_" + item.getComponentData().hashCode();
-        
-        // Check if we already have this item processed
-        if (processedItemCache.containsKey(cacheKey)) {
-            return processedItemCache.get(cacheKey).copy();
-        }
-        
         ItemStack baseItemStack = item.getItemStack().copy();
         
         // Apply component data if present
@@ -904,23 +863,53 @@ public class FreeMarketContainer implements Renderable {
             
             if (singleplayerServer != null) {
                 // Use server-side handler with registry access
-                ItemStack result = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                return com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
                     baseItemStack, componentData, singleplayerServer);
-                // Cache the result
-                processedItemCache.put(cacheKey, result.copy());
-                return result;
             } else {
                 // Fallback to client-side processing
                 ItemComponentHandler.applyComponentData(baseItemStack, componentData);
-                // Cache the result
-                processedItemCache.put(cacheKey, baseItemStack.copy());
                 return baseItemStack;
             }
         }
         
-        // Cache the base item stack
-        processedItemCache.put(cacheKey, baseItemStack.copy());
         return baseItemStack;
+    }
+    
+    /**
+     * Gets the cached can buy state for an item.
+     * Only updates when explicitly requested via updateButtonStates().
+     */
+    private boolean getCachedCanBuyState(FreeMarketItem item) {
+        String itemGuid = item.getGuid();
+        return cachedCanBuyStates.computeIfAbsent(itemGuid, guid -> canBuyItem(item));
+    }
+    
+    /**
+     * Gets the cached can sell state for an item.
+     * Only updates when explicitly requested via updateButtonStates().
+     */
+    private boolean getCachedCanSellState(FreeMarketItem item) {
+        String itemGuid = item.getGuid();
+        return cachedCanSellStates.computeIfAbsent(itemGuid, guid -> canSellItem(item));
+    }
+    
+    /**
+     * Updates all button states. Should only be called when:
+     * - GUI opens
+     * - After buy/sell operations
+     * - When wallet balance changes significantly
+     */
+    public void updateButtonStates() {
+        cachedCanBuyStates.clear();
+        cachedCanSellStates.clear();
+        
+        // Pre-calculate states for all items
+        if (allItems != null) {
+            for (FreeMarketItem item : allItems) {
+                cachedCanBuyStates.put(item.getGuid(), canBuyItem(item));
+                cachedCanSellStates.put(item.getGuid(), canSellItem(item));
+            }
+        }
     }
     
     /**
@@ -937,128 +926,6 @@ public class FreeMarketContainer implements Renderable {
         long currentTime = System.currentTimeMillis();
         Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
         return cooldownEnd != null && currentTime < cooldownEnd;
-    }
-    
-    /**
-     * Handles selling an item to the marketplace.
-     * Validates inventory, removes item, and adds money to wallet.
-     */
-    private boolean sellItem(FreeMarketItem item) {
-        // Check if button is in cooldown first
-        if (isSellButtonInCooldown(item)) {
-            return false; // Don't process transaction during cooldown
-        }
-        
-        // Get the player
-        Minecraft minecraft = Minecraft.getInstance();
-        Player clientPlayer = minecraft.player;
-        if (clientPlayer == null) {
-            System.out.println("SELL: No client player found");
-            return false;
-        }
-        
-        // Check if player has the item in inventory - use server player for persistence
-        // Create item with component data applied to ensure proper matching
-        ItemStack itemToSell = createItemWithComponentData(item);
-        Player playerForInventory = clientPlayer;
-        
-        // In singleplayer, use server player for inventory operations to ensure persistence
-        var singleplayerServer = minecraft.getSingleplayerServer();
-        if (singleplayerServer != null) {
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForInventory = serverPlayer;
-            }
-        }
-        
-        if (!hasItemInInventory(playerForInventory, itemToSell)) {
-            // TODO: Show error message to player
-            return false;
-        }
-        
-        // Set cooldown for this specific item (only after validation passes)
-        long currentTime = System.currentTimeMillis();
-        sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
-        
-        // Remove item from inventory
-        removeItemFromInventory(playerForInventory, itemToSell);
-        
-        // Add money to wallet - use server player if available
-        Player playerForMoney = clientPlayer;
-        if (singleplayerServer != null) {
-            // In singleplayer, get the server player for money operations
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForMoney = serverPlayer;
-            }
-        }
-        
-        WalletHandler.addMoney(playerForMoney, item.getSellPrice());
-        
-        // Play sell sound effect (lower pitch note block)
-        clientPlayer.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 0.5F);
-        
-        // Refresh wallet display and marketplace (preserve scroll position)
-        if (parentScreen != null) {
-            parentScreen.refreshBalance(); // Refresh cached balance
-            parentScreen.refreshMarketplace(true); // Preserve scroll position
-        }
-        
-        return true;
-    }
-    
-    /**
-     * Checks if the player has the specified item in their inventory.
-     * Checks total count across all stacks, not individual stack counts.
-     */
-    private boolean hasItemInInventory(Player player, ItemStack itemToCheck) {
-        var inventory = player.getInventory();
-        int totalCount = 0;
-        
-        // Count all matching items across the entire inventory
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack slotItem = inventory.getItem(i);
-            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
-                totalCount += slotItem.getCount();
-            }
-        }
-        
-        return totalCount >= itemToCheck.getCount();
-    }
-    
-    /**
-     * Removes the specified item from the player's inventory.
-     * Prioritizes removing from stacks with the fewest items.
-     */
-    private void removeItemFromInventory(Player player, ItemStack itemToRemove) {
-        var inventory = player.getInventory();
-        int remainingToRemove = itemToRemove.getCount();
-        
-        // First pass: find all matching stacks and sort by count (fewest first)
-        java.util.List<java.util.Map.Entry<Integer, ItemStack>> matchingStacks = new java.util.ArrayList<>();
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack slotItem = inventory.getItem(i);
-            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToRemove)) {
-                matchingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
-            }
-        }
-        
-        // Sort by count (ascending - fewest items first)
-        matchingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
-        
-        // Remove items starting from stacks with fewest items
-        for (var entry : matchingStacks) {
-            if (remainingToRemove <= 0) break;
-            
-            int slotIndex = entry.getKey();
-            ItemStack slotItem = entry.getValue();
-            int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
-            slotItem.shrink(removeFromSlot);
-            remainingToRemove -= removeFromSlot;
-            
-            // Update the slot
-            inventory.setItem(slotIndex, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
-        }
     }
     
     /**
@@ -1177,7 +1044,19 @@ public class FreeMarketContainer implements Renderable {
             }
         }
         
-        return hasItemInInventory(playerForCheck, itemToCheck);
+        // Check if player has the item in inventory
+        var inventory = playerForCheck.getInventory();
+        int totalCount = 0;
+        
+        // Count all matching items across the entire inventory
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
+                totalCount += slotItem.getCount();
+            }
+        }
+        
+        return totalCount >= itemToCheck.getCount();
     }
     
     /**
@@ -1189,8 +1068,14 @@ public class FreeMarketContainer implements Renderable {
             return false;
         }
         
-        // Then check if player has enough money
-        return WalletHandler.hasEnoughMoney(item.getBuyPrice());
+        // Use the GUI's cached balance instead of calling ClientWalletHandler directly
+        if (parentScreen != null) {
+            long cachedBalance = parentScreen.getCachedBalance();
+            return cachedBalance >= item.getBuyPrice();
+        }
+        
+        // Fallback to ClientWalletHandler if no parent screen
+        return ClientWalletHandler.hasEnoughMoney(item.getBuyPrice());
     }
     
     
@@ -1215,3 +1100,4 @@ public class FreeMarketContainer implements Renderable {
         // Narration support
     }
 }
+

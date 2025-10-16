@@ -37,6 +37,7 @@ import com.freemarket.server.data.FreeMarketDataManager;
 import com.freemarket.server.commands.FreeMarketCommands;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
 import com.freemarket.common.network.AdminModeNetworkHandler;
+import com.freemarket.common.network.SellItemNetworkHandler;
 import com.freemarket.server.events.ServerEventHandler;
 import com.freemarket.server.events.ServerMarketplaceEventHandler;
 
@@ -95,6 +96,9 @@ public class FreeMarket {
         
         // Register network handler for admin mode synchronization
         modEventBus.addListener(AdminModeNetworkHandler::register);
+        
+        // Register network handler for sell item operations
+        modEventBus.addListener(SellItemNetworkHandler::register);
         
         // Register server event handler for player join events
         NeoForge.EVENT_BUS.register(ServerEventHandler.class);

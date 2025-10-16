@@ -10,12 +10,14 @@ import net.minecraft.sounds.SoundEvents;
 import javax.annotation.Nonnull;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 
 import com.freemarket.Config;
 import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.network.MarketplaceItemOperationPacket;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.common.handlers.WalletHandler;
 import com.freemarket.common.managers.ItemCategoryManager;
@@ -35,6 +37,9 @@ public class FreeMarketContainer implements Renderable {
     private List<FreeMarketItem> allItems;
     private final FreeMarketGuiScreen parentScreen;
     private EditBox searchBox;
+    
+    // Caching for processed items with component data
+    private final Map<String, ItemStack> processedItemCache = new HashMap<>();
     private int scrollOffset = 0;
     private int maxVisibleItems = 0;
     private int itemHeight; // Will be calculated responsively
@@ -164,6 +169,8 @@ public class FreeMarketContainer implements Renderable {
     public void updateItems(List<FreeMarketItem> newItems) {
         allItems.clear();
         allItems.addAll(newItems);
+        // Clear cache when items are updated
+        clearProcessedItemCache();
         onSearchChanged(searchBox != null ? searchBox.getValue() : "");
     }
     
@@ -361,7 +368,7 @@ public class FreeMarketContainer implements Renderable {
         }
         
         // Create item stack with the marketplace quantity for display
-        // Create display stack with component data applied
+        // Create display stack with component data applied for visual effects (glint, trim, etc.)
         net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
         displayStack.setCount(item.getQuantity());
         
@@ -714,13 +721,9 @@ public class FreeMarketContainer implements Renderable {
                         
                         if (mouseX >= deleteButtonX - 2.0 && mouseX <= deleteButtonX + deleteButtonSize + 2.0 &&
                             mouseY >= deleteButtonY - 2.0 && mouseY <= deleteButtonY + deleteButtonSize + 2.0) {
-                            // Delete item from marketplace
-                            ClientFreeMarketDataManager.removeFreeMarketItem(item);
-                            
-                            // Refresh the marketplace display (preserve scroll position)
-                            if (parentScreen != null) {
-                                parentScreen.refreshMarketplace(true); // Preserve scroll position
-                            }
+                            // Send delete request to server via network packet
+                            MarketplaceItemOperationPacket packet = MarketplaceItemOperationPacket.removeItem(item);
+                            net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                             
                             return true;
                         }
@@ -878,9 +881,17 @@ public class FreeMarketContainer implements Renderable {
     
     /**
      * Creates an ItemStack with component data applied from the marketplace item.
-     * Uses server-side processing for proper registry access.
+     * Uses caching to avoid reprocessing component data every frame.
      */
     private ItemStack createItemWithComponentData(FreeMarketItem item) {
+        // Create cache key from item properties
+        String cacheKey = item.getGuid() + "_" + item.getComponentData().hashCode();
+        
+        // Check if we already have this item processed
+        if (processedItemCache.containsKey(cacheKey)) {
+            return processedItemCache.get(cacheKey).copy();
+        }
+        
         ItemStack baseItemStack = item.getItemStack().copy();
         
         // Apply component data if present
@@ -895,14 +906,28 @@ public class FreeMarketContainer implements Renderable {
                 // Use server-side handler with registry access
                 ItemStack result = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
                     baseItemStack, componentData, singleplayerServer);
+                // Cache the result
+                processedItemCache.put(cacheKey, result.copy());
                 return result;
             } else {
                 // Fallback to client-side processing
                 ItemComponentHandler.applyComponentData(baseItemStack, componentData);
+                // Cache the result
+                processedItemCache.put(cacheKey, baseItemStack.copy());
+                return baseItemStack;
             }
         }
         
+        // Cache the base item stack
+        processedItemCache.put(cacheKey, baseItemStack.copy());
         return baseItemStack;
+    }
+    
+    /**
+     * Clears the processed item cache. Should be called when marketplace data changes.
+     */
+    public void clearProcessedItemCache() {
+        processedItemCache.clear();
     }
     
     /**

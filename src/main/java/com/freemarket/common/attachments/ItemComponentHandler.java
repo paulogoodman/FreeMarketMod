@@ -25,15 +25,12 @@ public class ItemComponentHandler {
         if (componentDataString != null && !componentDataString.trim().isEmpty()) {
             try {
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
-                FreeMarket.LOGGER.info("Parsed component tag: {}", componentTag);
                 
                 // Handle each component type separately
                 applyEnchantments(itemStack, componentTag);
                 applyArmorTrim(itemStack, componentTag);
                 applyCustomData(itemStack, componentTag);
                 applyOtherComponents(itemStack, componentTag);
-                
-                FreeMarket.LOGGER.info("Successfully applied all components");
             } catch (Exception e) {
                 FreeMarket.LOGGER.error("Failed to apply component data: {}", e.getMessage());
                 e.printStackTrace();
@@ -78,8 +75,6 @@ public class ItemComponentHandler {
         if (componentTag.contains("minecraft:enchantments")) {
             try {
                 Tag enchantmentsTag = componentTag.get("minecraft:enchantments");
-                // For now, just log that we found enchantments
-                FreeMarket.LOGGER.info("Found enchantments to apply: {}", enchantmentsTag);
                 // TODO: Implement proper enchantment application
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply enchantments: {}", e.getMessage());

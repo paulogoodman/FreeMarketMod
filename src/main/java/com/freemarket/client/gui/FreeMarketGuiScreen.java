@@ -12,6 +12,7 @@ import java.util.List;
 
 import com.freemarket.Config;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
+import com.freemarket.client.data.ClientMarketplaceCache;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.handlers.WalletHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
@@ -37,6 +38,12 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     private void loadFreeMarketItemsFromFile() {
+        // First check if we have cached data from network sync
+        if (ClientMarketplaceCache.hasCachedData()) {
+            this.freeMarketItems = ClientMarketplaceCache.getCachedItems();
+            return;
+        }
+        
         // Try to use server-side loading first (with SavedData attachments)
         Minecraft minecraft = Minecraft.getInstance();
         var singleplayerServer = minecraft.getSingleplayerServer();
@@ -81,11 +88,35 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Updates marketplace data from network sync.
+     * Called when receiving marketplace data from server.
+     */
+    public void updateMarketplaceData(List<FreeMarketItem> items) {
+        this.freeMarketItems = new ArrayList<>(items);
+        
+        // Update the marketplace container with new data
+        if (freeMarketContainer != null) {
+            freeMarketContainer.updateFreeMarketItems(freeMarketItems, true); // Preserve scroll position
+        }
+    }
+    
+    /**
      * Forces a refresh of the marketplace data.
      * Invalidates the cache and reloads from file.
      * @param preserveScrollPosition If true, preserves the current scroll position
      */
     public void refreshMarketplace(boolean preserveScrollPosition) {
+        // First check if we have cached data from network sync
+        if (ClientMarketplaceCache.hasCachedData()) {
+            this.freeMarketItems = ClientMarketplaceCache.getCachedItems();
+            
+            // Update the marketplace container with new data
+            if (freeMarketContainer != null) {
+                freeMarketContainer.updateFreeMarketItems(freeMarketItems, preserveScrollPosition);
+            }
+            return;
+        }
+        
         // Try to use server-side loading first (with SavedData attachments)
         Minecraft minecraft = Minecraft.getInstance();
         var singleplayerServer = minecraft.getSingleplayerServer();

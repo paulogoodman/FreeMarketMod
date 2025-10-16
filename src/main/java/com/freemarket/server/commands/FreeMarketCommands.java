@@ -488,6 +488,9 @@ public class FreeMarketCommands {
         // Clear marketplace using JSON system
         FreeMarketDataManager.saveFreeMarketItems(level, new ArrayList<>());
         
+        // Sync empty marketplace data to all players
+        com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, new ArrayList<>());
+        
         Component message = Component.translatable("command.FreeMarket.freemarket.clear.success");
         source.sendSuccess(() -> message, true);
         
@@ -528,6 +531,9 @@ public class FreeMarketCommands {
             List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
             existingItems.add(FreeMarketItem);
             FreeMarketDataManager.saveFreeMarketItems(level, existingItems);
+            
+            // Sync marketplace data to all players
+            com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, existingItems);
             
             Component message = Component.translatable("command.FreeMarket.freemarket.additem.success", 
                 itemId, quantity, buyPrice, sellPrice);
@@ -633,6 +639,9 @@ public class FreeMarketCommands {
             List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
             existingItems.add(marketplaceItem);
             FreeMarketDataManager.saveFreeMarketItems(level, existingItems);
+            
+            // Sync marketplace data to all players
+            com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, existingItems);
             
             // Get item display name for confirmation message
             String itemName = itemToSell.getDisplayName().getString();

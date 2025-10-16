@@ -14,6 +14,7 @@ import javax.annotation.Nonnull;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.network.MarketplaceItemOperationPacket;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.common.attachments.ItemComponentHandler;
 
@@ -214,8 +215,9 @@ public class AddItemPopupScreen extends Screen {
                 this.componentDataBox.getValue() // Pass the component data from the text field
             );
             
-            // Add to marketplace via client data manager
-            ClientFreeMarketDataManager.addFreeMarketItem(FreeMarketItem);
+            // Add to marketplace via network packet (server-side)
+            MarketplaceItemOperationPacket packet = MarketplaceItemOperationPacket.addItem(FreeMarketItem);
+            net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
             
             FreeMarket.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
                 itemStack.getItem().getDescription().getString(), buyPrice, sellPrice, quantity);

@@ -38,6 +38,7 @@ import com.freemarket.server.commands.FreeMarketCommands;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
 import com.freemarket.common.network.AdminModeNetworkHandler;
 import com.freemarket.server.events.ServerEventHandler;
+import com.freemarket.server.events.ServerMarketplaceEventHandler;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(FreeMarket.MODID)
@@ -97,6 +98,9 @@ public class FreeMarket {
         
         // Register server event handler for player join events
         NeoForge.EVENT_BUS.register(ServerEventHandler.class);
+        
+        // Register marketplace event handler for marketplace sync
+        NeoForge.EVENT_BUS.register(ServerMarketplaceEventHandler.class);
 
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);

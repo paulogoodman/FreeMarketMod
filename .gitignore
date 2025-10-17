@@ -2,7 +2,6 @@
 .gradle/
 build/
 gradle-app.setting
-!gradle-wrapper.jar
 !gradle-wrapper.properties
 
 # IDE
@@ -52,6 +51,7 @@ options.txt
 # Java
 *.class
 *.jar
+!gradle-wrapper.jar
 *.war
 *.ear
 *.zip

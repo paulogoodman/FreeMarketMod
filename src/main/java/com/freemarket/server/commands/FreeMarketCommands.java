@@ -29,10 +29,38 @@ import java.util.List;
 
 /**
  * Marketplace-related commands for the FreeMarket mod.
- * These commands allow OPs to manage player money balances and admin mode.
+ * These commands allow players to manage their economy and OPs to manage the marketplace.
+ * 
+ * <p>Command Structure:</p>
+ * <ul>
+ *   <li>Player Commands: help, balance, pay</li>
+ *   <li>Admin Commands: adminmode, itemdata, list, balance management, clear, additem</li>
+ * </ul>
+ * 
+ * <p>Available Command Aliases:</p>
+ * <ul>
+ *   <li>/freemarket - Main command</li>
+ *   <li>/fm - Short alias</li>
+ * </ul>
  */
 @EventBusSubscriber(modid = FreeMarket.MODID)
 public class FreeMarketCommands {
+    
+    // Permission levels
+    private static final int ADMIN_PERMISSION_LEVEL = 2;
+    
+    // Command names
+    private static final String MAIN_COMMAND = "freemarket";
+    private static final String ALIAS_COMMAND = "fm";
+    
+    // Argument names
+    private static final String ARG_PLAYER = "player";
+    private static final String ARG_AMOUNT = "amount";
+    private static final String ARG_ITEM = "item";
+    private static final String ARG_BUY_PRICE = "buyPrice";
+    private static final String ARG_SELL_PRICE = "sellPrice";
+    private static final String ARG_QUANTITY = "quantity";
+    private static final String ARG_ENABLED = "enabled";
 
     @SubscribeEvent
     public static void onRegisterCommands(net.neoforged.neoforge.event.RegisterCommandsEvent event) {
@@ -41,76 +69,168 @@ public class FreeMarketCommands {
     }
 
     /**
-     * Registers all marketplace commands.
+     * Registers all marketplace commands with both main command and alias.
+     * 
+     * @param dispatcher The command dispatcher to register commands with
      */
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
-        // Register main marketplace command
-        registerFreeMarketCommands(dispatcher, "freemarket");
-        
-        // Register fm alias
-        registerFreeMarketCommands(dispatcher, "fm");
+        registerCommands(dispatcher, MAIN_COMMAND);
+        registerCommands(dispatcher, ALIAS_COMMAND);
     }
     
     /**
-     * Registers marketplace commands with the given command name.
+     * Registers all marketplace commands with the given command name.
+     * 
+     * @param dispatcher The command dispatcher to register commands with
+     * @param commandName The name of the command to register
      */
-    private static void registerFreeMarketCommands(CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
-        // Commands available to all players
+    private static void registerCommands(CommandDispatcher<CommandSourceStack> dispatcher, String commandName) {
         dispatcher.register(Commands.literal(commandName)
-            .then(Commands.literal("help")
-                .executes(FreeMarketCommands::showHelp))
-            .then(Commands.literal("balance")
-                .executes(FreeMarketCommands::getOwnBalance)
-                .then(Commands.argument("player", StringArgumentType.word())
-                    .requires(source -> source.hasPermission(2)) // OP level 2 required
-                    .executes(FreeMarketCommands::getBalance)))
-            .then(Commands.literal("pay")
-                .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                        .executes(FreeMarketCommands::payPlayer))))
-            .then(Commands.literal("itemdata")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .executes(FreeMarketCommands::getHeldItemData))
-            .then(Commands.literal("list")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.literal("hand")
-                    .then(Commands.argument("buyPrice", LongArgumentType.longArg(1))
-                        .then(Commands.argument("sellPrice", LongArgumentType.longArg(1))
-                            .executes(FreeMarketCommands::listHeldItem)))))
-            .then(Commands.literal("adminmode")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("enabled", BoolArgumentType.bool())
-                    .executes(FreeMarketCommands::executeAdminMode)
-                )
-                .executes(FreeMarketCommands::toggleAdminMode))
-            .then(Commands.literal("balance")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.literal("add")
-                    .then(Commands.argument("player", StringArgumentType.word())
-                        .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                            .executes(FreeMarketCommands::addMoney))))
-                .then(Commands.literal("remove")
-                    .then(Commands.argument("player", StringArgumentType.word())
-                        .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                            .executes(FreeMarketCommands::removeMoney))))
-                .then(Commands.literal("set")
-                    .then(Commands.argument("player", StringArgumentType.word())
-                        .then(Commands.argument("amount", LongArgumentType.longArg(0))
-                            .executes(FreeMarketCommands::setMoney)))))
-            .then(Commands.literal("clear")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .executes(FreeMarketCommands::clearMarketplace))
-            .then(Commands.literal("additem")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("item", StringArgumentType.word())
-                    .then(Commands.argument("buyPrice", IntegerArgumentType.integer(1))
-                        .then(Commands.argument("sellPrice", IntegerArgumentType.integer(0))
-                            .then(Commands.argument("quantity", IntegerArgumentType.integer(1))
-                                .executes(FreeMarketCommands::addItemToMarketplace)))))));;
+            .then(buildHelpCommand())
+            .then(buildBalanceCommands())
+            .then(buildPayCommand())
+            .then(buildAdminModeCommand())
+            .then(buildItemDataCommand())
+            .then(buildListCommand())
+            .then(buildBalanceManagementCommands())
+            .then(buildClearCommand())
+            .then(buildAddItemCommand()));
+    }
+    
+    /**
+     * Builds the help command.
+     * 
+     * @return Command builder for help command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildHelpCommand() {
+        return Commands.literal("help")
+            .executes(FreeMarketCommands::showHelp);
+    }
+    
+    /**
+     * Builds balance-related commands (both player and admin).
+     * 
+     * @return Command builder for balance commands
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildBalanceCommands() {
+        return Commands.literal("balance")
+            .executes(FreeMarketCommands::getOwnBalance)
+            .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
+                .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+                .executes(FreeMarketCommands::getBalance));
+    }
+    
+    /**
+     * Builds the pay command for players.
+     * 
+     * @return Command builder for pay command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildPayCommand() {
+        return Commands.literal("pay")
+            .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
+                .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
+                    .executes(FreeMarketCommands::payPlayer)));
+    }
+    
+    /**
+     * Builds admin mode commands.
+     * 
+     * @return Command builder for admin mode commands
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildAdminModeCommand() {
+        return Commands.literal("adminmode")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .then(Commands.argument(ARG_ENABLED, BoolArgumentType.bool())
+                .executes(FreeMarketCommands::executeAdminMode))
+            .executes(FreeMarketCommands::toggleAdminMode);
+    }
+    
+    /**
+     * Builds item data command.
+     * 
+     * @return Command builder for item data command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildItemDataCommand() {
+        return Commands.literal("itemdata")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .executes(FreeMarketCommands::getHeldItemData);
+    }
+    
+    /**
+     * Builds list command for adding items to marketplace.
+     * 
+     * @return Command builder for list command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildListCommand() {
+        return Commands.literal("list")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .then(Commands.literal("hand")
+                .then(Commands.argument(ARG_BUY_PRICE, LongArgumentType.longArg(1))
+                    .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(1))
+                        .executes(FreeMarketCommands::listHeldItem))));
+    }
+    
+    /**
+     * Builds balance management commands (add, remove, set).
+     * 
+     * @return Command builder for balance management commands
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildBalanceManagementCommands() {
+        return Commands.literal("balance")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .then(Commands.literal("add")
+                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
+                        .executes(FreeMarketCommands::addMoney))))
+            .then(Commands.literal("remove")
+                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
+                        .executes(FreeMarketCommands::removeMoney))))
+            .then(Commands.literal("set")
+                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(0))
+                        .executes(FreeMarketCommands::setMoney))));
+    }
+    
+    /**
+     * Builds clear marketplace command.
+     * 
+     * @return Command builder for clear command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildClearCommand() {
+        return Commands.literal("clear")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .executes(FreeMarketCommands::clearMarketplace);
+    }
+    
+    /**
+     * Builds add item command.
+     * 
+     * @return Command builder for add item command
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildAddItemCommand() {
+        return Commands.literal("additem")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .then(Commands.argument(ARG_ITEM, StringArgumentType.word())
+                .then(Commands.argument(ARG_BUY_PRICE, IntegerArgumentType.integer(1))
+                    .then(Commands.argument(ARG_SELL_PRICE, IntegerArgumentType.integer(0))
+                        .then(Commands.argument(ARG_QUANTITY, IntegerArgumentType.integer(1))
+                            .executes(FreeMarketCommands::addItemToMarketplace)))));
     }
 
+    // ============================================================================
+    // COMMAND EXECUTION METHODS
+    // ============================================================================
+    
     /**
      * Gets the balance of the current user (no parameters).
+     * 
+     * <p>Usage: /freemarket balance</p>
+     * <p>Permission: None (available to all players)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if the source is not a player
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int getOwnBalance(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
@@ -129,7 +249,14 @@ public class FreeMarketCommands {
     }
 
     /**
-     * Gets the balance of a player by name.
+     * Gets the balance of a specific player by name.
+     * 
+     * <p>Usage: /freemarket balance &lt;player&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful (regardless of player found/not found)
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int getBalance(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
@@ -154,7 +281,14 @@ public class FreeMarketCommands {
     }
 
     /**
-     * Adds money to a player by name.
+     * Adds money to a player's account.
+     * 
+     * <p>Usage: /freemarket balance add &lt;player&gt; &lt;amount&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful (regardless of player found/not found)
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int addMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
@@ -187,7 +321,14 @@ public class FreeMarketCommands {
     }
 
     /**
-     * Removes money from a player by name.
+     * Removes money from a player's account.
+     * 
+     * <p>Usage: /freemarket balance remove &lt;player&gt; &lt;amount&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful (regardless of player found/not found)
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int removeMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
@@ -229,7 +370,14 @@ public class FreeMarketCommands {
     }
 
     /**
-     * Sets the money of a player by name.
+     * Sets a player's money to a specific amount.
+     * 
+     * <p>Usage: /freemarket balance set &lt;player&gt; &lt;amount&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful (regardless of player found/not found)
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int setMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String playerName = StringArgumentType.getString(context, "player");
@@ -261,8 +409,24 @@ public class FreeMarketCommands {
         return 1;
     }
     
+    // ============================================================================
+    // HELPER METHODS
+    // ============================================================================
+    
     /**
      * Helper method to find a player by name, works in both singleplayer and multiplayer.
+     * 
+     * <p>This method performs multiple search strategies:</p>
+     * <ul>
+     *   <li>Standard player list lookup</li>
+     *   <li>Case-insensitive search through all players</li>
+     *   <li>Singleplayer command executor matching</li>
+     *   <li>Profile cache lookup by UUID</li>
+     * </ul>
+     * 
+     * @param source The command source for server access
+     * @param playerName The name of the player to find
+     * @return The ServerPlayer if found, null otherwise
      */
     private static ServerPlayer findPlayer(CommandSourceStack source, String playerName) {
         // First try the standard player list lookup
@@ -305,9 +469,13 @@ public class FreeMarketCommands {
     }
     
     /**
-     * Executes the adminmode command with a boolean argument.
-     * @param context the command context
-     * @return command result
+     * Executes the admin mode command with a boolean argument.
+     * 
+     * <p>Usage: /freemarket adminmode &lt;true/false&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful
      */
     private static int executeAdminMode(CommandContext<CommandSourceStack> context) {
         boolean enabled = BoolArgumentType.getBool(context, "enabled");
@@ -322,8 +490,12 @@ public class FreeMarketCommands {
     
     /**
      * Toggles admin mode when no argument is provided.
-     * @param context the command context
-     * @return command result
+     * 
+     * <p>Usage: /freemarket adminmode</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful
      */
     private static int toggleAdminMode(CommandContext<CommandSourceStack> context) {
         boolean newState = AdminModeHandler.toggleAdminMode(context.getSource().getServer());
@@ -337,6 +509,13 @@ public class FreeMarketCommands {
     
     /**
      * Pays money from one player to another.
+     * 
+     * <p>Usage: /freemarket pay &lt;player&gt; &lt;amount&gt;</p>
+     * <p>Permission: None (available to all players)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if transaction fails
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int payPlayer(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String targetPlayerName = StringArgumentType.getString(context, "player");
@@ -403,6 +582,13 @@ public class FreeMarketCommands {
     /**
      * Gets the component data for the held item in a copy-pastable format.
      * Shows detailed information about enchantments, armor trims, and other component data.
+     * 
+     * <p>Usage: /freemarket itemdata</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if no item held or error occurs
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int getHeldItemData(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
@@ -479,8 +665,13 @@ public class FreeMarketCommands {
     
     /**
      * Clears all items from the marketplace.
-     * @param context the command context
-     * @return command result
+     * 
+     * <p>Usage: /freemarket clear</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int clearMarketplace(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();
@@ -500,8 +691,13 @@ public class FreeMarketCommands {
     
     /**
      * Adds an item to the marketplace via command.
-     * @param context the command context
-     * @return command result
+     * 
+     * <p>Usage: /freemarket additem &lt;item&gt; &lt;buyPrice&gt; &lt;sellPrice&gt; &lt;quantity&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if item is invalid or error occurs
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int addItemToMarketplace(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String itemId = StringArgumentType.getString(context, "item");
@@ -551,8 +747,12 @@ public class FreeMarketCommands {
     
     /**
      * Shows help information for all available FreeMarket commands.
-     * @param context the command context
-     * @return command result
+     * 
+     * <p>Usage: /freemarket help</p>
+     * <p>Permission: None (available to all players)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful
      */
     private static int showHelp(CommandContext<CommandSourceStack> context) {
         CommandSourceStack source = context.getSource();
@@ -567,7 +767,7 @@ public class FreeMarketCommands {
         source.sendSuccess(() -> Component.literal("§7/freemarket pay <player> <amount>§r - Pay money to another player"), false);
         
         // Admin commands (OP only)
-        if (source.hasPermission(2)) {
+        if (source.hasPermission(ADMIN_PERMISSION_LEVEL)) {
             source.sendSuccess(() -> Component.literal("§cAdmin Commands (OP Required):§r"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket adminmode [true/false]§r - Enable/disable admin mode"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
@@ -588,8 +788,13 @@ public class FreeMarketCommands {
     /**
      * Lists the item currently held in the player's hand to the marketplace.
      * Captures all NBT data including enchantments and armor trims.
-     * @param context the command context
-     * @return command result
+     * 
+     * <p>Usage: /freemarket list hand &lt;buyPrice&gt; &lt;sellPrice&gt;</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if no item held or error occurs
+     * @throws CommandSyntaxException if command syntax is invalid
      */
     private static int listHeldItem(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         CommandSourceStack source = context.getSource();

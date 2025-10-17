@@ -6,6 +6,9 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.HashMap;
+import java.util.Map;
+
 /**
  * Renders modern item cards with proper GUI scaling support
  * Works like a widget with internal layout management
@@ -15,6 +18,14 @@ public class ItemCardRenderer {
     // Texture locations for delete icons
     private static final ResourceLocation DELETE_ICON_UNSELECTED = ResourceLocation.fromNamespaceAndPath("freemarket", "textures/gui/trash_can_icon_unselected.png");
     private static final ResourceLocation DELETE_ICON_SELECTED = ResourceLocation.fromNamespaceAndPath("freemarket", "textures/gui/trash_can_model.png");
+    
+    // Cache for CardLayout instances to avoid recreation on every render
+    private static CardLayout cachedLayout;
+    private static int cachedX, cachedY, cachedWidth, cachedHeight;
+    private static float cachedGuiScale;
+    
+    // Cache for text truncation to avoid binary search on every render
+    private final Map<String, String> textTruncationCache = new HashMap<>();
     
     /**
      * Represents the layout/bounds of a button within the card
@@ -70,31 +81,6 @@ public class ItemCardRenderer {
         }
     }
     
-    /**
-     * Calculates the actual space used by the icon after dynamic adjustments
-     * This matches the logic in renderItemIcon to ensure consistent positioning
-     */
-    private static int calculateActualIconSpaceUsed(int x, int y, int cardWidth, int cardHeight, float guiScale) {
-        // Calculate icon size and position with proper boundaries (same as renderItemIcon)
-        int iconPadding = Math.max(2, cardWidth / 20); // Minimum 2px padding
-        int maxIconSize = cardWidth - (iconPadding * 2); // Maximum size with padding
-        int minIconSize = Math.max(8, (int)(12 / guiScale)); // Scale minimum size inversely with GUI scale
-        
-        // Calculate icon size to fit within card boundaries
-        int iconSize = Math.max(minIconSize, Math.min(maxIconSize, cardWidth / 4)); // Maximum 25% of card width
-        int iconY = y + iconPadding; // Position from top with padding
-        
-        // Ensure icon doesn't overlap with buttons
-        int buttonAreaHeight = cardHeight / 3; // Reserve space for buttons (roughly 33%)
-        int maxIconY = y + cardHeight - buttonAreaHeight - iconPadding;
-        if (iconY + iconSize > maxIconY) {
-            // Reduce icon size if it would overlap with buttons
-            iconSize = Math.max(minIconSize, maxIconY - iconY);
-        }
-        
-        // Return the actual space used by the icon (from top to bottom)
-        return iconY + iconSize - y; // Space used from card top
-    }
     public void renderItemCard(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y, 
                               int cardWidth, int cardHeight, int mouseX, int mouseY, float guiScale,
                               boolean canBuy, boolean canSell, boolean isBuyCooldown, boolean isSellCooldown,
@@ -120,25 +106,6 @@ public class ItemCardRenderer {
                            canBuy, canSell, isBuyCooldown, isSellCooldown, buyPrice, sellPrice);
     }
     
-    /**
-     * Legacy method for backward compatibility
-     */
-    public void renderItemCard(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y, 
-                              int cardWidth, int cardHeight, int mouseX, int mouseY) {
-        Minecraft client = Minecraft.getInstance();
-        float guiScale = (float) client.getWindow().getGuiScale();
-        renderItemCard(guiGraphics, itemStack, x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale,
-                      true, true, false, false, 0, 0); // Default: enabled buttons, no cooldown, no prices
-    }
-    
-    /**
-     * Legacy method for backward compatibility
-     */
-    public void renderItemCard(GuiGraphics guiGraphics, ItemStack itemStack, int x, int y, 
-                              int cardWidth, int cardHeight, int mouseX, int mouseY, float guiScale) {
-        renderItemCard(guiGraphics, itemStack, x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale,
-                      true, true, false, false, 0, 0); // Default: enabled buttons, no cooldown, no prices
-    }
     
     /**
      * Renders the card background (no hover effect on the card itself)
@@ -235,7 +202,7 @@ public class ItemCardRenderer {
     private void renderActionButtons(GuiGraphics guiGraphics, int x, int y, int cardWidth, int cardHeight, int mouseX, int mouseY, float guiScale,
                                    boolean canBuy, boolean canSell, boolean isBuyCooldown, boolean isSellCooldown, long buyPrice, long sellPrice) {
         // Create layout once - this is our "div" with all bounds calculated
-        CardLayout layout = new CardLayout(x, y, cardWidth, cardHeight, guiScale);
+        CardLayout layout = getCachedCardLayout(x, y, cardWidth, cardHeight, guiScale);
         
         // Check hover states using CardLayout (same logic as click detection)
         boolean isBuyHovered = layout.buyButton.contains(mouseX, mouseY);
@@ -393,35 +360,56 @@ public class ItemCardRenderer {
     /**
      * Truncates text to fit within the specified width, adding ellipsis if needed.
      * Examples: "Buy $1000000" -> "Buy $1000..", "Sell $500" -> "Sell $500"
+     * Uses caching to avoid binary search on every render
      */
-    private static String truncateTextToWidth(String text, int maxWidth) {
+    private String truncateTextToWidth(String text, int maxWidth) {
+        // Create cache key
+        String cacheKey = text + "|" + maxWidth;
+        
+        // Check cache first
+        if (textTruncationCache.containsKey(cacheKey)) {
+            return textTruncationCache.get(cacheKey);
+        }
+        
         Minecraft client = Minecraft.getInstance();
         int textWidth = client.font.width(text);
         
+        String result;
+        
         // If text fits, return as-is
         if (textWidth <= maxWidth) {
-            return text;
-        }
-        
-        // Binary search to find the maximum characters that fit
-        int left = 0;
-        int right = text.length();
-        String bestFit = "";
-        
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            String candidate = text.substring(0, mid) + "..";
-            int candidateWidth = client.font.width(candidate);
+            result = text;
+        } else {
+            // Binary search to find the maximum characters that fit
+            int left = 0;
+            int right = text.length();
+            String bestFit = "";
             
-            if (candidateWidth <= maxWidth) {
-                bestFit = candidate;
-                left = mid + 1;
-            } else {
-                right = mid - 1;
+            while (left <= right) {
+                int mid = (left + right) / 2;
+                String candidate = text.substring(0, mid) + "..";
+                int candidateWidth = client.font.width(candidate);
+                
+                if (candidateWidth <= maxWidth) {
+                    bestFit = candidate;
+                    left = mid + 1;
+                } else {
+                    right = mid - 1;
+                }
             }
+            
+            result = bestFit.isEmpty() ? ".." : bestFit;
         }
         
-        return bestFit.isEmpty() ? ".." : bestFit;
+        // Cache the result
+        textTruncationCache.put(cacheKey, result);
+        
+        // Limit cache size to prevent memory leaks
+        if (textTruncationCache.size() > 1000) {
+            textTruncationCache.clear();
+        }
+        
+        return result;
     }
 
     /**
@@ -433,7 +421,7 @@ public class ItemCardRenderer {
         if (buyPrice <= 0) {
             return false; // Button not rendered if price is 0
         }
-        CardLayout layout = new CardLayout(x, y, cardWidth, cardHeight, guiScale);
+        CardLayout layout = getCachedCardLayout(x, y, cardWidth, cardHeight, guiScale);
         return layout.buyButton.contains(mouseX, mouseY);
     }
 
@@ -446,27 +434,10 @@ public class ItemCardRenderer {
         if (sellPrice <= 0) {
             return false; // Button not rendered if price is 0
         }
-        CardLayout layout = new CardLayout(x, y, cardWidth, cardHeight, guiScale);
+        CardLayout layout = getCachedCardLayout(x, y, cardWidth, cardHeight, guiScale);
         return layout.sellButton.contains(mouseX, mouseY);
     }
     
-    /**
-     * Checks if a click occurred on a buy button (legacy method for backward compatibility)
-     */
-    public boolean isBuyButtonClicked(int x, int y, int cardWidth, int cardHeight, int mouseX, int mouseY) {
-        Minecraft client = Minecraft.getInstance();
-        float guiScale = (float) client.getWindow().getGuiScale();
-        return isBuyButtonClicked(x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale, 1); // Default price 1 for legacy compatibility
-    }
-    
-    /**
-     * Checks if a click occurred on a sell button (legacy method for backward compatibility)
-     */
-    public boolean isSellButtonClicked(int x, int y, int cardWidth, int cardHeight, int mouseX, int mouseY) {
-        Minecraft client = Minecraft.getInstance();
-        float guiScale = (float) client.getWindow().getGuiScale();
-        return isSellButtonClicked(x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale, 1); // Default price 1 for legacy compatibility
-    }
     
     /**
      * Checks if the mouse is hovering over the item icon area
@@ -512,5 +483,26 @@ public class ItemCardRenderer {
             itemStack.getTooltipImage(),
             mouseX, mouseY
         );
+    }
+    
+    /**
+     * Gets cached CardLayout instance, creating new one if parameters changed
+     */
+    private static CardLayout getCachedCardLayout(int x, int y, int cardWidth, int cardHeight, float guiScale) {
+        // Check if cache is valid
+        if (cachedLayout == null || 
+            cachedX != x || cachedY != y || cachedWidth != cardWidth || cachedHeight != cardHeight || 
+            cachedGuiScale != guiScale) {
+            
+            // Update cache
+            cachedLayout = new CardLayout(x, y, cardWidth, cardHeight, guiScale);
+            cachedX = x;
+            cachedY = y;
+            cachedWidth = cardWidth;
+            cachedHeight = cardHeight;
+            cachedGuiScale = guiScale;
+        }
+        
+        return cachedLayout;
     }
 }

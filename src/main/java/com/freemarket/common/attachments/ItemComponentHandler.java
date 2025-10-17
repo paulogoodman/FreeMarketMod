@@ -214,7 +214,7 @@ public class ItemComponentHandler {
                 ItemEnchantments enchantments = itemStack.get(DataComponents.ENCHANTMENTS);
                 
                 // Only serialize if there are actual enchantments
-                if (!enchantments.keySet().isEmpty()) {
+                if (enchantments != null && !enchantments.keySet().isEmpty()) {
                     // Create a manual enchantments structure
                     CompoundTag enchantmentsTag = new CompoundTag();
                     CompoundTag enchantmentsList = new CompoundTag();
@@ -259,18 +259,20 @@ public class ItemComponentHandler {
                 CompoundTag trimTag = new CompoundTag();
                 
                 // Extract trim material
-                trim.material().unwrap().ifLeft(resourceKey -> {
-                    trimTag.putString("material", resourceKey.location().toString());
-                }).ifRight(material -> {
-                    trimTag.putString("material", material.toString());
-                });
-                
-                // Extract trim pattern
-                trim.pattern().unwrap().ifLeft(resourceKey -> {
-                    trimTag.putString("pattern", resourceKey.location().toString());
-                }).ifRight(pattern -> {
-                    trimTag.putString("pattern", pattern.toString());
-                });
+                if (trim != null) {
+                    trim.material().unwrap().ifLeft(resourceKey -> {
+                        trimTag.putString("material", resourceKey.location().toString());
+                    }).ifRight(material -> {
+                        trimTag.putString("material", material.toString());
+                    });
+                    
+                    // Extract trim pattern
+                    trim.pattern().unwrap().ifLeft(resourceKey -> {
+                        trimTag.putString("pattern", resourceKey.location().toString());
+                    }).ifRight(pattern -> {
+                        trimTag.putString("pattern", pattern.toString());
+                    });
+                }
                 
                 resultTag.put("minecraft:trim", trimTag);
                 
@@ -290,7 +292,7 @@ public class ItemComponentHandler {
                 CustomData customData = itemStack.get(DataComponents.CUSTOM_DATA);
                 
                 // Only serialize if there's actual custom data
-                if (!customData.isEmpty()) {
+                if (customData != null && !customData.isEmpty()) {
                     // Custom data is already a CompoundTag, so we can use it directly
                     CompoundTag customDataTag = customData.copyTag();
                     resultTag.put("minecraft:custom_data", customDataTag);
@@ -310,8 +312,8 @@ public class ItemComponentHandler {
         // Serialize damage (only if > 0)
         if (itemStack.has(DataComponents.DAMAGE)) {
             try {
-                int damage = itemStack.get(DataComponents.DAMAGE);
-                if (damage > 0) {
+                Integer damage = itemStack.get(DataComponents.DAMAGE);
+                if (damage != null && damage > 0) {
                     resultTag.putInt("minecraft:damage", damage);
                     FreeMarket.LOGGER.info("Successfully serialized damage: {}", damage);
                 }
@@ -323,8 +325,8 @@ public class ItemComponentHandler {
         // Serialize repair cost (only if > 0)
         if (itemStack.has(DataComponents.REPAIR_COST)) {
             try {
-                int repairCost = itemStack.get(DataComponents.REPAIR_COST);
-                if (repairCost > 0) {
+                Integer repairCost = itemStack.get(DataComponents.REPAIR_COST);
+                if (repairCost != null && repairCost > 0) {
                     resultTag.putInt("minecraft:repair_cost", repairCost);
                     FreeMarket.LOGGER.info("Successfully serialized repair cost: {}", repairCost);
                 }
@@ -339,7 +341,7 @@ public class ItemComponentHandler {
                 var lore = itemStack.get(DataComponents.LORE);
                 
                 // Only serialize if there are actual lore lines
-                if (!lore.lines().isEmpty()) {
+                if (lore != null && !lore.lines().isEmpty()) {
                     // Create a manual lore structure
                     CompoundTag loreTag = new CompoundTag();
                     CompoundTag linesTag = new CompoundTag();

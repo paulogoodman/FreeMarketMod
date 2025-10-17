@@ -29,7 +29,6 @@ public class FreeMarketGuiScreen extends Screen {
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
-    private long lastBalanceUpdate = 0;
     
     public FreeMarketGuiScreen() {
         super(Component.literal(Config.MARKETPLACE_NAME.get()));
@@ -91,7 +90,6 @@ public class FreeMarketGuiScreen extends Screen {
                     if (serverPlayer != null) {
                         long balance = com.freemarket.server.handlers.ServerWalletHandler.getPlayerMoney(serverPlayer);
                         cachedBalance = balance;
-                        lastBalanceUpdate = System.currentTimeMillis();
                         return;
                     }
                 }
@@ -112,7 +110,6 @@ public class FreeMarketGuiScreen extends Screen {
      */
     public void updateWalletBalance(long balance) {
         this.cachedBalance = balance;
-        this.lastBalanceUpdate = System.currentTimeMillis();
         
         // Update button states when wallet balance is received from server
         if (freeMarketContainer != null) {
@@ -126,7 +123,6 @@ public class FreeMarketGuiScreen extends Screen {
      */
     public void updateWalletBalanceAndRefreshButtons(long balance) {
         this.cachedBalance = balance;
-        this.lastBalanceUpdate = System.currentTimeMillis();
         
         // Update button states when wallet balance changes due to user actions
         if (freeMarketContainer != null) {
@@ -140,7 +136,6 @@ public class FreeMarketGuiScreen extends Screen {
      */
     public void refreshBalance() {
         cachedBalance = ClientWalletHandler.getPlayerMoney();
-        lastBalanceUpdate = System.currentTimeMillis();
     }
     
     /**
@@ -247,7 +242,7 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     @Override
-    public void resize(net.minecraft.client.Minecraft minecraft, int width, int height) {
+    public void resize(@Nonnull net.minecraft.client.Minecraft minecraft, int width, int height) {
         super.resize(minecraft, width, height);
         // Recreate container with new dimensions
         createMarketplaceContainer();

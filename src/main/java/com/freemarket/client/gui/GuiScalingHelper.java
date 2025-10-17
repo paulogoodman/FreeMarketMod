@@ -8,7 +8,7 @@ import net.minecraft.client.Minecraft;
 public class GuiScalingHelper {
     
     /**
-     * Gets the current screen dimensions from Minecraft (already scaled by GUI scale).
+     * Gets the current GUI-scaled screen dimensions from Minecraft.
      */
     public static int getScreenWidth() {
         return Minecraft.getInstance().getWindow().getGuiScaledWidth();
@@ -16,6 +16,155 @@ public class GuiScalingHelper {
     
     public static int getScreenHeight() {
         return Minecraft.getInstance().getWindow().getGuiScaledHeight();
+    }
+    
+    /**
+     * Gets the current GUI scale factor from Minecraft.
+     * This is used for font scaling and other GUI elements.
+     */
+    public static double getGuiScaleFactor() {
+        return Minecraft.getInstance().getWindow().getGuiScale();
+    }
+    
+    /**
+     * Gets the raw screen width (not GUI-scaled)
+     */
+    public static int getRawScreenWidth() {
+        return Minecraft.getInstance().getWindow().getWidth();
+    }
+    
+    /**
+     * Gets the raw screen height (not GUI-scaled)
+     */
+    public static int getRawScreenHeight() {
+        return Minecraft.getInstance().getWindow().getHeight();
+    }
+    
+    /**
+     * Gets the resolution/screen size scale factor used by responsive scaling
+     */
+    public static double getResolutionScaleFactor() {
+        int screenWidth = getScreenWidth();
+        int screenHeight = getScreenHeight();
+        
+        // Scale based on the smaller dimension to prevent oversized UI
+        int smallerDimension = Math.min(screenWidth, screenHeight);
+        return Math.min(smallerDimension / 1080.0, 1.5); // Cap at 1.5x scaling
+    }
+    
+    /**
+     * Universal scaling pipeline that handles both GUI scaling and resolution scaling
+     * This ensures consistent coordinate transformations across rendering and input handling
+     */
+    public static class ScalingPipeline {
+        private final double guiScale;
+        private final double resolutionScale;
+        private final double combinedScale;
+        
+        public ScalingPipeline() {
+            this.guiScale = getGuiScaleFactor();
+            this.resolutionScale = getResolutionScaleFactor();
+            this.combinedScale = guiScale * resolutionScale;
+        }
+        
+        /**
+         * Converts coordinates from raw screen space to GUI-scaled space
+         */
+        public int toGuiScaled(double coordinate) {
+            return (int) (coordinate / guiScale);
+        }
+        
+        /**
+         * Converts coordinates from GUI-scaled space to raw screen space
+         */
+        public int fromGuiScaled(double coordinate) {
+            return (int) (coordinate * guiScale);
+        }
+        
+        /**
+         * Converts coordinates from raw screen space to resolution-scaled space
+         */
+        public int toResolutionScaled(double coordinate) {
+            return (int) (coordinate / resolutionScale);
+        }
+        
+        /**
+         * Converts coordinates from resolution-scaled space to raw screen space
+         */
+        public int fromResolutionScaled(double coordinate) {
+            return (int) (coordinate * resolutionScale);
+        }
+        
+        /**
+         * Converts coordinates from raw screen space to fully scaled space (GUI + resolution)
+         */
+        public int toFullyScaled(double coordinate) {
+            return (int) (coordinate / combinedScale);
+        }
+        
+        /**
+         * Converts coordinates from fully scaled space to raw screen space
+         */
+        public int fromFullyScaled(double coordinate) {
+            return (int) (coordinate * combinedScale);
+        }
+        
+        /**
+         * Gets the current GUI scale factor
+         */
+        public double getGuiScale() {
+            return guiScale;
+        }
+        
+        /**
+         * Gets the current resolution scale factor
+         */
+        public double getResolutionScale() {
+            return resolutionScale;
+        }
+        
+        /**
+         * Gets the combined scale factor
+         */
+        public double getCombinedScale() {
+            return combinedScale;
+        }
+    }
+    
+    /**
+     * Gets a new scaling pipeline instance for the current state
+     */
+    public static ScalingPipeline getScalingPipeline() {
+        return new ScalingPipeline();
+    }
+    
+    /**
+     * Simple font scaling that works with Minecraft's built-in GUI scaling.
+     * No need for complex calculations - Minecraft handles this automatically.
+     */
+    public static float getFontScale() {
+        return 1.0f; // Let Minecraft handle font scaling automatically
+    }
+    
+    /**
+     * Simple button text scaling - just ensure text fits within bounds.
+     */
+    public static float getFontScaleForButton(int buttonWidth, int buttonHeight, String text) {
+        Minecraft minecraft = Minecraft.getInstance();
+        int textWidth = minecraft.font.width(text);
+        int textHeight = minecraft.font.lineHeight;
+        
+        // Simple check: if text is too wide, scale down
+        if (textWidth > buttonWidth - 8) { // 8 pixels padding
+            return Math.max(0.5f, (float)(buttonWidth - 8) / textWidth);
+        }
+        
+        // If text is too tall, scale down
+        if (textHeight > buttonHeight - 4) { // 4 pixels padding
+            return Math.max(0.5f, (float)(buttonHeight - 4) / textHeight);
+        }
+        
+        return 1.0f; // Text fits fine
     }
     
     /**
@@ -47,20 +196,34 @@ public class GuiScalingHelper {
     }
     
     /**
-     * Responsive scaling that adapts to window size.
-     * Scales elements based on screen size with min/max limits.
+     * Simple responsive scaling using Minecraft's built-in GUI scaling.
+     * The width and height fields automatically scale with window resizing.
      */
     public static int responsiveWidth(int baseWidth, int minWidth, int maxWidth) {
+        // Use a simple scale factor based on screen size
         int screenWidth = getScreenWidth();
-        // Scale based on screen width, but clamp between min and max
-        int scaledWidth = Math.round(baseWidth * (float) screenWidth / 1920f);
+        int screenHeight = getScreenHeight();
+        
+        // Scale based on the smaller dimension to prevent oversized UI
+        int smallerDimension = Math.min(screenWidth, screenHeight);
+        double scaleFactor = Math.min(smallerDimension / 1080.0, 1.5); // Cap at 1.5x scaling
+        
+        // Scale the base width and clamp between min and max
+        int scaledWidth = Math.round(baseWidth * (float) scaleFactor);
         return Math.max(minWidth, Math.min(maxWidth, scaledWidth));
     }
     
     public static int responsiveHeight(int baseHeight, int minHeight, int maxHeight) {
+        // Use a simple scale factor based on screen size
+        int screenWidth = getScreenWidth();
         int screenHeight = getScreenHeight();
-        // Scale based on screen height, but clamp between min and max
-        int scaledHeight = Math.round(baseHeight * (float) screenHeight / 1080f);
+        
+        // Scale based on the smaller dimension to prevent oversized UI
+        int smallerDimension = Math.min(screenWidth, screenHeight);
+        double scaleFactor = Math.min(smallerDimension / 1080.0, 1.5); // Cap at 1.5x scaling
+        
+        // Scale the base height and clamp between min and max
+        int scaledHeight = Math.round(baseHeight * (float) scaleFactor);
         return Math.max(minHeight, Math.min(maxHeight, scaledHeight));
     }
     

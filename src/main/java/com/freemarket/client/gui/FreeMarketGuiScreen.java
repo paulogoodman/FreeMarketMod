@@ -224,17 +224,33 @@ public class FreeMarketGuiScreen extends Screen {
         
         // Plus button is now handled inside the marketplace container
         
-        // Create the marketplace container with responsive positioning
-        int containerWidth = GuiScalingHelper.responsiveWidth(600, 400, 800);
-        int containerHeight = GuiScalingHelper.responsiveHeight(450, 350, 650); // Increased height for better spacing
-        int containerX = GuiScalingHelper.centerX(containerWidth);
-        int containerY = GuiScalingHelper.centerY(containerHeight);
-        
-        this.freeMarketContainer = new FreeMarketContainer(containerX, containerY, containerWidth, containerHeight, freeMarketItems, this);
-        this.freeMarketContainer.init();
+        // Create the marketplace container with responsive positioning (limited height)
+        createMarketplaceContainer();
         
         // Update button states when GUI opens
         this.freeMarketContainer.updateButtonStates();
+    }
+    
+    /**
+     * Creates or recreates the marketplace container with current screen dimensions.
+     * Uses Minecraft's built-in scaling - width and height automatically scale with window resizing.
+     */
+    private void createMarketplaceContainer() {
+        // Use percentage-based sizing that scales automatically with Minecraft's width/height
+        int containerWidth = (int)(width * 0.8); // 80% of screen width
+        int containerHeight = (int)(height * 0.7); // 70% of screen height
+        int containerX = (width - containerWidth) / 2; // Center horizontally
+        int containerY = (height - containerHeight) / 2; // Center vertically
+        
+        this.freeMarketContainer = new FreeMarketContainer(containerX, containerY, containerWidth, containerHeight, freeMarketItems, this);
+        this.freeMarketContainer.init();
+    }
+    
+    @Override
+    public void resize(net.minecraft.client.Minecraft minecraft, int width, int height) {
+        super.resize(minecraft, width, height);
+        // Recreate container with new dimensions
+        createMarketplaceContainer();
     }
     
     @Override
@@ -257,7 +273,7 @@ public class FreeMarketGuiScreen extends Screen {
     private void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
         long money = cachedBalance; // Use only cached balance - no polling
-        String formattedMoney = String.format("$%,d", money);
+        String formattedMoney = "$" + formatPrice(money);
         
         // Create title and money components
         Component titleText = Component.literal("Balance:");
@@ -278,9 +294,9 @@ public class FreeMarketGuiScreen extends Screen {
         int backgroundX = GuiScalingHelper.percentageX(0.85f) - backgroundWidth; // 85% from left, minus width
         int backgroundY = GuiScalingHelper.responsiveHeight(15, 10, 25);
         
-        // Draw background box
-        guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0xFF1A1A1A);
-        guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0xFF2D2D2D);
+        // Draw background box with semi-transparent colors (matching container)
+        guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0x801E1E1E); // 50% opacity
+        guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0x802A2A2A); // 50% opacity
         
         // Calculate text positions (centered within background box)
         int titleX = backgroundX + (backgroundWidth - titleWidth) / 2;
@@ -295,6 +311,69 @@ public class FreeMarketGuiScreen extends Screen {
         
         // Draw wallet text (centered horizontally and vertically)
         guiGraphics.drawString(this.font, walletText, moneyX, moneyY, 0xFF4CAF50);
+    }
+    
+    /**
+     * Formats a price number to be shorter for display with intelligent decimal handling.
+     * Only abbreviates when there are trailing zeros, otherwise shows full number.
+     * Examples: 1000 -> 1K, 1001 -> 1001, 1100000 -> 1.1M, 1000001 -> 1000001
+     */
+    private String formatPrice(long price) {
+        if (price < 1000) {
+            return String.valueOf(price);
+        } else if (price < 1000000) {
+            // Thousands - only abbreviate if all trailing digits are zero
+            if (price % 1000 == 0) {
+                double thousands = price / 1000.0;
+                if (thousands == Math.floor(thousands)) {
+                    return String.format("%.0fK", thousands);
+                } else {
+                    return String.format("%.1fK", thousands);
+                }
+            } else {
+                // Has non-zero trailing digits, show full number
+                return String.valueOf(price);
+            }
+        } else if (price < 1000000000) {
+            // Millions - only abbreviate if all trailing digits are zero
+            if (price % 1000000 == 0) {
+                double millions = price / 1000000.0;
+                if (millions == Math.floor(millions)) {
+                    return String.format("%.0fM", millions);
+                } else {
+                    return String.format("%.1fM", millions);
+                }
+            } else {
+                // Has non-zero trailing digits, show full number
+                return String.valueOf(price);
+            }
+        } else if (price < 1000000000000L) {
+            // Billions - only abbreviate if all trailing digits are zero
+            if (price % 1000000000 == 0) {
+                double billions = price / 1000000000.0;
+                if (billions == Math.floor(billions)) {
+                    return String.format("%.0fB", billions);
+                } else {
+                    return String.format("%.1fB", billions);
+                }
+            } else {
+                // Has non-zero trailing digits, show full number
+                return String.valueOf(price);
+            }
+        } else {
+            // Trillions - only abbreviate if all trailing digits are zero
+            if (price % 1000000000000L == 0) {
+                double trillions = price / 1000000000000.0;
+                if (trillions == Math.floor(trillions)) {
+                    return String.format("%.0fT", trillions);
+                } else {
+                    return String.format("%.1fT", trillions);
+                }
+            } else {
+                // Has non-zero trailing digits, show full number
+                return String.valueOf(price);
+            }
+        }
     }
     
     /**

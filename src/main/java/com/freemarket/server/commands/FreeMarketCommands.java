@@ -62,12 +62,14 @@ public class FreeMarketCommands {
             .then(Commands.literal("balance")
                 .executes(FreeMarketCommands::getOwnBalance)
                 .then(Commands.argument("player", StringArgumentType.word())
+                    .requires(source -> source.hasPermission(2)) // OP level 2 required
                     .executes(FreeMarketCommands::getBalance)))
             .then(Commands.literal("pay")
                 .then(Commands.argument("player", StringArgumentType.word())
                     .then(Commands.argument("amount", LongArgumentType.longArg(1))
                         .executes(FreeMarketCommands::payPlayer))))
             .then(Commands.literal("itemdata")
+                .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .executes(FreeMarketCommands::getHeldItemData))
             .then(Commands.literal("list")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
@@ -81,21 +83,20 @@ public class FreeMarketCommands {
                     .executes(FreeMarketCommands::executeAdminMode)
                 )
                 .executes(FreeMarketCommands::toggleAdminMode))
-            .then(Commands.literal("add")
+            .then(Commands.literal("balance")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("amount", LongArgumentType.longArg(1))
+                .then(Commands.literal("add")
                     .then(Commands.argument("player", StringArgumentType.word())
-                        .executes(FreeMarketCommands::addMoney))))
-            .then(Commands.literal("remove")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", LongArgumentType.longArg(1))
-                        .executes(FreeMarketCommands::removeMoney))))
-            .then(Commands.literal("set")
-                .requires(source -> source.hasPermission(2)) // OP level 2 required
-                .then(Commands.argument("player", StringArgumentType.word())
-                    .then(Commands.argument("amount", LongArgumentType.longArg(0))
-                        .executes(FreeMarketCommands::setMoney))))
+                        .then(Commands.argument("amount", LongArgumentType.longArg(1))
+                            .executes(FreeMarketCommands::addMoney))))
+                .then(Commands.literal("remove")
+                    .then(Commands.argument("player", StringArgumentType.word())
+                        .then(Commands.argument("amount", LongArgumentType.longArg(1))
+                            .executes(FreeMarketCommands::removeMoney))))
+                .then(Commands.literal("set")
+                    .then(Commands.argument("player", StringArgumentType.word())
+                        .then(Commands.argument("amount", LongArgumentType.longArg(0))
+                            .executes(FreeMarketCommands::setMoney)))))
             .then(Commands.literal("clear")
                 .requires(source -> source.hasPermission(2)) // OP level 2 required
                 .executes(FreeMarketCommands::clearMarketplace))
@@ -156,8 +157,8 @@ public class FreeMarketCommands {
      * Adds money to a player by name.
      */
     private static int addMoney(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        long amount = LongArgumentType.getLong(context, "amount");
         String playerName = StringArgumentType.getString(context, "player");
+        long amount = LongArgumentType.getLong(context, "amount");
         CommandSourceStack source = context.getSource();
 
         ServerPlayer player = findPlayer(source, playerName);
@@ -563,18 +564,18 @@ public class FreeMarketCommands {
         source.sendSuccess(() -> Component.literal("§ePlayer Commands:§r"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket help§r - Shows this help message"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket balance§r - Shows your balance"), false);
-        source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket pay <player> <amount>§r - Pay money to another player"), false);
-        source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
         
         // Admin commands (OP only)
         if (source.hasPermission(2)) {
             source.sendSuccess(() -> Component.literal("§cAdmin Commands (OP Required):§r"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket adminmode [true/false]§r - Enable/disable admin mode"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket list hand§r - Add the item in your hand to marketplace"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket add <amount> <player>§r - Add money to a player"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket remove <player> <amount>§r - Remove money from a player"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket set <player> <amount>§r - Set a player's money"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket balance add <player> <amount>§r - Add money to a player"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket balance remove <player> <amount>§r - Remove money from a player"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket balance set <player> <amount>§r - Set a player's money"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket clear§r - Clear all marketplace items"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket additem <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace"), false);
         }

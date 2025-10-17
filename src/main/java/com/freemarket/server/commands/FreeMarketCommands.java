@@ -170,13 +170,13 @@ public class FreeMarketCommands {
         return Commands.literal("list")
             .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
             .then(Commands.literal("hand")
-                .then(Commands.argument(ARG_BUY_PRICE, LongArgumentType.longArg(1))
-                    .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(1))
+                .then(Commands.argument(ARG_BUY_PRICE, LongArgumentType.longArg(0))
+                    .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(0))
                         .executes(FreeMarketCommands::listHeldItem))))
             .then(Commands.literal("item")
                 .then(Commands.argument(ARG_ITEM, StringArgumentType.word())
-                    .then(Commands.argument(ARG_BUY_PRICE, IntegerArgumentType.integer(1))
-                        .then(Commands.argument(ARG_SELL_PRICE, IntegerArgumentType.integer(0))
+                    .then(Commands.argument(ARG_BUY_PRICE, LongArgumentType.longArg(0))
+                        .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(0))
                             .then(Commands.argument(ARG_QUANTITY, IntegerArgumentType.integer(1))
                                 .executes(FreeMarketCommands::addItemToMarketplace))))));
     }
@@ -639,13 +639,20 @@ public class FreeMarketCommands {
      */
     private static int addItemToMarketplace(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
         String itemId = StringArgumentType.getString(context, "item");
-        int buyPrice = IntegerArgumentType.getInteger(context, "buyPrice");
-        int sellPrice = IntegerArgumentType.getInteger(context, "sellPrice");
+        long buyPrice = LongArgumentType.getLong(context, "buyPrice");
+        long sellPrice = LongArgumentType.getLong(context, "sellPrice");
         int quantity = IntegerArgumentType.getInteger(context, "quantity");
         CommandSourceStack source = context.getSource();
         ServerLevel level = source.getLevel();
         
         try {
+            // Validate that at least one price is greater than zero
+            if (buyPrice <= 0 && sellPrice <= 0) {
+                Component message = Component.translatable("command.FreeMarket.list.item.both_prices_zero");
+                source.sendFailure(message);
+                return 0;
+            }
+            
             // Parse item ID
             ResourceLocation itemLocation = ResourceLocation.parse(itemId);
             if (!BuiltInRegistries.ITEM.containsKey(itemLocation)) {
@@ -711,8 +718,8 @@ public class FreeMarketCommands {
             source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket balance <player> add | remove | set <amount>§r - Manage player money"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket list hand <buyPrice> <sellPrice>§r - Add the item in your hand to marketplace"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket list item <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket list hand <buyPrice> <sellPrice>§r - Add the item in your hand to marketplace (at least one price must be > 0)"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket list item <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace (at least one price must be > 0)"), false);
         }
         
         source.sendSuccess(() -> Component.literal("§6Use §e/fm§6 as a shortcut for §e/freemarket§r"), false);
@@ -754,6 +761,13 @@ public class FreeMarketCommands {
             // Get buy and sell prices from command arguments
             long buyPrice = LongArgumentType.getLong(context, "buyPrice");
             long sellPrice = LongArgumentType.getLong(context, "sellPrice");
+            
+            // Validate that at least one price is greater than zero
+            if (buyPrice <= 0 && sellPrice <= 0) {
+                Component message = Component.translatable("command.FreeMarket.list.hand.both_prices_zero");
+                source.sendFailure(message);
+                return 0;
+            }
             
             // Create a copy of the item with all NBT data preserved
             ItemStack itemToSell = heldItem.copy();

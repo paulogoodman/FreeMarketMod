@@ -22,7 +22,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
 
 /**
@@ -297,7 +296,7 @@ public class FreeMarketDataManager {
             JsonObject initData = new JsonObject();
             initData.addProperty("initialized", true);
             initData.addProperty("timestamp", System.currentTimeMillis());
-            initData.addProperty("version", "1.0.0");
+            initData.addProperty("version", "1.0.2");
             
             try (FileWriter writer = new FileWriter(file)) {
                 GSON.toJson(initData, writer);

@@ -64,5 +64,7 @@
   
   "command.FreeMarket.list.hand.empty": "You must be holding an item to list it",
   "command.FreeMarket.list.hand.success": "Successfully listed %s (x%d) - %s",
-  "command.FreeMarket.list.hand.error": "Error listing item: %s"
+  "command.FreeMarket.list.hand.error": "Error listing item: %s",
+  "command.FreeMarket.list.hand.both_prices_zero": "Both buy and sell prices cannot be zero. At least one price must be greater than 0.",
+  "command.FreeMarket.list.item.both_prices_zero": "Both buy and sell prices cannot be zero. At least one price must be greater than 0."
 }

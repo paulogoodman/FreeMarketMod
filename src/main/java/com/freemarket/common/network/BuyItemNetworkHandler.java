@@ -10,9 +10,9 @@ import com.freemarket.server.data.FreeMarketDataManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.sounds.SoundEvents;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * Network handler for buy item operations.
@@ -98,9 +98,6 @@ public class BuyItemNetworkHandler {
                 return;
             }
             
-            // Play purchase sound
-            player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 1.0F);
-            
             // Send success response
             long newBalance = ServerWalletHandler.getPlayerMoney(player);
             BuyItemResponsePacket response = new BuyItemResponsePacket(true, "Purchase successful", newBalance);
@@ -118,19 +115,26 @@ public class BuyItemNetworkHandler {
      */
     public static void handleBuyResponse(BuyItemResponsePacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
+            net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+            if (minecraft.player == null) {
+                return;
+            }
+            
+            var player = Objects.requireNonNull(minecraft.player); // Store reference to avoid repeated null checks
+            
             // Update wallet cache
             com.freemarket.client.data.ClientWalletCache.updateBalance(
-                net.minecraft.client.Minecraft.getInstance().player.getUUID().toString(), 
+                player.getUUID().toString(), 
                 packet.newBalance()
             );
             
             // Update GUI if it's open
-            net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
             if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen freeMarketScreen) {
                 freeMarketScreen.updateWalletBalanceAndRefreshButtons(packet.newBalance());
                 
                 if (packet.success()) {
-                    // Purchase successful - no need to log every purchase
+                    // Play purchase sound on client side
+                    player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, 1.0F);
                 } else {
                     FreeMarket.LOGGER.warn("Purchase failed: {}", packet.message());
                 }

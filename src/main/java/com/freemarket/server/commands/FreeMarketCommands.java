@@ -24,7 +24,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.ItemComponentHandler;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -34,7 +33,7 @@ import java.util.List;
  * <p>Command Structure:</p>
  * <ul>
  *   <li>Player Commands: help, balance, pay</li>
- *   <li>Admin Commands: adminmode, itemdata, list, balance management, clear, additem</li>
+ *   <li>Admin Commands: adminmode, itemdata, list (hand/item), balance management</li>
  * </ul>
  * 
  * <p>Available Command Aliases:</p>
@@ -91,10 +90,7 @@ public class FreeMarketCommands {
             .then(buildPayCommand())
             .then(buildAdminModeCommand())
             .then(buildItemDataCommand())
-            .then(buildListCommand())
-            .then(buildBalanceManagementCommands())
-            .then(buildClearCommand())
-            .then(buildAddItemCommand()));
+            .then(buildListCommand()));
     }
     
     /**
@@ -117,7 +113,16 @@ public class FreeMarketCommands {
             .executes(FreeMarketCommands::getOwnBalance)
             .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
                 .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-                .executes(FreeMarketCommands::getBalance));
+                .executes(FreeMarketCommands::getBalance)
+                .then(Commands.literal("add")
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
+                        .executes(FreeMarketCommands::addMoney)))
+                .then(Commands.literal("remove")
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
+                        .executes(FreeMarketCommands::removeMoney)))
+                .then(Commands.literal("set")
+                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(0))
+                        .executes(FreeMarketCommands::setMoney))));
     }
     
     /**
@@ -167,56 +172,15 @@ public class FreeMarketCommands {
             .then(Commands.literal("hand")
                 .then(Commands.argument(ARG_BUY_PRICE, LongArgumentType.longArg(1))
                     .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(1))
-                        .executes(FreeMarketCommands::listHeldItem))));
+                        .executes(FreeMarketCommands::listHeldItem))))
+            .then(Commands.literal("item")
+                .then(Commands.argument(ARG_ITEM, StringArgumentType.word())
+                    .then(Commands.argument(ARG_BUY_PRICE, IntegerArgumentType.integer(1))
+                        .then(Commands.argument(ARG_SELL_PRICE, IntegerArgumentType.integer(0))
+                            .then(Commands.argument(ARG_QUANTITY, IntegerArgumentType.integer(1))
+                                .executes(FreeMarketCommands::addItemToMarketplace))))));
     }
     
-    /**
-     * Builds balance management commands (add, remove, set).
-     * 
-     * @return Command builder for balance management commands
-     */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildBalanceManagementCommands() {
-        return Commands.literal("balance")
-            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-            .then(Commands.literal("add")
-                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
-                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
-                        .executes(FreeMarketCommands::addMoney))))
-            .then(Commands.literal("remove")
-                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
-                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(1))
-                        .executes(FreeMarketCommands::removeMoney))))
-            .then(Commands.literal("set")
-                .then(Commands.argument(ARG_PLAYER, StringArgumentType.word())
-                    .then(Commands.argument(ARG_AMOUNT, LongArgumentType.longArg(0))
-                        .executes(FreeMarketCommands::setMoney))));
-    }
-    
-    /**
-     * Builds clear marketplace command.
-     * 
-     * @return Command builder for clear command
-     */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildClearCommand() {
-        return Commands.literal("clear")
-            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-            .executes(FreeMarketCommands::clearMarketplace);
-    }
-    
-    /**
-     * Builds add item command.
-     * 
-     * @return Command builder for add item command
-     */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildAddItemCommand() {
-        return Commands.literal("additem")
-            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-            .then(Commands.argument(ARG_ITEM, StringArgumentType.word())
-                .then(Commands.argument(ARG_BUY_PRICE, IntegerArgumentType.integer(1))
-                    .then(Commands.argument(ARG_SELL_PRICE, IntegerArgumentType.integer(0))
-                        .then(Commands.argument(ARG_QUANTITY, IntegerArgumentType.integer(1))
-                            .executes(FreeMarketCommands::addItemToMarketplace)))));
-    }
 
     // ============================================================================
     // COMMAND EXECUTION METHODS
@@ -664,32 +628,6 @@ public class FreeMarketCommands {
     }
     
     /**
-     * Clears all items from the marketplace.
-     * 
-     * <p>Usage: /freemarket clear</p>
-     * <p>Permission: OP Level 2 (admin only)</p>
-     * 
-     * @param context The command context containing the source and arguments
-     * @return 1 if successful
-     * @throws CommandSyntaxException if command syntax is invalid
-     */
-    private static int clearMarketplace(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        CommandSourceStack source = context.getSource();
-        ServerLevel level = source.getLevel();
-        
-        // Clear marketplace using JSON system
-        FreeMarketDataManager.saveFreeMarketItems(level, new ArrayList<>());
-        
-        // Sync empty marketplace data to all players
-        com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, new ArrayList<>());
-        
-        Component message = Component.translatable("command.FreeMarket.freemarket.clear.success");
-        source.sendSuccess(() -> message, true);
-        
-        return 1;
-    }
-    
-    /**
      * Adds an item to the marketplace via command.
      * 
      * <p>Usage: /freemarket additem &lt;item&gt; &lt;buyPrice&gt; &lt;sellPrice&gt; &lt;quantity&gt;</p>
@@ -771,13 +709,10 @@ public class FreeMarketCommands {
             source.sendSuccess(() -> Component.literal("§cAdmin Commands (OP Required):§r"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket adminmode [true/false]§r - Enable/disable admin mode"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket balance <player>§r - Shows another player's balance"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket balance <player> add | remove | set <amount>§r - Manage player money"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket list hand§r - Add the item in your hand to marketplace"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket balance add <player> <amount>§r - Add money to a player"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket balance remove <player> <amount>§r - Remove money from a player"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket balance set <player> <amount>§r - Set a player's money"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket clear§r - Clear all marketplace items"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket additem <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket list hand <buyPrice> <sellPrice>§r - Add the item in your hand to marketplace"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket list item <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace"), false);
         }
         
         source.sendSuccess(() -> Component.literal("§6Use §e/fm§6 as a shortcut for §e/freemarket§r"), false);

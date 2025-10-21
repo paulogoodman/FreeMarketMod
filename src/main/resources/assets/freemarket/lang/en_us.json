@@ -1,15 +1,4 @@
 {
-  "itemGroup.freemarket": "FreeMarket",
-  "block.freemarket.example_block": "Market Block",
-  "item.freemarket.example_item": "Coin",
-
-  "freemarket.configuration.title": "FreeMarket Configs",
-  "freemarket.configuration.section.freemarket.common.toml": "FreeMarket Configs",
-  "freemarket.configuration.section.freemarket.common.toml.title": "FreeMarket Configs",
-  "freemarket.configuration.items": "Item List",
-  "freemarket.configuration.logDirtBlock": "Log Dirt Block",
-  "freemarket.configuration.magicNumberIntroduction": "Magic Number Text",
-  "freemarket.configuration.magicNumber": "Magic Number",
 
   "gui.FreeMarket.shop.title": "Free Market",
   "gui.FreeMarket.shop.instruction": "Press ESC to close",

@@ -195,10 +195,44 @@ public class ItemComponentHandler {
         // Apply lore
         if (componentTag.contains("minecraft:lore")) {
             try {
-                Tag loreTag = componentTag.get("minecraft:lore");
-                // For now, just log that we found lore
-                FreeMarket.LOGGER.info("Found lore to apply: {}", loreTag);
-                // TODO: Implement proper lore application
+                CompoundTag loreTag = componentTag.getCompound("minecraft:lore");
+                
+                // Parse lore lines from the tag structure
+                if (loreTag.contains("lines")) {
+                    CompoundTag linesTag = loreTag.getCompound("lines");
+                    
+                    // Create a list to hold the lore lines
+                    java.util.List<net.minecraft.network.chat.Component> loreLines = new java.util.ArrayList<>();
+                    
+                    // Extract lore lines in order
+                    for (String key : linesTag.getAllKeys()) {
+                        try {
+                            String loreText = linesTag.getString(key);
+                            if (loreText != null && !loreText.trim().isEmpty()) {
+                                // Parse the lore text as a component (handles JSON formatting)
+                                var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
+                                net.minecraft.network.chat.Component loreComponent = null;
+                                if (clientLevel != null) {
+                                    loreComponent = net.minecraft.network.chat.Component.Serializer.fromJson(loreText, clientLevel.registryAccess());
+                                }
+                                if (loreComponent != null) {
+                                    loreLines.add(loreComponent);
+                                } else {
+                                    // Fallback: treat as plain text
+                                    loreLines.add(net.minecraft.network.chat.Component.literal(loreText));
+                                }
+                            }
+                        } catch (Exception e) {
+                            FreeMarket.LOGGER.warn("Failed to parse lore line {}: {}", key, e.getMessage());
+                        }
+                    }
+                    
+                    // Apply lore to the item stack if we have any lines
+                    if (!loreLines.isEmpty()) {
+                        itemStack.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(loreLines));
+                        FreeMarket.LOGGER.info("Successfully applied {} lore lines", loreLines.size());
+                    }
+                }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply lore: {}", e.getMessage());
             }

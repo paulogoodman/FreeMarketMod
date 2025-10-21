@@ -15,7 +15,6 @@ import javax.annotation.Nonnull;
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.network.MarketplaceItemOperationPacket;
-import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.common.attachments.ItemComponentHandler;
 
 /**
@@ -57,12 +56,10 @@ public class AddItemPopupScreen extends Screen {
         this.itemIdBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 
             GuiScalingHelper.responsiveWidth(200, 160, 250), GuiScalingHelper.responsiveHeight(20, 16, 26), 
             Component.translatable("gui.FreeMarket.add_item.item_id"));
-        this.itemIdBox.setValue("minecraft:diamond");
+        this.itemIdBox.setValue("");
         this.itemIdBox.setResponder(this::onItemIdChanged);
         this.addRenderableWidget(this.itemIdBox);
         
-        // Pre-validate the default diamond value to show icon immediately
-        onItemIdChanged("minecraft:diamond");
         
         // Buy price input
         this.buyPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(90, 75, 110), 
@@ -204,13 +201,19 @@ public class AddItemPopupScreen extends Screen {
             ItemStack itemStack = createItemWithComponents(selectedItem.getItem(), quantity, 
                 this.componentDataBox.getValue());
             
+            // Get the actual player name
+            String playerName = "Unknown Player";
+            if (this.minecraft != null && this.minecraft.player != null) {
+                playerName = this.minecraft.player.getName().getString();
+            }
+            
             // Create marketplace item with component data
             FreeMarketItem FreeMarketItem = new FreeMarketItem(
                 itemStack, 
                 buyPrice, 
                 sellPrice, 
                 quantity, 
-                "admin", // TODO: Get actual player name
+                playerName, // Use actual player name
                 null, // GUID will be generated
                 this.componentDataBox.getValue() // Pass the component data from the text field
             );

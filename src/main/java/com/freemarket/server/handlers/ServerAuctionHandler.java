@@ -4,11 +4,19 @@ import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.data.PlayerAuction;
 import com.freemarket.server.data.AuctionDataManager;
+import com.google.gson.GsonBuilder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -16,7 +24,7 @@ import java.util.List;
  */
 public class ServerAuctionHandler {
     
-    private static final long MIN_BID_INCREMENT = 100; // Minimum bid increment
+    private static boolean DEBUG_MODE = false; // Debug mode to allow bidding on own auctions
     
     /**
      * Creates a new auction.
@@ -33,6 +41,26 @@ public class ServerAuctionHandler {
             
             if (durationMinutes < 1 || durationMinutes > 10080) { // Max 1 week
                 player.sendSystemMessage(Component.literal("Duration must be between 1 minute and 1 week!"));
+                return false;
+            }
+            
+            // Create ItemStack to validate and remove from inventory
+            ItemStack itemStack = createItemStackFromId(itemId, componentData, quantity);
+            if (itemStack == null) {
+                player.sendSystemMessage(Component.literal("Invalid item!"));
+                return false;
+            }
+            
+            // Check if player has the item
+            if (!hasItemInInventory(player, itemStack)) {
+                player.sendSystemMessage(Component.literal("You don't have this item in your inventory!"));
+                return false;
+            }
+            
+            // Remove item from inventory
+            boolean removed = removeItemFromInventory(player, itemStack);
+            if (!removed) {
+                player.sendSystemMessage(Component.literal("Failed to remove item from inventory!"));
                 return false;
             }
             
@@ -55,10 +83,7 @@ public class ServerAuctionHandler {
                 System.currentTimeMillis()
             );
             
-            // TODO: Remove item from player inventory (requires inventory management)
-            // For now, we'll just create the auction
-            
-            // Save auction
+            // Save auction to NBT storage
             AuctionDataManager.addAuction(level, auction);
             
             player.sendSystemMessage(Component.literal("Auction created successfully!"));
@@ -74,11 +99,12 @@ public class ServerAuctionHandler {
     
     /**
      * Places a bid on an auction.
+     * Data is loaded from NBT storage only when bidding.
      * @return true if successful
      */
     public static boolean placeBid(ServerLevel level, ServerPlayer player, String auctionId, long bidAmount) {
         try {
-            // Load auctions
+            // Load auctions from NBT storage (only when bidding)
             List<PlayerAuction> auctions = AuctionDataManager.loadAuctions(level);
             PlayerAuction auction = null;
             
@@ -101,16 +127,22 @@ public class ServerAuctionHandler {
                 return false;
             }
             
-            // Check if player is the seller
-            if (auction.getSellerUuid().equals(player.getUUID().toString())) {
+            // Check if player is the seller (skip in debug mode)
+            if (!DEBUG_MODE && auction.getSellerUuid().equals(player.getUUID().toString())) {
                 player.sendSystemMessage(Component.literal("You cannot bid on your own auction!"));
                 return false;
             }
             
             // Check if bid is high enough
-            long minBid = auction.getCurrentBid() + MIN_BID_INCREMENT;
+            long minBid = auction.getMinimumBid();
             if (bidAmount < minBid) {
-                player.sendSystemMessage(Component.literal("Bid must be at least $" + minBid + "!"));
+                if (auction.getCurrentBid() == auction.getStartingPrice()) {
+                    // First bid must be at least the starting price
+                    player.sendSystemMessage(Component.literal("Bid must be at least the starting price of $" + auction.getStartingPrice() + "!"));
+                } else {
+                    // Subsequent bids must be higher than current bid
+                    player.sendSystemMessage(Component.literal("Bid must be higher than the current bid of $" + auction.getCurrentBid() + "!"));
+                }
                 return false;
             }
             
@@ -140,7 +172,7 @@ public class ServerAuctionHandler {
             auction.setBidderUuid(player.getUUID().toString());
             auction.setBidderName(player.getName().getString());
             
-            // Save auction
+            // Save auction to NBT storage
             AuctionDataManager.updateAuction(level, auction);
             
             player.sendSystemMessage(Component.literal("Bid placed successfully!"));
@@ -155,11 +187,60 @@ public class ServerAuctionHandler {
     }
     
     /**
-     * Processes expired auctions.
+     * Syncs auction data to all players.
+     * Data is loaded from NBT storage only when syncing (render operations).
+     */
+    public static void syncAuctionsToAllPlayers(ServerLevel level) {
+        try {
+            // Load auctions from NBT storage (only when syncing for render)
+            var auctions = AuctionDataManager.loadAuctions(level);
+            FreeMarketPacket syncPacket = FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, new GsonBuilder().create().toJson(auctions));
+            net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(syncPacket);
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to sync auctions to players: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Processes expired auctions and sends expiry sync packets to clients.
      * Should be called periodically (e.g., every minute).
+     * Data is loaded from NBT storage only when processing expired auctions.
      */
     public static void processExpiredAuctions(ServerLevel level) {
         try {
+            // Load auctions from NBT storage
+            var auctions = AuctionDataManager.loadAuctions(level);
+            List<String> expiredAuctionIds = new ArrayList<>();
+            
+            // Check for expired auctions
+            long currentTime = System.currentTimeMillis();
+            for (PlayerAuction auction : auctions) {
+                if (currentTime > auction.getExpiryTime()) {
+                    expiredAuctionIds.add(auction.getAuctionId());
+                }
+            }
+            
+            // If we have expired auctions, send expiry sync packet to all clients
+            if (!expiredAuctionIds.isEmpty()) {
+                String jsonData = new GsonBuilder().create().toJson(expiredAuctionIds);
+                FreeMarketPacket expiryPacket = FreeMarketPacket.withJson(PacketType.AUCTION_EXPIRY_SYNC, jsonData);
+                net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(expiryPacket);
+                
+                FreeMarket.LOGGER.info("Sent expiry sync for {} expired auctions", expiredAuctionIds.size());
+            }
+            
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to process expired auctions: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Handles expired auctions by processing refunds and item distribution.
+     * This method should be called after processExpiredAuctions to actually complete the auctions.
+     */
+    public static void handleExpiredAuctions(ServerLevel level) {
+        try {
+            // Load and remove expired auctions from NBT storage
             List<PlayerAuction> expiredAuctions = AuctionDataManager.removeExpiredAuctions(level);
             
             for (PlayerAuction auction : expiredAuctions) {
@@ -176,11 +257,24 @@ public class ServerAuctionHandler {
                     if (seller != null) {
                         ServerWalletHandler.addMoney(seller, auction.getCurrentBid());
                         seller.sendSystemMessage(Component.literal("Your auction sold for $" + auction.getCurrentBid() + "!"));
+                    } else {
+                        // Seller offline - TODO: store money for later (pending rewards system)
+                        FreeMarket.LOGGER.info("Seller {} is offline, money will be credited on login", auction.getSellerName());
                     }
                     
-                    // TODO: Give item to winner (requires inventory management)
+                    // Give item to winner
+                    ItemStack itemStack = createItemFromAuction(auction);
                     if (winner != null) {
-                        winner.sendSystemMessage(Component.literal("You won an auction for $" + auction.getCurrentBid() + "!"));
+                        boolean added = addItemToInventory(winner, itemStack);
+                        if (added) {
+                            winner.sendSystemMessage(Component.literal("You won an auction! Item added to your inventory."));
+                        } else {
+                            winner.sendSystemMessage(Component.literal("You won an auction, but your inventory is full!"));
+                            // TODO: Store item for later (pending rewards system)
+                        }
+                    } else {
+                        // Winner offline - TODO: store item for later (pending rewards system)
+                        FreeMarket.LOGGER.info("Winner {} is offline, item will be given on login", auction.getBidderName());
                     }
                     
                     FreeMarket.LOGGER.info("Auction {} completed: {} sold to {} for ${}", 
@@ -191,17 +285,197 @@ public class ServerAuctionHandler {
                         java.util.UUID.fromString(auction.getSellerUuid())
                     );
                     
-                    // TODO: Return item to seller (requires inventory management)
+                    // Return item to seller
+                    ItemStack itemStack = createItemFromAuction(auction);
                     if (seller != null) {
-                        seller.sendSystemMessage(Component.literal("Your auction expired with no bids."));
+                        boolean added = addItemToInventory(seller, itemStack);
+                        if (added) {
+                            seller.sendSystemMessage(Component.literal("Your auction expired with no bids. Item returned to your inventory."));
+                        } else {
+                            seller.sendSystemMessage(Component.literal("Your auction expired with no bids, but your inventory is full!"));
+                            // TODO: Store item for later (pending rewards system)
+                        }
+                    } else {
+                        // Seller offline - TODO: store item for later (pending rewards system)
+                        FreeMarket.LOGGER.info("Seller {} is offline, item will be returned on login", auction.getSellerName());
                     }
                     
                     FreeMarket.LOGGER.info("Auction {} expired with no bids", auction.getAuctionId());
                 }
             }
+            
+            // Broadcast updated auction list to all players if any auctions expired
+            if (!expiredAuctions.isEmpty()) {
+                syncAuctionsToAllPlayers(level);
+            }
         } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to process expired auctions: {}", e.getMessage(), e);
+            FreeMarket.LOGGER.error("Failed to handle expired auctions: {}", e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Creates an ItemStack from auction data.
+     */
+    private static ItemStack createItemFromAuction(PlayerAuction auction) {
+        return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity());
+    }
+    
+    /**
+     * Creates an ItemStack from item ID and component data.
+     */
+    private static ItemStack createItemStackFromId(String itemId, String componentData, int quantity) {
+        try {
+            ResourceLocation itemLocation = ResourceLocation.parse(itemId);
+            Item item = BuiltInRegistries.ITEM.get(itemLocation);
+            
+            if (item == null || item == BuiltInRegistries.ITEM.get(ResourceLocation.fromNamespaceAndPath("minecraft", "air"))) {
+                return null;
+            }
+            
+            ItemStack itemStack = new ItemStack(item, quantity);
+            
+            // Apply component data if present
+            if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+                ItemComponentHandler.applyComponentData(itemStack, componentData);
+            }
+            
+            return itemStack;
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to create ItemStack from ID {}: {}", itemId, e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Checks if player has the specified item in their inventory.
+     */
+    private static boolean hasItemInInventory(ServerPlayer player, ItemStack itemToCheck) {
+        Inventory inventory = player.getInventory();
+        int totalCount = 0;
+        
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
+                totalCount += slotItem.getCount();
+            }
+        }
+        
+        return totalCount >= itemToCheck.getCount();
+    }
+    
+    /**
+     * Removes the specified item from player's inventory.
+     */
+    private static boolean removeItemFromInventory(ServerPlayer player, ItemStack itemToRemove) {
+        Inventory inventory = player.getInventory();
+        int remainingToRemove = itemToRemove.getCount();
+        
+        // Find all matching stacks and sort by count (fewest first)
+        List<java.util.Map.Entry<Integer, ItemStack>> matchingStacks = new ArrayList<>();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToRemove)) {
+                matchingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
+            }
+        }
+        
+        // Sort by count (ascending)
+        matchingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        // Remove items
+        for (var entry : matchingStacks) {
+            if (remainingToRemove <= 0) break;
+            
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
+            slotItem.shrink(removeFromSlot);
+            remainingToRemove -= removeFromSlot;
+            
+            inventory.setItem(slotIndex, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
+        }
+        
+        return remainingToRemove == 0;
+    }
+    
+    /**
+     * Adds an item to player's inventory.
+     */
+    private static boolean addItemToInventory(ServerPlayer player, ItemStack itemToAdd) {
+        Inventory inventory = player.getInventory();
+        int remainingToAdd = itemToAdd.getCount();
+        
+        // Only use main inventory slots (0-35)
+        final int MAIN_INVENTORY_SIZE = 36;
+        
+        // Find existing stacks and sort by count (fewest first)
+        List<java.util.Map.Entry<Integer, ItemStack>> existingStacks = new ArrayList<>();
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToAdd)) {
+                existingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
+            }
+        }
+        
+        // Sort by count (ascending)
+        existingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        // Add to existing stacks
+        for (var entry : existingStacks) {
+            if (remainingToAdd <= 0) break;
+            
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int maxStackSize = slotItem.getMaxStackSize();
+            int currentCount = slotItem.getCount();
+            int canAdd = maxStackSize - currentCount;
+            
+            if (canAdd > 0) {
+                int addToSlot = Math.min(remainingToAdd, canAdd);
+                slotItem.grow(addToSlot);
+                remainingToAdd -= addToSlot;
+                inventory.setItem(slotIndex, slotItem);
+            }
+        }
+        
+        // Add to empty slots if needed
+        if (remainingToAdd > 0) {
+            for (int i = 0; i < MAIN_INVENTORY_SIZE && remainingToAdd > 0; i++) {
+                ItemStack slotItem = inventory.getItem(i);
+                if (slotItem.isEmpty()) {
+                    int addToSlot = Math.min(remainingToAdd, itemToAdd.getMaxStackSize());
+                    ItemStack newStack = itemToAdd.copy();
+                    newStack.setCount(addToSlot);
+                    inventory.setItem(i, newStack);
+                    remainingToAdd -= addToSlot;
+                }
+            }
+        }
+        
+        return remainingToAdd == 0;
+    }
+    
+    /**
+     * Enables debug mode to allow bidding on own auctions.
+     */
+    public static void enableDebugMode() {
+        DEBUG_MODE = true;
+        FreeMarket.LOGGER.info("Auction debug mode enabled - players can bid on their own auctions");
+    }
+    
+    /**
+     * Disables debug mode.
+     */
+    public static void disableDebugMode() {
+        DEBUG_MODE = false;
+        FreeMarket.LOGGER.info("Auction debug mode disabled");
+    }
+    
+    /**
+     * Checks if debug mode is enabled.
+     */
+    public static boolean isDebugModeEnabled() {
+        return DEBUG_MODE;
     }
 }
 

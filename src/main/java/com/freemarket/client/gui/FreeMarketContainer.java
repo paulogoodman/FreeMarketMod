@@ -17,7 +17,8 @@ import java.util.Map;
 
 import com.freemarket.Config;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.network.MarketplaceItemOperationPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.common.managers.ItemCategoryManager;
@@ -55,8 +56,8 @@ public class FreeMarketContainer implements Renderable {
     private String lastSearchText;
     private long lastItemCacheUpdate = 0;
     private static final long ITEM_CACHE_DURATION = 500; // 500ms cache for more responsive search
-    // Item card renderer for proper GUI scaling
-    private final ItemCardRenderer itemCardRenderer = new ItemCardRenderer();
+    // Unified card renderer for proper GUI scaling
+    private final UnifiedItemCardRenderer unifiedRenderer = new UnifiedItemCardRenderer();
     
     // GUI Scale to Grid Layout Mapping
     // Scale 1 = 5x5, Scale 2 = 4x4, Scale 3 = 3x3, Scale 4 = 2x2, Scale 5 = 1x1
@@ -261,12 +262,6 @@ public class FreeMarketContainer implements Renderable {
         guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040); // 50% opacity
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040); // 50% opacity
         
-        // Draw title (simple rendering with proper spacing from search bar)
-        Component title = Component.literal(Config.MARKETPLACE_NAME.get());
-        int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
-        int titleX = x + (width - titleWidth) / 2;
-        int titleY = y + (int)(height * 0.02); // 2% from top (reduced to avoid search bar)
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, titleY, 0xFFE0E0E0);
         
         // Render search box
         if (searchBox != null) {
@@ -308,21 +303,20 @@ public class FreeMarketContainer implements Renderable {
                     net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
                     displayStack.setCount(item.getQuantity());
                     
-                    // Render the modern item card using the new renderer with GUI scale and cooldown states
+                    // Render using unified renderer with GUI scale and cooldown states
                     Minecraft client = Minecraft.getInstance();
                     float guiScale = (float) client.getWindow().getGuiScale();
                     
-                    // Get button states
-                    boolean canBuy = getCachedCanBuyState(item);
-                    boolean canSell = getCachedCanSellState(item);
-                    boolean isBuyCooldown = isBuyButtonInCooldown(item);
-                    boolean isSellCooldown = isSellButtonInCooldown(item);
+                    // Create button config for marketplace
+                    CardButtonConfig config = CardButtonConfig.forMarketplace(
+                        item.getBuyPrice(), item.getSellPrice(),
+                        getCachedCanBuyState(item), getCachedCanSellState(item),
+                        isBuyButtonInCooldown(item), isSellButtonInCooldown(item)
+                    );
                     
-                    itemCardRenderer.renderItemCard(guiGraphics, displayStack, itemX, itemY, 
-                                                 calculatedItemWidth, cardHeight, 
-                                                 mouseX, mouseY, guiScale,
-                                                 canBuy, canSell, isBuyCooldown, isSellCooldown,
-                                                 item.getBuyPrice(), item.getSellPrice());
+                    unifiedRenderer.renderCard(guiGraphics, displayStack, config, null,
+                                              itemX, itemY, calculatedItemWidth, cardHeight, 
+                                              mouseX, mouseY, guiScale);
                 }
                 itemsRendered++;
             }
@@ -672,7 +666,7 @@ public class FreeMarketContainer implements Renderable {
                             }
                             
                             // Send delete request to server via network packet
-                            MarketplaceItemOperationPacket packet = MarketplaceItemOperationPacket.removeItem(item);
+                            FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.MARKETPLACE_REMOVE_ITEM, item.getGuid());
                             net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                             
                             return true;
@@ -681,12 +675,23 @@ public class FreeMarketContainer implements Renderable {
                 }
                 
 
-                // Use the new ItemCardRenderer for buy button click detection
-                // Use raw mouse coordinates like the highlighting does (which works correctly)
+                // Use unified renderer for button click detection
                 Minecraft client = Minecraft.getInstance();
                 float guiScale = (float) client.getWindow().getGuiScale();
                 
-                if (ItemCardRenderer.isBuyButtonClicked(itemX, itemY, cardWidth, cardHeight, (int)mouseX, (int)mouseY, guiScale, item.getBuyPrice())) {
+                // Create button config for click detection
+                CardButtonConfig config = CardButtonConfig.forMarketplace(
+                    item.getBuyPrice(), item.getSellPrice(),
+                    getCachedCanBuyState(item), getCachedCanSellState(item),
+                    isBuyButtonInCooldown(item), isSellButtonInCooldown(item)
+                );
+                
+                ButtonType buttonClicked = UnifiedItemCardRenderer.checkButtonClick(
+                    itemX, itemY, cardWidth, cardHeight, 
+                    (int)mouseX, (int)mouseY, guiScale, config
+                );
+                
+                if (buttonClicked == ButtonType.BUY) {
                     // Check if button is enabled before processing
                     if (!getCachedCanBuyState(item)) {
                         return true; // Consume click but don't process - button is disabled
@@ -702,17 +707,14 @@ public class FreeMarketContainer implements Renderable {
                     buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
                     
                     // Send buy request to server via network packet
-                    com.freemarket.common.network.BuyItemRequestPacket packet = new com.freemarket.common.network.BuyItemRequestPacket(item.getGuid());
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, item.getGuid());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
                     // Update button states after buy operation
                     updateButtonStates();
                     
                     return true; // Consume the click
-                }
-                
-                // Use the new ItemCardRenderer for sell button click detection
-                if (ItemCardRenderer.isSellButtonClicked(itemX, itemY, cardWidth, cardHeight, (int)mouseX, (int)mouseY, guiScale, item.getSellPrice())) {
+                } else if (buttonClicked == ButtonType.SELL) {
                     // Check if button is enabled before processing
                     if (!getCachedCanSellState(item)) {
                         return true; // Consume click but don't process - button is disabled
@@ -728,7 +730,7 @@ public class FreeMarketContainer implements Renderable {
                     sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
                     
                     // Send sell request to server via network packet
-                    com.freemarket.common.network.SellItemRequestPacket packet = new com.freemarket.common.network.SellItemRequestPacket(item.getGuid());
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, item.getGuid());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
                     // Update button states after sell operation

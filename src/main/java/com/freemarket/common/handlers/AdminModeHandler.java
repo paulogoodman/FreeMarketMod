@@ -1,7 +1,8 @@
 package com.freemarket.common.handlers;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.common.network.AdminModeSyncPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 
@@ -33,7 +34,7 @@ public class AdminModeHandler {
         FreeMarket.LOGGER.info("Admin mode {} for FreeMarket", enabled ? "enabled" : "disabled");
         
         // Send sync packet to all connected players
-        AdminModeSyncPacket packet = new AdminModeSyncPacket(enabled);
+        FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.ADMIN_MODE_SYNC, String.valueOf(enabled));
         net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(packet);
         
         FreeMarket.LOGGER.info("Sent admin mode sync packet to all clients: {}", enabled ? "enabled" : "disabled");
@@ -68,7 +69,7 @@ public class AdminModeHandler {
         FreeMarket.LOGGER.info("Admin mode {} for FreeMarket", adminMode ? "enabled" : "disabled");
         
         // Send sync packet to all connected players
-        AdminModeSyncPacket packet = new AdminModeSyncPacket(adminMode);
+        FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.ADMIN_MODE_SYNC, String.valueOf(adminMode));
         net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(packet);
         
         FreeMarket.LOGGER.info("Sent admin mode sync packet to all clients: {}", adminMode ? "enabled" : "disabled");
@@ -81,7 +82,7 @@ public class AdminModeHandler {
      * @param player the player to send the admin mode state to
      */
     public static void sendAdminModeToPlayer(ServerPlayer player) {
-        AdminModeSyncPacket packet = new AdminModeSyncPacket(adminMode);
+        FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.ADMIN_MODE_SYNC, String.valueOf(adminMode));
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, packet);
         
         FreeMarket.LOGGER.info("Sent admin mode sync packet to player {}: {}", 

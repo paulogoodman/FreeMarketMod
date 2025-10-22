@@ -16,6 +16,8 @@ import com.freemarket.FreeMarket;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.client.data.ClientMarketplaceCache;
 import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 
@@ -37,9 +39,13 @@ public class FreeMarketGuiScreen extends Screen {
     private ScreenType currentScreen = ScreenType.MARKETPLACE;
     
     private List<FreeMarketItem> freeMarketItems;
-    private FreeMarketContainer freeMarketContainer;
-    private LeaderboardContainer leaderboardContainer;
-    private PlayerAuctionContainer auctionContainer;
+    FreeMarketContainer freeMarketContainer;
+    LeaderboardContainer leaderboardContainer;
+    PlayerAuctionContainer auctionContainer;
+    
+    // Popup overlays
+    private CreateAuctionPopupOverlay createAuctionPopup;
+    private PlaceBidPopupOverlay placeBidPopup;
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
@@ -79,6 +85,41 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Shows the create auction popup overlay.
+     */
+    public void showCreateAuctionPopup() {
+        if (createAuctionPopup != null) {
+            createAuctionPopup.show();
+        }
+    }
+    
+    /**
+     * Shows the place bid popup overlay for the given auction.
+     */
+    public void showPlaceBidPopup(com.freemarket.common.data.PlayerAuction auction) {
+        if (placeBidPopup == null) {
+            placeBidPopup = new PlaceBidPopupOverlay(auction);
+        } else {
+            // Update the auction data if popup already exists
+            placeBidPopup = new PlaceBidPopupOverlay(auction);
+        }
+        placeBidPopup.show();
+    }
+    
+    /**
+     * Hides all popup overlays.
+     */
+    public void hideAllPopups() {
+        if (createAuctionPopup != null) {
+            createAuctionPopup.hide();
+        }
+        if (placeBidPopup != null) {
+            placeBidPopup.hide();
+        }
+    }
+    
+    
+    /**
      * Gets the cached wallet balance for external access.
      * @return the cached balance
      */
@@ -109,7 +150,7 @@ public class FreeMarketGuiScreen extends Screen {
                 }
                 
                 // In multiplayer, request balance from server
-                com.freemarket.common.network.WalletRequestPacket packet = new com.freemarket.common.network.WalletRequestPacket();
+                FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.WALLET_REQUEST);
                 net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
             }
         } catch (Exception e) {
@@ -230,6 +271,11 @@ public class FreeMarketGuiScreen extends Screen {
             this.currentScreen = newScreen;
             // Recreate the appropriate container for the new screen
             createContainerForCurrentScreen();
+            
+            // Check for data refresh when switching to leaderboard
+            if (newScreen == ScreenType.LEADERBOARD && leaderboardContainer != null) {
+                leaderboardContainer.checkAndRefreshIfNeeded();
+            }
         }
     }
     
@@ -250,6 +296,10 @@ public class FreeMarketGuiScreen extends Screen {
         
         // Request wallet balance from server (for multiplayer)
         requestWalletBalance();
+        
+        // Initialize popup overlays
+        this.createAuctionPopup = new CreateAuctionPopupOverlay();
+        this.placeBidPopup = null; // Will be created when needed
         
         // Create the appropriate container based on current screen
         createContainerForCurrentScreen();
@@ -357,12 +407,20 @@ public class FreeMarketGuiScreen extends Screen {
                 }
                 break;
         }
+        
+        // Render popup overlays on top of everything
+        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
+            createAuctionPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            placeBidPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
     }
     
     /**
      * Renders the tab navigation buttons at the top of the container.
      */
-    private void renderTabButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+    void renderTabButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         // Calculate container dimensions (same as createMarketplaceContainer)
         int containerWidth = (int)(width * 0.8);
         int containerHeight = (int)(height * 0.7);
@@ -421,7 +479,7 @@ public class FreeMarketGuiScreen extends Screen {
         }
     }
     
-    private void renderWalletDisplay(GuiGraphics guiGraphics) {
+    void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right of screen with background
         long money = cachedBalance; // Use only cached balance - no polling
         String formattedMoney = "$" + formatPrice(money);
@@ -556,6 +614,18 @@ public class FreeMarketGuiScreen extends Screen {
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Handle popup overlay clicks first (highest priority)
+        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
+            if (createAuctionPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
         // Check if tab button was clicked
         if (handleTabClick(mouseX, mouseY)) {
             return true;
@@ -620,6 +690,18 @@ public class FreeMarketGuiScreen extends Screen {
     
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // Handle popup overlay key presses first (highest priority)
+        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
+            if (createAuctionPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
         // Route to appropriate container
         switch (currentScreen) {
             case MARKETPLACE:
@@ -643,6 +725,18 @@ public class FreeMarketGuiScreen extends Screen {
     
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
+        // Handle popup overlay character typing first (highest priority)
+        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
+            if (createAuctionPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
         // Route to appropriate container
         switch (currentScreen) {
             case MARKETPLACE:

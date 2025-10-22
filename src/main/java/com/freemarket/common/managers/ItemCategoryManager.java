@@ -210,4 +210,44 @@ public class ItemCategoryManager {
         
         return counts;
     }
+    
+    /**
+     * Gets the count of auctions in each category.
+     */
+    public static Map<Category, Integer> getCategoryCountsForAuctions(List<com.freemarket.common.data.PlayerAuction> auctions) {
+        Map<Category, Integer> counts = new HashMap<>();
+        
+        for (Category category : Category.values()) {
+            counts.put(category, filterAuctionsByCategory(auctions, category).size());
+        }
+        
+        return counts;
+    }
+    
+    /**
+     * Filters a list of player auctions by category.
+     */
+    public static List<com.freemarket.common.data.PlayerAuction> filterAuctionsByCategory(List<com.freemarket.common.data.PlayerAuction> auctions, Category category) {
+        if (category == Category.ALL) {
+            return new ArrayList<>(auctions);
+        }
+        
+        return auctions.stream()
+            .filter(auction -> {
+                // Create ItemStack from auction data
+                ResourceLocation itemId = ResourceLocation.parse(auction.getItemId());
+                Item item = BuiltInRegistries.ITEM.get(itemId);
+                ItemStack itemStack = new ItemStack(item, auction.getQuantity());
+                
+                // Apply component data if present
+                String componentData = auction.getComponentData();
+                if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+                    // Note: This is a simplified version - in practice, you might need to handle component data differently
+                    // depending on your mod's architecture
+                }
+                
+                return getCategoryForItem(itemStack) == category;
+            })
+            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+    }
 }

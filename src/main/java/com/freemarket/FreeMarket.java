@@ -21,10 +21,7 @@ import com.freemarket.server.data.LeaderboardDataManager;
 import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.server.commands.FreeMarketCommands;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
-import com.freemarket.common.network.AdminModeNetworkHandler;
-import com.freemarket.common.network.SellItemNetworkHandler;
-import com.freemarket.common.network.LeaderboardNetworkHandler;
-import com.freemarket.common.network.AuctionNetworkHandler;
+import com.freemarket.common.network.NetworkRegistry;
 import com.freemarket.server.events.ServerEventHandler;
 import com.freemarket.server.events.ServerMarketplaceEventHandler;
 import com.freemarket.server.events.LeaderboardEventHandler;
@@ -50,17 +47,8 @@ public class FreeMarket {
         // Do not add this line if there are no @SubscribeEvent-annotated functions in this class, like onServerStarting() below.
         NeoForge.EVENT_BUS.register(this);
         
-        // Register network handler for admin mode synchronization
-        modEventBus.addListener(AdminModeNetworkHandler::register);
-        
-        // Register network handler for sell item operations
-        modEventBus.addListener(SellItemNetworkHandler::register);
-        
-        // Register network handler for leaderboard synchronization
-        modEventBus.addListener(LeaderboardNetworkHandler::register);
-        
-        // Register network handler for auction synchronization
-        modEventBus.addListener(AuctionNetworkHandler::register);
+        // Register centralized network packet handler
+        modEventBus.addListener(NetworkRegistry::register);
         
         // Register server event handler for player join events
         NeoForge.EVENT_BUS.register(ServerEventHandler.class);
@@ -101,10 +89,6 @@ public class FreeMarket {
             // Load leaderboard data into cache on world load
             LeaderboardDataManager.loadLeaderboardData(serverLevel);
             
-            // Create empty auctions.json file if it doesn't exist
-            if (!AuctionDataManager.auctionFileExists(serverLevel)) {
-                AuctionDataManager.createEmptyAuctionFile(serverLevel);
-            }
         }
     }
     

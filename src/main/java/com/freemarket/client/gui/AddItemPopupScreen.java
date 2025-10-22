@@ -14,7 +14,8 @@ import javax.annotation.Nonnull;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.network.MarketplaceItemOperationPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import com.freemarket.common.attachments.ItemComponentHandler;
 
 /**
@@ -219,7 +220,9 @@ public class AddItemPopupScreen extends Screen {
             );
             
             // Add to marketplace via network packet (server-side)
-            MarketplaceItemOperationPacket packet = MarketplaceItemOperationPacket.addItem(FreeMarketItem);
+            String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"quantity\":%d}", 
+                itemId, this.componentDataBox.getValue(), buyPrice, sellPrice, quantity);
+            FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
             net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
             
             FreeMarket.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
@@ -241,10 +244,15 @@ public class AddItemPopupScreen extends Screen {
         int popupX = GuiScalingHelper.centerX(popupWidth);
         int popupY = GuiScalingHelper.centerY(popupHeight);
         
-        // Call super.render() FIRST to draw the blur overlay behind everything
-        super.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Render the parent screen first (so we can see the container behind)
+        if (parentScreen != null) {
+            parentScreen.render(guiGraphics, -1, -1, partialTick);
+        }
         
-        // Draw popup background on top of the blur (matching FreeMarketContainer colors)
+        // Apply semi-transparent overlay with blur effect over entire screen
+        guiGraphics.fill(0, 0, this.width, this.height, 0xA0000000);
+        
+        // Draw popup background on top of the blur (matching container colors)
         guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF1E1E1E);
         guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF2A2A2A);
         

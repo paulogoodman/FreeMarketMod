@@ -7,6 +7,7 @@ import java.util.List;
 
 /**
  * Client-side cache for auction data received from the server.
+ * Server now uses NBT storage, but client still receives JSON over network for compatibility.
  */
 public class ClientAuctionCache {
     
@@ -14,11 +15,14 @@ public class ClientAuctionCache {
     private static long lastUpdateTime = 0;
     
     /**
-     * Updates the cached auction data.
+     * Updates the cached auction data and timing cache.
      */
     public static void updateAuctions(List<PlayerAuction> auctions) {
         cachedAuctions = new ArrayList<>(auctions);
         lastUpdateTime = System.currentTimeMillis();
+        
+        // Update timing cache with fresh data
+        ClientAuctionTimingCache.updateTimingCache(auctions);
     }
     
     /**
@@ -48,6 +52,7 @@ public class ClientAuctionCache {
     public static void clearCache() {
         cachedAuctions.clear();
         lastUpdateTime = 0;
+        ClientAuctionTimingCache.clearCache();
     }
 }
 

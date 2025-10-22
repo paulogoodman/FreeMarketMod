@@ -2,7 +2,8 @@ package com.freemarket.client.gui;
 
 import com.freemarket.client.data.ClientLeaderboardCache;
 import com.freemarket.common.data.PlayerBalanceData;
-import com.freemarket.common.network.LeaderboardRequestPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Renderable;
@@ -55,9 +56,19 @@ public class LeaderboardContainer implements Renderable {
      * Requests leaderboard data from the server.
      */
     private void requestLeaderboardData() {
-        LeaderboardRequestPacket packet = new LeaderboardRequestPacket();
+        FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.LEADERBOARD_REQUEST);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
         lastRefreshTime = System.currentTimeMillis();
+    }
+    
+    /**
+     * Checks if leaderboard data should be refreshed and requests if needed.
+     * This should be called when switching to the leaderboard tab, not in render.
+     */
+    public void checkAndRefreshIfNeeded() {
+        if (System.currentTimeMillis() - lastRefreshTime > REFRESH_INTERVAL) {
+            requestLeaderboardData();
+        }
     }
     
     /**
@@ -72,10 +83,7 @@ public class LeaderboardContainer implements Renderable {
     
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Auto-refresh every 30 seconds
-        if (System.currentTimeMillis() - lastRefreshTime > REFRESH_INTERVAL) {
-            requestLeaderboardData();
-        }
+        // Note: Auto-refresh moved to event-based system to avoid per-frame network calls
         
         // Draw modern container background with gradient effect (semi-transparent)
         guiGraphics.fill(x, y, x + width, y + height, 0x801E1E1E); // 50% opacity
@@ -87,12 +95,6 @@ public class LeaderboardContainer implements Renderable {
         guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040);
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040);
         
-        // Draw title
-        Component title = Component.literal("Balance Leaderboard");
-        int titleWidth = Minecraft.getInstance().font.width(title);
-        int titleX = x + (width - titleWidth) / 2;
-        int titleY = y + 10;
-        guiGraphics.drawString(Minecraft.getInstance().font, title, titleX, titleY, 0xFFE0E0E0);
         
         // Draw column headers
         int headerY = y + 35;

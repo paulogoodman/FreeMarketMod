@@ -1,5 +1,7 @@
 package com.freemarket.common.data;
 
+import net.minecraft.nbt.CompoundTag;
+
 /**
  * Data model for player auctions.
  * Represents an item listed for auction by a player.
@@ -40,7 +42,7 @@ public class PlayerAuction {
     }
     
     /**
-     * Default constructor for JSON deserialization.
+     * Default constructor for JSON deserialization and NBT deserialization.
      */
     public PlayerAuction() {
         this.auctionId = "";
@@ -156,6 +158,24 @@ public class PlayerAuction {
     }
     
     /**
+     * Calculates the minimum bid amount.
+     * For auctions with no bids, the minimum bid is the starting price.
+     * For auctions with existing bids, there is no minimum bid requirement.
+     * @return the minimum bid amount
+     */
+    public long getMinimumBid() {
+        // If no bids have been placed yet (currentBid equals startingPrice), 
+        // the minimum bid is the starting price
+        if (currentBid == startingPrice) {
+            return startingPrice;
+        }
+        
+        // If there are already bids, there's no minimum bid requirement
+        // Players can bid any amount higher than the current bid
+        return currentBid + 1; // Just needs to be higher than current bid
+    }
+    
+    /**
      * Checks if the auction has expired.
      * @return true if the auction has expired
      */
@@ -178,6 +198,62 @@ public class PlayerAuction {
     public long getTimeRemaining() {
         long remaining = expiryTime - System.currentTimeMillis();
         return Math.max(0, remaining);
+    }
+    
+    /**
+     * Serializes this auction to NBT.
+     * @return CompoundTag containing auction data
+     */
+    public CompoundTag toNBT() {
+        CompoundTag tag = new CompoundTag();
+        tag.putString("auctionId", auctionId);
+        tag.putString("itemId", itemId);
+        tag.putString("componentData", componentData);
+        tag.putInt("quantity", quantity);
+        tag.putLong("startingPrice", startingPrice);
+        tag.putLong("currentBid", currentBid);
+        tag.putString("sellerUuid", sellerUuid);
+        tag.putString("sellerName", sellerName);
+        tag.putLong("expiryTime", expiryTime);
+        tag.putLong("createdTime", createdTime);
+        
+        if (bidderUuid != null) {
+            tag.putString("bidderUuid", bidderUuid);
+        }
+        if (bidderName != null) {
+            tag.putString("bidderName", bidderName);
+        }
+        
+        return tag;
+    }
+    
+    /**
+     * Deserializes an auction from NBT.
+     * @param tag CompoundTag containing auction data
+     * @return PlayerAuction instance
+     */
+    public static PlayerAuction fromNBT(CompoundTag tag) {
+        PlayerAuction auction = new PlayerAuction();
+        
+        auction.setAuctionId(tag.getString("auctionId"));
+        auction.setItemId(tag.getString("itemId"));
+        auction.setComponentData(tag.getString("componentData"));
+        auction.setQuantity(tag.getInt("quantity"));
+        auction.setStartingPrice(tag.getLong("startingPrice"));
+        auction.setCurrentBid(tag.getLong("currentBid"));
+        auction.setSellerUuid(tag.getString("sellerUuid"));
+        auction.setSellerName(tag.getString("sellerName"));
+        auction.setExpiryTime(tag.getLong("expiryTime"));
+        auction.setCreatedTime(tag.getLong("createdTime"));
+        
+        if (tag.contains("bidderUuid")) {
+            auction.setBidderUuid(tag.getString("bidderUuid"));
+        }
+        if (tag.contains("bidderName")) {
+            auction.setBidderName(tag.getString("bidderName"));
+        }
+        
+        return auction;
     }
     
     @Override

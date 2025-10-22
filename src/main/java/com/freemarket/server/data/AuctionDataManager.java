@@ -2,164 +2,57 @@ package com.freemarket.server.data;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.PlayerAuction;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.saveddata.SavedData;
+import org.jetbrains.annotations.NotNull;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 /**
- * Manages auction data persistence using JSON files in world data directory.
+ * Manages auction data persistence using world NBT data.
+ * Data is only loaded when needed (render/bid operations) and stored in world save data.
  */
 public class AuctionDataManager {
     
-    private static final String AUCTION_FILE_NAME = "auctions.json";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final String AUCTION_DATA_KEY = "freemarket_auctions";
+    private static final String AUCTIONS_LIST_KEY = "auctions";
+    private static final String VERSION_KEY = "version";
+    private static final String LAST_UPDATED_KEY = "lastUpdated";
     
     /**
-     * Gets the auction data file path for a given world.
-     */
-    public static Path getAuctionFilePath(ServerLevel level) {
-        return level.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve(AUCTION_FILE_NAME);
-    }
-    
-    /**
-     * Creates an empty auctions.json file in the world data directory.
-     */
-    public static void createEmptyAuctionFile(ServerLevel level) {
-        try {
-            Path auctionFile = getAuctionFilePath(level);
-            File file = auctionFile.toFile();
-            
-            file.getParentFile().mkdirs();
-            
-            JsonObject auctionData = new JsonObject();
-            auctionData.add("auctions", new JsonArray());
-            auctionData.addProperty("version", "1.0");
-            auctionData.addProperty("description", "FreeMarket Auction Data");
-            
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(auctionData, writer);
-            }
-            
-            FreeMarket.LOGGER.info("Created empty auctions.json file for world: {}", level.dimension().location());
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to create auctions.json file for world: {}", level.dimension().location(), e);
-        }
-    }
-    
-    /**
-     * Loads auction data from the JSON file.
+     * Gets the auction data from world save data.
+     * Only loads data when explicitly requested.
      */
     public static List<PlayerAuction> loadAuctions(ServerLevel level) {
-        List<PlayerAuction> auctions = new ArrayList<>();
+        AuctionSavedData savedData = level.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(AuctionSavedData::new, AuctionSavedData::load),
+            AUCTION_DATA_KEY
+        );
         
-        try {
-            Path auctionFile = getAuctionFilePath(level);
-            File file = auctionFile.toFile();
-            
-            if (!file.exists()) {
-                FreeMarket.LOGGER.info("Auction file does not exist, creating empty file: {}", auctionFile);
-                createEmptyAuctionFile(level);
-                return auctions;
-            }
-            
-            try (FileReader reader = new FileReader(file)) {
-                JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-                JsonArray auctionsArray = root.getAsJsonArray("auctions");
-                
-                if (auctionsArray != null) {
-                    for (int i = 0; i < auctionsArray.size(); i++) {
-                        JsonObject auctionJson = auctionsArray.get(i).getAsJsonObject();
-                        
-                        PlayerAuction auction = new PlayerAuction();
-                        auction.setAuctionId(auctionJson.get("auctionId").getAsString());
-                        auction.setItemId(auctionJson.get("itemId").getAsString());
-                        auction.setComponentData(auctionJson.has("componentData") ? 
-                            auctionJson.get("componentData").getAsString() : "{}");
-                        auction.setQuantity(auctionJson.get("quantity").getAsInt());
-                        auction.setStartingPrice(auctionJson.get("startingPrice").getAsLong());
-                        auction.setCurrentBid(auctionJson.get("currentBid").getAsLong());
-                        auction.setSellerUuid(auctionJson.get("sellerUuid").getAsString());
-                        auction.setSellerName(auctionJson.get("sellerName").getAsString());
-                        auction.setExpiryTime(auctionJson.get("expiryTime").getAsLong());
-                        auction.setBidderUuid(auctionJson.has("bidderUuid") && !auctionJson.get("bidderUuid").isJsonNull() ? 
-                            auctionJson.get("bidderUuid").getAsString() : null);
-                        auction.setBidderName(auctionJson.has("bidderName") && !auctionJson.get("bidderName").isJsonNull() ? 
-                            auctionJson.get("bidderName").getAsString() : null);
-                        auction.setCreatedTime(auctionJson.has("createdTime") ? 
-                            auctionJson.get("createdTime").getAsLong() : System.currentTimeMillis());
-                        
-                        auctions.add(auction);
-                    }
-                }
-            }
-            
-            FreeMarket.LOGGER.info("Loaded {} auctions from auctions.json", auctions.size());
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to load auction data from world: {}", level.dimension().location(), e);
-        }
-        
-        return auctions;
+        return savedData.getAuctions();
     }
     
     /**
-     * Saves auction data to the JSON file.
+     * Saves auction data to world save data.
      */
     public static void saveAuctions(ServerLevel level, List<PlayerAuction> auctions) {
-        try {
-            Path auctionFile = getAuctionFilePath(level);
-            File file = auctionFile.toFile();
-            
-            file.getParentFile().mkdirs();
-            
-            JsonObject auctionData = new JsonObject();
-            JsonArray auctionsArray = new JsonArray();
-            
-            for (PlayerAuction auction : auctions) {
-                JsonObject auctionJson = new JsonObject();
-                auctionJson.addProperty("auctionId", auction.getAuctionId());
-                auctionJson.addProperty("itemId", auction.getItemId());
-                auctionJson.addProperty("componentData", auction.getComponentData());
-                auctionJson.addProperty("quantity", auction.getQuantity());
-                auctionJson.addProperty("startingPrice", auction.getStartingPrice());
-                auctionJson.addProperty("currentBid", auction.getCurrentBid());
-                auctionJson.addProperty("sellerUuid", auction.getSellerUuid());
-                auctionJson.addProperty("sellerName", auction.getSellerName());
-                auctionJson.addProperty("expiryTime", auction.getExpiryTime());
-                auctionJson.addProperty("bidderUuid", auction.getBidderUuid());
-                auctionJson.addProperty("bidderName", auction.getBidderName());
-                auctionJson.addProperty("createdTime", auction.getCreatedTime());
-                auctionsArray.add(auctionJson);
-            }
-            
-            auctionData.add("auctions", auctionsArray);
-            auctionData.addProperty("version", "1.0");
-            auctionData.addProperty("description", "FreeMarket Auction Data");
-            auctionData.addProperty("lastUpdated", System.currentTimeMillis());
-            
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(auctionData, writer);
-            }
-            
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to save auction data to world: {}", level.dimension().location(), e);
-        }
+        AuctionSavedData savedData = level.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(AuctionSavedData::new, AuctionSavedData::load),
+            AUCTION_DATA_KEY
+        );
+        
+        savedData.setAuctions(auctions);
+        savedData.setDirty();
     }
     
     /**
-     * Adds a new auction.
+     * Adds a new auction to world data.
      */
     public static void addAuction(ServerLevel level, PlayerAuction auction) {
         List<PlayerAuction> auctions = loadAuctions(level);
@@ -168,7 +61,7 @@ public class AuctionDataManager {
     }
     
     /**
-     * Removes an auction by ID.
+     * Removes an auction by ID from world data.
      */
     public static void removeAuction(ServerLevel level, String auctionId) {
         List<PlayerAuction> auctions = loadAuctions(level);
@@ -177,7 +70,7 @@ public class AuctionDataManager {
     }
     
     /**
-     * Updates an existing auction.
+     * Updates an existing auction in world data.
      */
     public static void updateAuction(ServerLevel level, PlayerAuction updatedAuction) {
         List<PlayerAuction> auctions = loadAuctions(level);
@@ -191,7 +84,7 @@ public class AuctionDataManager {
     }
     
     /**
-     * Removes all expired auctions.
+     * Removes all expired auctions from world data.
      * @return list of expired auctions that were removed
      */
     public static List<PlayerAuction> removeExpiredAuctions(ServerLevel level) {
@@ -208,7 +101,7 @@ public class AuctionDataManager {
         
         if (!expired.isEmpty()) {
             saveAuctions(level, auctions);
-            FreeMarket.LOGGER.info("Removed {} expired auctions", expired.size());
+            FreeMarket.LOGGER.info("Removed {} expired auctions from world data", expired.size());
         }
         
         return expired;
@@ -222,11 +115,118 @@ public class AuctionDataManager {
     }
     
     /**
-     * Checks if the auction file exists for a given world.
+     * Checks if auction data exists for a given world.
      */
-    public static boolean auctionFileExists(ServerLevel level) {
-        Path auctionFile = getAuctionFilePath(level);
-        return auctionFile.toFile().exists();
+    public static boolean hasAuctionData(ServerLevel level) {
+        return level.getDataStorage().get(new SavedData.Factory<>(AuctionSavedData::new, AuctionSavedData::load), AUCTION_DATA_KEY) != null;
+    }
+    
+    /**
+     * SavedData implementation for storing auction data in world NBT.
+     */
+    public static class AuctionSavedData extends SavedData {
+        private List<PlayerAuction> auctions = new ArrayList<>();
+        private String version = "1.0";
+        private long lastUpdated = System.currentTimeMillis();
+        
+        public AuctionSavedData() {
+            // Default constructor
+        }
+        
+        public AuctionSavedData(List<PlayerAuction> auctions) {
+            this.auctions = new ArrayList<>(auctions);
+        }
+        
+        @Override
+        public CompoundTag save(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+            ListTag auctionsList = new ListTag();
+            
+            for (PlayerAuction auction : auctions) {
+                CompoundTag auctionTag = new CompoundTag();
+                auctionTag.putString("auctionId", auction.getAuctionId());
+                auctionTag.putString("itemId", auction.getItemId());
+                auctionTag.putString("componentData", auction.getComponentData());
+                auctionTag.putInt("quantity", auction.getQuantity());
+                auctionTag.putLong("startingPrice", auction.getStartingPrice());
+                auctionTag.putLong("currentBid", auction.getCurrentBid());
+                auctionTag.putString("sellerUuid", auction.getSellerUuid());
+                auctionTag.putString("sellerName", auction.getSellerName());
+                auctionTag.putLong("expiryTime", auction.getExpiryTime());
+                
+                if (auction.getBidderUuid() != null) {
+                    auctionTag.putString("bidderUuid", auction.getBidderUuid());
+                }
+                if (auction.getBidderName() != null) {
+                    auctionTag.putString("bidderName", auction.getBidderName());
+                }
+                
+                auctionTag.putLong("createdTime", auction.getCreatedTime());
+                auctionsList.add(auctionTag);
+            }
+            
+            tag.put(AUCTIONS_LIST_KEY, auctionsList);
+            tag.putString(VERSION_KEY, version);
+            tag.putLong(LAST_UPDATED_KEY, System.currentTimeMillis());
+            
+            return tag;
+        }
+        
+        public static AuctionSavedData load(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+            AuctionSavedData data = new AuctionSavedData();
+            
+            if (tag.contains(AUCTIONS_LIST_KEY, Tag.TAG_LIST)) {
+                ListTag auctionsList = tag.getList(AUCTIONS_LIST_KEY, Tag.TAG_COMPOUND);
+                
+                for (int i = 0; i < auctionsList.size(); i++) {
+                    CompoundTag auctionTag = auctionsList.getCompound(i);
+                    
+                    PlayerAuction auction = new PlayerAuction();
+                    auction.setAuctionId(auctionTag.getString("auctionId"));
+                    auction.setItemId(auctionTag.getString("itemId"));
+                    auction.setComponentData(auctionTag.getString("componentData"));
+                    auction.setQuantity(auctionTag.getInt("quantity"));
+                    auction.setStartingPrice(auctionTag.getLong("startingPrice"));
+                    auction.setCurrentBid(auctionTag.getLong("currentBid"));
+                    auction.setSellerUuid(auctionTag.getString("sellerUuid"));
+                    auction.setSellerName(auctionTag.getString("sellerName"));
+                    auction.setExpiryTime(auctionTag.getLong("expiryTime"));
+                    
+                    if (auctionTag.contains("bidderUuid")) {
+                        auction.setBidderUuid(auctionTag.getString("bidderUuid"));
+                    }
+                    if (auctionTag.contains("bidderName")) {
+                        auction.setBidderName(auctionTag.getString("bidderName"));
+                    }
+                    
+                    auction.setCreatedTime(auctionTag.getLong("createdTime"));
+                    data.auctions.add(auction);
+                }
+            }
+            
+            if (tag.contains(VERSION_KEY)) {
+                data.version = tag.getString(VERSION_KEY);
+            }
+            if (tag.contains(LAST_UPDATED_KEY)) {
+                data.lastUpdated = tag.getLong(LAST_UPDATED_KEY);
+            }
+            
+            return data;
+        }
+        
+        public List<PlayerAuction> getAuctions() {
+            return new ArrayList<>(auctions);
+        }
+        
+        public void setAuctions(List<PlayerAuction> auctions) {
+            this.auctions = new ArrayList<>(auctions);
+        }
+        
+        public String getVersion() {
+            return version;
+        }
+        
+        public long getLastUpdated() {
+            return lastUpdated;
+        }
     }
 }
-

@@ -8,6 +8,7 @@
   "gui.FreeMarket.marketplace.search": "Search items...",
   "gui.FreeMarket.marketplace.search_placeholder": "Type to search...",
   "gui.FreeMarket.marketplace.count": "Showing %d of %d items",
+  "gui.FreeMarket.auction.count": "Showing %d of %d auctions",
   
   "gui.FreeMarket.add_item.title": "Add Item to Free Market",
   "gui.FreeMarket.add_item.item_id": "Item ID",

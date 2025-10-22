@@ -268,6 +268,11 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             // Render auction grid
             renderDataGrid(guiGraphics, auctionsToRender, mouseX, mouseY, partialTick);
         }
+        
+        // Draw auction count
+        int actualAuctionCount = auctionsToRender.size();
+        Component countText = Component.translatable("gui.FreeMarket.auction.count", actualAuctionCount, getCachedAuctionData().size());
+        guiGraphics.drawString(Minecraft.getInstance().font, countText, x + GuiScalingHelper.responsiveWidth(10, 8, 15), y + height - GuiScalingHelper.responsiveHeight(15, 12, 20), 0xCCCCCC);
     }
     
     /**

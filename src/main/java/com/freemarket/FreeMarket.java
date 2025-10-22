@@ -17,12 +17,17 @@ import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import com.freemarket.server.data.FreeMarketDataManager;
+import com.freemarket.server.data.LeaderboardDataManager;
+import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.server.commands.FreeMarketCommands;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
 import com.freemarket.common.network.AdminModeNetworkHandler;
 import com.freemarket.common.network.SellItemNetworkHandler;
+import com.freemarket.common.network.LeaderboardNetworkHandler;
+import com.freemarket.common.network.AuctionNetworkHandler;
 import com.freemarket.server.events.ServerEventHandler;
 import com.freemarket.server.events.ServerMarketplaceEventHandler;
+import com.freemarket.server.events.LeaderboardEventHandler;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(FreeMarket.MODID)
@@ -51,11 +56,20 @@ public class FreeMarket {
         // Register network handler for sell item operations
         modEventBus.addListener(SellItemNetworkHandler::register);
         
+        // Register network handler for leaderboard synchronization
+        modEventBus.addListener(LeaderboardNetworkHandler::register);
+        
+        // Register network handler for auction synchronization
+        modEventBus.addListener(AuctionNetworkHandler::register);
+        
         // Register server event handler for player join events
         NeoForge.EVENT_BUS.register(ServerEventHandler.class);
         
         // Register marketplace event handler for marketplace sync
         NeoForge.EVENT_BUS.register(ServerMarketplaceEventHandler.class);
+        
+        // Register leaderboard event handler for player login/logout
+        NeoForge.EVENT_BUS.register(LeaderboardEventHandler.class);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);
@@ -77,6 +91,19 @@ public class FreeMarket {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             if (!FreeMarketDataManager.marketplaceFileExists(serverLevel)) {
                 FreeMarketDataManager.createEmptyMarketplaceFile(serverLevel);
+            }
+            
+            // Create empty leaderboard.json file if it doesn't exist
+            if (!LeaderboardDataManager.leaderboardFileExists(serverLevel)) {
+                LeaderboardDataManager.createEmptyLeaderboardFile(serverLevel);
+            }
+            
+            // Load leaderboard data into cache on world load
+            LeaderboardDataManager.loadLeaderboardData(serverLevel);
+            
+            // Create empty auctions.json file if it doesn't exist
+            if (!AuctionDataManager.auctionFileExists(serverLevel)) {
+                AuctionDataManager.createEmptyAuctionFile(serverLevel);
             }
         }
     }

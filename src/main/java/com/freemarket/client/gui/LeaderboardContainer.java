@@ -251,6 +251,11 @@ public class LeaderboardContainer implements Renderable {
      * Handles mouse clicks.
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Block clicks if popup is visible
+        if (parentScreen != null && parentScreen.isAnyPopupVisible()) {
+            return false; // Don't consume - let popup handle it
+        }
+        
         // No clickable elements in leaderboard
         return false;
     }

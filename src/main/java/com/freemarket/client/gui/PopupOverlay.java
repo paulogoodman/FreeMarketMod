@@ -82,6 +82,10 @@ public abstract class PopupOverlay implements Renderable {
             return;
         }
         
+        // Push pose to render popup at a higher z-level (in front of everything)
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(0, 0, 400); // Push popup forward in z-space
+        
         // Draw backdrop overlay with blur effect
         int screenWidth = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledWidth();
         int screenHeight = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
@@ -110,6 +114,9 @@ public abstract class PopupOverlay implements Renderable {
         if (errorMessage != null) {
             drawErrorMessage(guiGraphics);
         }
+        
+        // Pop pose to restore original z-level
+        guiGraphics.pose().popPose();
     }
     
     /**

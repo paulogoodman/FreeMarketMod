@@ -93,10 +93,11 @@ public class UnifiedItemCardRenderer {
     /**
      * Main render method for unified card rendering.
      * @param infoText Optional info text to display (e.g., auction details). Pass null for marketplace.
+     * @param popupVisible Whether any popup is currently visible (prevents tooltip rendering)
      */
     public void renderCard(GuiGraphics guiGraphics, ItemStack itemStack, CardButtonConfig config,
                           String infoText, int x, int y, int cardWidth, int cardHeight,
-                          int mouseX, int mouseY, float guiScale) {
+                          int mouseX, int mouseY, float guiScale, boolean popupVisible) {
         // Render card background
         renderCardBackground(guiGraphics, x, y, cardWidth, cardHeight);
         
@@ -108,8 +109,8 @@ public class UnifiedItemCardRenderer {
         // Render item icon
         renderItemIcon(guiGraphics, itemStack, x, y, cardWidth, cardHeight, guiScale);
         
-        // Render tooltip on hover
-        if (isMouseOverIcon(x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale)) {
+        // Render tooltip on hover (only if no popup is visible)
+        if (!popupVisible && isMouseOverIcon(x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale)) {
             renderItemTooltip(guiGraphics, itemStack, mouseX, mouseY);
         }
         

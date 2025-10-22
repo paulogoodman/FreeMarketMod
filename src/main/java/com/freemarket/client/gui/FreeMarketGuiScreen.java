@@ -120,6 +120,15 @@ public class FreeMarketGuiScreen extends Screen {
     
     
     /**
+     * Checks if any popup overlay is currently visible.
+     * @return true if any popup is visible, false otherwise
+     */
+    public boolean isAnyPopupVisible() {
+        return (createAuctionPopup != null && createAuctionPopup.isVisible()) ||
+               (placeBidPopup != null && placeBidPopup.isVisible());
+    }
+    
+    /**
      * Gets the cached wallet balance for external access.
      * @return the cached balance
      */
@@ -624,6 +633,11 @@ public class FreeMarketGuiScreen extends Screen {
             if (placeBidPopup.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
+        }
+        
+        // Don't process tab clicks or container clicks if popup is visible
+        if (isAnyPopupVisible()) {
+            return false; // Let popup handle all clicks
         }
         
         // Check if tab button was clicked

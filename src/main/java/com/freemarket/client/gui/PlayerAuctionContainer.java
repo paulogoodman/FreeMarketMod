@@ -10,8 +10,6 @@ import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -27,21 +25,8 @@ import java.util.Map;
 /**
  * Container for displaying player auctions with grid layout and bid functionality.
  */
-public class PlayerAuctionContainer implements Renderable {
+public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.common.data.PlayerAuction> {
     
-    private final int x, y, width, height;
-    private final FreeMarketGuiScreen parentScreen;
-    
-    // Grid layout configuration - will be calculated responsively
-    private int itemsPerRow = 3; // Default, will be overridden by calculateOptimalGridLayout()
-    private int rowsOfItems = 3; // Default, will be overridden by calculateOptimalGridLayout()
-    private int maxVisibleItems = 9; // Default, will be overridden by calculateOptimalGridLayout()
-    private int itemSpacing = 150;
-    private int itemHeight = 180;
-    private int calculatedItemWidth = 130;
-    
-    // Scrolling
-    private int scrollOffset = 0;
     
     // Cooldown tracking for bid button
     private final Map<String, Long> bidCooldowns = new HashMap<>();
@@ -57,145 +42,21 @@ public class PlayerAuctionContainer implements Renderable {
     // Unified card renderer
     private final UnifiedItemCardRenderer unifiedRenderer = new UnifiedItemCardRenderer();
     
-    // Search and category functionality
-    private EditBox searchBox;
-    private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
     
     // Caching for auction data (similar to marketplace container)
     private List<PlayerAuction> cachedAllAuctions;
     private long lastAuctionDataUpdate = 0;
     private static final long AUCTION_DATA_CACHE_DURATION = 1000; // 1 second cache for auction data
     
-    // Caching for filtered auctions
-    private List<PlayerAuction> cachedAuctionsToRender;
-    private ItemCategoryManager.Category lastFilteredCategory;
-    private String lastSearchText;
-    private long lastAuctionCacheUpdate = 0;
-    private static final long AUCTION_CACHE_DURATION = 500; // 500ms cache
-    
-    // Caching for categories (similar to marketplace container)
-    private List<ItemCategoryManager.Category> cachedCategories;
-    private Map<ItemCategoryManager.Category, Integer> cachedCategoryCounts;
-    private long lastCategoryCacheUpdate = 0;
-    private static final long CATEGORY_CACHE_DURATION = 1000; // 1 second cache
     
     public PlayerAuctionContainer(int x, int y, int width, int height, FreeMarketGuiScreen parentScreen) {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.parentScreen = parentScreen;
+        super(x, y, width, height, parentScreen);
         
         // Request auction data from server
         requestAuctionData();
     }
     
-    /**
-     * Initializes the container with responsive dimensions.
-     */
-    public void init() {
-        // Calculate responsive dimensions
-        calculateResponsiveDimensions();
-        
-        // Create search box with proper spacing from title
-        int searchWidth = (int)(width * 0.5); // 50% of container width
-        int searchHeight = (int)(height * 0.05); // 5% of container height
-        int searchX = x + (width - searchWidth) / 2; // Center horizontally
-        int searchY = y + (int)(height * 0.08); // 8% from top (below title with space)
-        
-        this.searchBox = new EditBox(
-            Minecraft.getInstance().font,
-            searchX, searchY, searchWidth, searchHeight,
-            Component.translatable("gui.FreeMarket.auction.search_placeholder")
-        );
-        this.searchBox.setResponder(this::onSearchChanged);
-        this.searchBox.setMaxLength(50); // Set max length for search
-        this.searchBox.setValue(""); // Clear any initial value
-        
-        // Initialize cache with current auction data
-        initializeAuctionCache();
-        
-        // Request fresh auction data
-        requestAuctionData();
-    }
     
-    /**
-     * Calculates responsive grid layout based on GUI scale.
-     * Identical to marketplace container implementation.
-     */
-    private void calculateResponsiveDimensions() {
-        // Calculate grid layout based on GUI scale mapping
-        calculateOptimalGridLayout();
-        
-        // Calculate available space for items - account for sidebar like marketplace
-        int sidebarWidth = (int)(width * 0.2); // 20% of container width
-        int sidebarMargin = (int)(width * 0.02); // 2% margin
-        int rightMargin = (int)(width * 0.02); // 2% margin
-        int availableWidth = width - sidebarWidth - sidebarMargin - rightMargin;
-        
-        // Calculate card spacing based on grid size
-        int cardMargin = Math.max(2, (int)(width * 0.005)); // Minimum 2px margin between cards
-        int shadowOffset = Math.max(1, (int)(width * 0.002)); // Minimum 1px shadow offset
-        
-        // Calculate card width to fit the grid perfectly
-        int totalSpacing = (itemsPerRow - 1) * (cardMargin + shadowOffset);
-        int cardWidth = (availableWidth - totalSpacing) / itemsPerRow;
-        
-        // Ensure minimum card size for usability
-        int minCardWidth = Math.max(40, (int)(width * 0.05)); // Minimum 5% of container width
-        cardWidth = Math.max(cardWidth, minCardWidth);
-        
-        // Calculate card height based on available vertical space
-        int availableHeight = height - (int)(height * 0.2); // Leave space for search box and margins
-        int verticalMargin = Math.max(2, (int)(height * 0.005)); // Minimum 2px vertical margin
-        int totalVerticalSpacing = (rowsOfItems - 1) * verticalMargin;
-        int cardHeight = (availableHeight - totalVerticalSpacing) / rowsOfItems;
-        
-        // Ensure minimum card height for usability
-        int minCardHeight = Math.max(30, (int)(height * 0.05)); // Minimum 5% of container height
-        cardHeight = Math.max(cardHeight, minCardHeight);
-        
-        // Calculate item spacing
-        this.itemSpacing = cardWidth + cardMargin + shadowOffset;
-        this.itemHeight = cardHeight + verticalMargin;
-        
-        // Store the calculated dimensions for use in rendering
-        this.calculatedItemWidth = cardWidth;
-    }
-    
-    /**
-     * Maps GUI scale to grid layout
-     * Scale 1 = 5x5, Scale 2 = 4x4, Scale 3 = 3x3, Scale 4 = 2x2, Scale 5 = 1x1
-     * Identical to marketplace container implementation.
-     */
-    private void calculateOptimalGridLayout() {
-        Minecraft client = Minecraft.getInstance();
-        float guiScale = (float) client.getWindow().getGuiScale();
-        
-        // Map GUI scale to grid size (inverse relationship)
-        int gridSize;
-        if (guiScale <= 1.0f) {
-            gridSize = 5; // Scale 1 = 5x5 (most items)
-        } else if (guiScale <= 2.0f) {
-            gridSize = 4; // Scale 2 = 4x4
-        } else if (guiScale <= 3.0f) {
-            gridSize = 3; // Scale 3 = 3x3
-        } else if (guiScale <= 4.0f) {
-            gridSize = 2; // Scale 4 = 2x2
-        } else {
-            gridSize = 1; // Scale 5+ = 1x1 (largest cards)
-        }
-        
-        // Set grid layout based on GUI scale
-        this.itemsPerRow = gridSize;
-        this.rowsOfItems = gridSize;
-        this.maxVisibleItems = gridSize * gridSize;
-        
-        // Ensure we always show at least 1 item
-        this.itemsPerRow = Math.max(1, this.itemsPerRow);
-        this.rowsOfItems = Math.max(1, this.rowsOfItems);
-        this.maxVisibleItems = Math.max(1, this.maxVisibleItems);
-    }
     
     /**
      * Requests auction data from the server.
@@ -205,11 +66,156 @@ public class PlayerAuctionContainer implements Renderable {
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
     }
     
-    /**
-     * Handles search text changes.
-     */
-    private void onSearchChanged(String searchText) {
-        scrollOffset = 0; // Reset scroll when searching
+    // Abstract method implementations
+    
+    @Override
+    protected Component getSearchPlaceholder() {
+        return Component.translatable("gui.FreeMarket.auction.search_placeholder");
+    }
+    
+    @Override
+    protected List<com.freemarket.common.data.PlayerAuction> getAllData() {
+        return getCachedAuctionData();
+    }
+    
+    @Override
+    protected List<com.freemarket.common.data.PlayerAuction> filterByCategory(List<com.freemarket.common.data.PlayerAuction> data, ItemCategoryManager.Category category) {
+        return ItemCategoryManager.filterAuctionsByCategory(data, category);
+    }
+    
+    @Override
+    protected List<com.freemarket.common.data.PlayerAuction> filterBySearch(List<com.freemarket.common.data.PlayerAuction> data, String searchText) {
+        if (searchText.isEmpty()) {
+            return data;
+        }
+        String searchLower = searchText.toLowerCase();
+        return data.stream()
+            .filter(auction -> auction.getItemId().toLowerCase().contains(searchLower))
+            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+    }
+    
+    @Override
+    protected Map<ItemCategoryManager.Category, Integer> getCategoryCounts() {
+        List<com.freemarket.common.data.PlayerAuction> allAuctions = getCachedAuctionData();
+        List<com.freemarket.common.data.PlayerAuction> activeAuctions = new ArrayList<>();
+        for (com.freemarket.common.data.PlayerAuction auction : allAuctions) {
+            if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
+                activeAuctions.add(auction);
+            }
+        }
+        return ItemCategoryManager.getCategoryCountsForAuctions(activeAuctions);
+    }
+    
+    @Override
+    protected ItemCategoryManager.Category getItemCategory(com.freemarket.common.data.PlayerAuction auction) {
+        // Create ItemStack from auction data
+        ResourceLocation itemId = ResourceLocation.parse(auction.getItemId());
+        Item item = BuiltInRegistries.ITEM.get(itemId);
+        ItemStack itemStack = new ItemStack(item, auction.getQuantity());
+        
+        // Apply component data if present
+        String componentData = auction.getComponentData();
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            Minecraft minecraft = Minecraft.getInstance();
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            
+            if (singleplayerServer != null) {
+                // Use server-side handler
+                itemStack = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    itemStack, componentData, singleplayerServer);
+            } else {
+                // Fallback to client-side
+                ItemComponentHandler.applyComponentData(itemStack, componentData);
+            }
+        }
+        
+        return ItemCategoryManager.getCategoryForItem(itemStack);
+    }
+    
+    @Override
+    protected void renderDataGrid(GuiGraphics guiGraphics, List<com.freemarket.common.data.PlayerAuction> auctions, int mouseX, int mouseY, float partialTick) {
+        // Filter to only active auctions
+        List<com.freemarket.common.data.PlayerAuction> activeAuctions = new ArrayList<>();
+        for (com.freemarket.common.data.PlayerAuction auction : auctions) {
+            if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
+                activeAuctions.add(auction);
+            }
+        }
+        
+        // Render auction grid
+        renderAuctionGrid(guiGraphics, activeAuctions, mouseX, mouseY);
+    }
+    
+    @Override
+    protected boolean handleDataClick(com.freemarket.common.data.PlayerAuction auction, double mouseX, double mouseY, int button) {
+        // Handle bid button clicks
+        Minecraft minecraft = Minecraft.getInstance();
+        float guiScale = (float) minecraft.getWindow().getGuiScale();
+        String playerUuid = minecraft.player != null ? minecraft.player.getStringUUID() : null;
+        
+        // Calculate grid start position - account for sidebar like marketplace
+        int startY = y + (int)(height * 0.15);
+        int sidebarWidth = (int)(width * 0.2); // 20% of container width
+        int sidebarMargin = (int)(width * 0.02); // 2% margin
+        int startX = x + sidebarWidth + sidebarMargin; // Start after sidebar with consistent margin
+        
+        // Get filtered auction data
+        List<com.freemarket.common.data.PlayerAuction> auctions = getFilteredData();
+        
+        // Calculate visible range
+        int startIndex = scrollOffset * itemsPerRow;
+        int endIndex = Math.min(startIndex + maxVisibleItems, auctions.size());
+        
+        // Check each visible auction for click
+        for (int i = startIndex; i < endIndex; i++) {
+            com.freemarket.common.data.PlayerAuction currentAuction = auctions.get(i);
+            
+            // Calculate position
+            int gridIndex = i - startIndex;
+            int row = gridIndex / itemsPerRow;
+            int col = gridIndex % itemsPerRow;
+            
+            int cardX = startX + (col * itemSpacing);
+            int cardY = startY + (row * itemHeight);
+            int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin) - match market container
+            
+            // Check if button was clicked using unified renderer
+            boolean isOwnAuction = playerUuid != null && playerUuid.equals(currentAuction.getSellerUuid());
+            boolean isHighestBidder = playerUuid != null && playerUuid.equals(currentAuction.getBidderUuid());
+            boolean isExpired = ClientAuctionTimingCache.isExpired(currentAuction.getAuctionId());
+            boolean isCooldown = isBidCooldown(currentAuction.getAuctionId());
+            
+            long minimumBid = currentAuction.getMinimumBid();
+            long playerBalance = ClientWalletHandler.getPlayerMoney();
+            boolean canBid = playerBalance >= minimumBid;
+            
+            // Create button config for click detection
+            CardButtonConfig config = CardButtonConfig.forAuction(
+                currentAuction.getCurrentBid(), canBid, isCooldown,
+                isOwnAuction, isHighestBidder, isExpired
+            );
+            
+            ButtonType buttonClicked = UnifiedItemCardRenderer.checkButtonClick(
+                cardX, cardY, calculatedItemWidth, cardHeight,
+                (int)mouseX, (int)mouseY, guiScale, config
+            );
+            
+            if (buttonClicked == ButtonType.BID) {
+                // Check cooldown
+                if (isBidCooldown(currentAuction.getAuctionId())) {
+                    return true; // Consume click but don't open popup
+                }
+                
+                // Start cooldown
+                startBidCooldown(currentAuction.getAuctionId());
+                
+                // Open bid popup using overlay system
+                parentScreen.showPlaceBidPopup(currentAuction);
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     @Override
@@ -231,7 +237,6 @@ public class PlayerAuctionContainer implements Renderable {
         guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040);
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040);
         
-        
         // Render search box
         if (searchBox != null) {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
@@ -244,7 +249,7 @@ public class PlayerAuctionContainer implements Renderable {
         renderCategorySidebar(guiGraphics, mouseX, mouseY);
         
         // Get filtered auction data (includes search and category filtering)
-        List<PlayerAuction> auctionsToRender = getAuctionsToRender();
+        List<com.freemarket.common.data.PlayerAuction> auctionsToRender = getFilteredData();
         
         if (auctionsToRender.isEmpty()) {
             // Show "No Active Auctions" message
@@ -261,7 +266,7 @@ public class PlayerAuctionContainer implements Renderable {
             guiGraphics.drawString(Minecraft.getInstance().font, description, descX, descY, 0xFF666666);
         } else {
             // Render auction grid
-            renderAuctionGrid(guiGraphics, auctionsToRender, mouseX, mouseY);
+            renderDataGrid(guiGraphics, auctionsToRender, mouseX, mouseY, partialTick);
         }
     }
     
@@ -327,7 +332,8 @@ public class PlayerAuctionContainer implements Renderable {
             unifiedRenderer.renderCard(guiGraphics, itemStack, config, infoText,
                                       cardX, cardY, calculatedItemWidth, 
                                       cardHeight,
-                                      mouseX, mouseY, guiScale);
+                                      mouseX, mouseY, guiScale,
+                                      parentScreen != null && parentScreen.isAnyPopupVisible());
         }
     }
     
@@ -490,7 +496,10 @@ public class PlayerAuctionContainer implements Renderable {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return false; // Only left click
         
-        // Handle search box clicks first
+        // Block all clicks if a popup is visible (except search box to allow unfocusing)
+        boolean popupVisible = parentScreen != null && parentScreen.isAnyPopupVisible();
+        
+        // Handle search box clicks first (always allow to enable unfocusing)
         if (searchBox != null) {
             if (searchBox.mouseClicked(mouseX, mouseY, button)) {
                 searchBox.setFocused(true);
@@ -502,6 +511,11 @@ public class PlayerAuctionContainer implements Renderable {
                 searchBox.setFocused(true);
                 return true;
             }
+        }
+        
+        // Block remaining clicks if popup is visible
+        if (popupVisible) {
+            return false; // Don't consume - let popup handle it
         }
         
         // Handle category sidebar clicks
@@ -619,46 +633,14 @@ public class PlayerAuctionContainer implements Renderable {
         return false;
     }
     
-    /**
-     * Handles key presses.
-     * Forwards input to search box like marketplace container.
-     */
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (searchBox != null && searchBox.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
-        return false;
-    }
     
-    /**
-     * Handles character typing.
-     * Forwards input to search box like marketplace container.
-     */
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (searchBox != null && searchBox.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        return false;
-    }
     
-    /**
-     * Checks if the search box is focused.
-     * Identical to marketplace container implementation.
-     */
-    public boolean isFocused() {
-        return searchBox != null && searchBox.isFocused();
-    }
     
     /**
      * Scrolls the auction list.
      */
     public void scroll(int delta) {
-        // Use cached auction data instead of calling ClientAuctionCache every time
-        int totalAuctions = getCachedAuctionData().size();
-        int totalRows = (int) Math.ceil((double) totalAuctions / itemsPerRow);
-        int maxScroll = Math.max(0, totalRows - rowsOfItems);
-        
-        scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + delta));
+        super.scroll(delta);
     }
     
     /**
@@ -668,17 +650,6 @@ public class PlayerAuctionContainer implements Renderable {
         itemStackCache.clear();
     }
     
-    /**
-     * Initializes the auction cache with current data.
-     * Called during container initialization to populate cache immediately.
-     */
-    private void initializeAuctionCache() {
-        // Initialize cache with current auction data if available
-        if (ClientAuctionCache.hasCachedData()) {
-            cachedAllAuctions = ClientAuctionCache.getCachedAuctions();
-            lastAuctionDataUpdate = System.currentTimeMillis();
-        }
-    }
     
     /**
      * Invalidates the auction data cache to force refresh on next access.
@@ -686,12 +657,8 @@ public class PlayerAuctionContainer implements Renderable {
      */
     public void invalidateAuctionDataCache() {
         cachedAllAuctions = null;
-        cachedAuctionsToRender = null;
-        cachedCategories = null;
-        cachedCategoryCounts = null;
+        invalidateDataCache();
         lastAuctionDataUpdate = 0;
-        lastAuctionCacheUpdate = 0;
-        lastCategoryCacheUpdate = 0;
     }
     
     /**
@@ -711,154 +678,5 @@ public class PlayerAuctionContainer implements Renderable {
         }
         
         return cachedAllAuctions;
-    }
-    
-    /**
-     * Gets filtered auctions based on search text and category.
-     */
-    private List<PlayerAuction> getAuctionsToRender() {
-        long currentTime = System.currentTimeMillis();
-        String currentSearchText = searchBox != null ? searchBox.getValue() : "";
-        
-        // Check if cache is valid
-        if (cachedAuctionsToRender == null || 
-            lastFilteredCategory != selectedCategory ||
-            !currentSearchText.equals(lastSearchText) ||
-            (currentTime - lastAuctionCacheUpdate) > AUCTION_CACHE_DURATION) {
-            
-            // Get cached auction data instead of calling ClientAuctionCache every time
-            List<PlayerAuction> allAuctions = getCachedAuctionData();
-            List<PlayerAuction> activeAuctions = new ArrayList<>();
-            for (PlayerAuction auction : allAuctions) {
-                if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
-                    activeAuctions.add(auction);
-                }
-            }
-            
-            // Filter by category
-            List<PlayerAuction> categoryFiltered = filterAuctionsByCategory(activeAuctions, selectedCategory);
-            
-            // Filter by search text
-            if (!currentSearchText.isEmpty()) {
-                String searchText = currentSearchText.toLowerCase();
-                categoryFiltered = categoryFiltered.stream()
-                    .filter(auction -> auction.getItemId().toLowerCase().contains(searchText))
-                    .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
-            }
-            
-            cachedAuctionsToRender = categoryFiltered;
-            lastFilteredCategory = selectedCategory;
-            lastSearchText = currentSearchText;
-            lastAuctionCacheUpdate = currentTime;
-        }
-        
-        return cachedAuctionsToRender;
-    }
-    
-    /**
-     * Filters a list of auctions by category.
-     * Uses ItemCategoryManager.filterAuctionsByCategory for consistency.
-     */
-    private List<PlayerAuction> filterAuctionsByCategory(List<PlayerAuction> auctions, ItemCategoryManager.Category category) {
-        return ItemCategoryManager.filterAuctionsByCategory(auctions, category);
-    }
-    
-    /**
-     * Renders the category sidebar.
-     * Identical to marketplace container implementation.
-     */
-    private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        // Use percentage-based sizing for sidebar with matching margins
-        int sidebarWidth = (int)(width * 0.2); // 20% of container width
-        int sidebarX = x + (int)(width * 0.02); // 2% margin from left (matches right margin)
-        int sidebarY = y + (int)(height * 0.15); // 15% from top (below search box)
-        int sidebarHeight = height - (int)(height * 0.2); // 80% of container height
-        
-        // Draw sidebar background (semi-transparent)
-        guiGraphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + sidebarHeight, 0x801A1A1A); // 50% opacity
-        guiGraphics.fill(sidebarX + 1, sidebarY + 1, sidebarX + sidebarWidth - 1, sidebarY + sidebarHeight - 1, 0x802D2D2D); // 50% opacity
-        
-        // Draw sidebar title
-        Component sidebarTitle = Component.literal("Categories");
-        guiGraphics.drawString(Minecraft.getInstance().font, sidebarTitle, 
-            sidebarX + GuiScalingHelper.responsiveWidth(5, 4, 8), 
-            sidebarY + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFFE0E0E0);
-        
-        // Get cached categories (filter out categories with zero items)
-        List<ItemCategoryManager.Category> categories = getCachedCategories();
-        
-        int categoryY = sidebarY + GuiScalingHelper.responsiveHeight(20, 16, 28);
-        int categoryHeight = GuiScalingHelper.responsiveHeight(16, 12, 22);
-        
-        for (int i = 0; i < categories.size(); i++) {
-            ItemCategoryManager.Category category = categories.get(i);
-            int currentCategoryY = categoryY + i * categoryHeight;
-            
-            boolean isSelected = category == selectedCategory;
-            boolean isHovered = mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
-                               mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight;
-            
-            // Draw category background (semi-transparent)
-            if (isSelected) {
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY + categoryHeight, 0x804CAF50); // 50% opacity
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + 1, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + categoryHeight - 1, 0x8066BB6A); // 50% opacity
-            } else if (isHovered) {
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY + categoryHeight, 0x803A3A3A); // 50% opacity
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + 1, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + categoryHeight - 1, 0x804A4A4A); // 50% opacity
-            }
-            
-            // Draw category text (simple rendering)
-            int textColor = isSelected ? 0xFFFFFFFF : 0xFFE0E0E0;
-            String categoryText = category.getDisplayName();
-            int count = cachedCategoryCounts.getOrDefault(category, 0);
-            String displayText = categoryText + " (" + count + ")";
-            
-            // Truncate text if it's too long for the container
-            int maxTextWidth = sidebarWidth - GuiScalingHelper.responsiveWidth(10, 8, 15);
-            if (Minecraft.getInstance().font.width(displayText) > maxTextWidth) {
-                while (Minecraft.getInstance().font.width(displayText + "...") > maxTextWidth && displayText.length() > 0) {
-                    displayText = displayText.substring(0, displayText.length() - 1);
-                }
-                displayText += "...";
-            }
-            
-            guiGraphics.drawString(Minecraft.getInstance().font, displayText, 
-                sidebarX + GuiScalingHelper.responsiveWidth(5, 4, 8), 
-                currentCategoryY, textColor);
-        }
-    }
-    
-    /**
-     * Gets cached categories, updating cache if needed
-     */
-    private List<ItemCategoryManager.Category> getCachedCategories() {
-        long currentTime = System.currentTimeMillis();
-        
-        // Check if cache is valid
-        if (cachedCategories == null || cachedCategoryCounts == null || 
-            (currentTime - lastCategoryCacheUpdate) > CATEGORY_CACHE_DURATION) {
-            
-            // Get cached auction data instead of calling ClientAuctionCache every time
-            List<PlayerAuction> allAuctions = getCachedAuctionData();
-            List<PlayerAuction> activeAuctions = new ArrayList<>();
-            for (PlayerAuction auction : allAuctions) {
-                if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
-                    activeAuctions.add(auction);
-                }
-            }
-            
-            // Update cache
-            List<ItemCategoryManager.Category> allCategories = ItemCategoryManager.getAllCategories();
-            cachedCategoryCounts = ItemCategoryManager.getCategoryCountsForAuctions(activeAuctions);
-            
-            // Filter out categories with zero items
-            cachedCategories = allCategories.stream()
-                .filter(category -> cachedCategoryCounts.getOrDefault(category, 0) > 0)
-                .collect(java.util.stream.Collectors.toList());
-            
-            lastCategoryCacheUpdate = currentTime;
-        }
-        
-        return cachedCategories;
     }
 }

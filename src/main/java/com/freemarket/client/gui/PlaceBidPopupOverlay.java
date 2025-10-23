@@ -25,7 +25,7 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
     
     // UI Constants
     private static final int POPUP_WIDTH = 420;
-    private static final int POPUP_HEIGHT = 320;
+    private static final int POPUP_HEIGHT = 340;
     private static final int HEADER_HEIGHT = 40;
     private static final int SECTION_SPACING = 8;
     
@@ -57,13 +57,14 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
     private void initializeInputField() {
         Minecraft minecraft = Minecraft.getInstance();
         
-        // Bid amount input
+        // Bid amount input - positioned in the bid input section
+        int inputY = y + POPUP_HEIGHT - 120;
         this.bidAmountBox = new EditBox(
             minecraft.font,
-            x + 30,
-            y + POPUP_HEIGHT - 100,
-            POPUP_WIDTH - 60,
-            24,
+            x + 45,  // Offset for dollar sign
+            inputY + 5,
+            POPUP_WIDTH - 90,
+            20,
             Component.literal("Enter bid amount")
         );
         this.bidAmountBox.setValue(String.valueOf(minimumBid));
@@ -109,43 +110,41 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         Minecraft minecraft = Minecraft.getInstance();
         int currentY = startY;
         int lineHeight = minecraft.font.lineHeight + 4;
-        int sectionWidth = POPUP_WIDTH - 60;
         int sectionX = x + 30;
         
         // Section title
         Component sectionTitle = Component.literal("📋 Auction Details");
         guiGraphics.drawString(minecraft.font, sectionTitle, sectionX, currentY, ACCENT_COLOR);
-        currentY += lineHeight + 4;
+        currentY += lineHeight + 6;
         
-        // Draw info cards
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "💰 Starting Price", "$" + auction.getStartingPrice(), SUCCESS_COLOR);
-        currentY += 35;
+        // 2x2 Grid Layout
+        int cardWidth = (POPUP_WIDTH - 60 - 10) / 2;  // Split width in half with 10px gap
+        int cardHeight = 30;
+        int gap = 10;
         
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "🏆 Current Bid", "$" + auction.getCurrentBid(), WARNING_COLOR);
-        currentY += 35;
+        // Top Left: Listed By
+        drawInfoCard(guiGraphics, sectionX, currentY, cardWidth, "🏪 Listed by", auction.getSellerName(), TEXT_SECONDARY);
         
-        // Bidder info
+        // Top Right: Starting Price
+        drawInfoCard(guiGraphics, sectionX + cardWidth + gap, currentY, cardWidth, "💰 Starting Price", "$" + auction.getStartingPrice(), SUCCESS_COLOR);
+        
+        currentY += cardHeight + gap;
+        
+        // Bottom Left: Last Bidder
         String bidderInfo = auction.getBidderName() != null && !auction.getBidderName().isEmpty() 
-            ? "👤 " + auction.getBidderName() 
-            : "❌ No bids yet";
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "🎯 Last Bidder", bidderInfo, TEXT_SECONDARY);
-        currentY += 35;
+            ? auction.getBidderName() 
+            : "No bids yet";
+        drawInfoCard(guiGraphics, sectionX, currentY, cardWidth, "🎯 Last Bidder", bidderInfo, TEXT_SECONDARY);
         
-        // Seller info
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "🏪 Listed by", auction.getSellerName(), TEXT_SECONDARY);
-        currentY += 35;
+        // Bottom Right: Current Bid
+        drawInfoCard(guiGraphics, sectionX + cardWidth + gap, currentY, cardWidth, "🏆 Current Bid", "$" + auction.getCurrentBid(), WARNING_COLOR);
         
-        // Minimum bid requirement
-        String minBidText = auction.getCurrentBid() == auction.getStartingPrice() 
-            ? "$" + auction.getStartingPrice() + " (starting price)"
-            : "$" + (auction.getCurrentBid() + 1) + " (must exceed current bid)";
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "⚡ Minimum Bid", minBidText, ACCENT_COLOR);
-        currentY += 35;
+        currentY += cardHeight + gap;
         
-        // Player balance with status indicator
-        String balanceStatus = playerBalance >= minimumBid ? "✅ Sufficient" : "❌ Insufficient";
+        // Your Balance (full width below grid)
+        String balanceText = "$" + playerBalance;
         int balanceColor = playerBalance >= minimumBid ? SUCCESS_COLOR : ERROR_COLOR;
-        drawInfoCard(guiGraphics, sectionX, currentY, sectionWidth, "💳 Your Balance", "$" + playerBalance + " - " + balanceStatus, balanceColor);
+        drawInfoCard(guiGraphics, sectionX, currentY, POPUP_WIDTH - 60, "💳 Your Balance", balanceText, balanceColor);
     }
     
     private void drawInfoCard(GuiGraphics guiGraphics, int x, int y, int width, String label, String value, int valueColor) {
@@ -164,25 +163,30 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
     
     private void drawBidInputSection(GuiGraphics guiGraphics) {
         Minecraft minecraft = Minecraft.getInstance();
-        int inputY = y + POPUP_HEIGHT - 100;
+        int inputY = y + POPUP_HEIGHT - 120;
         int sectionX = x + 30;
         int sectionWidth = POPUP_WIDTH - 60;
         
         // Section title
         Component inputTitle = Component.literal("💵 Enter Your Bid");
-        guiGraphics.drawString(minecraft.font, inputTitle, sectionX, inputY - 25, TEXT_PRIMARY);
+        guiGraphics.drawString(minecraft.font, inputTitle, sectionX, inputY - 22, TEXT_PRIMARY);
         
         // Input field background
-        guiGraphics.fill(sectionX, inputY - 2, sectionX + sectionWidth, inputY + 26, BORDER_COLOR);
-        guiGraphics.fill(sectionX + 1, inputY - 1, sectionX + sectionWidth - 1, inputY + 25, SURFACE_COLOR);
+        guiGraphics.fill(sectionX, inputY, sectionX + sectionWidth, inputY + 30, BORDER_COLOR);
+        guiGraphics.fill(sectionX + 1, inputY + 1, sectionX + sectionWidth - 1, inputY + 29, SURFACE_COLOR);
         
         // Dollar sign prefix
-        guiGraphics.drawString(minecraft.font, "$", sectionX + 8, inputY + 6, TEXT_SECONDARY);
+        guiGraphics.drawString(minecraft.font, "$", sectionX + 8, inputY + 8, TEXT_SECONDARY);
+        
+        // Render the EditBox widget
+        if (bidAmountBox != null) {
+            bidAmountBox.render(guiGraphics, (int)Minecraft.getInstance().mouseHandler.xpos(), (int)Minecraft.getInstance().mouseHandler.ypos(), 0);
+        }
     }
     
     private void renderButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         Minecraft minecraft = Minecraft.getInstance();
-        int buttonY = y + POPUP_HEIGHT - 50;
+        int buttonY = y + POPUP_HEIGHT - 60;
         
         // Place Bid button
         int placeBidButtonX = x + 30;
@@ -199,7 +203,7 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         guiGraphics.fill(placeBidButtonX + placeBidButtonWidth - 1, buttonY, placeBidButtonX + placeBidButtonWidth, buttonY + placeBidButtonHeight, BORDER_COLOR);
         guiGraphics.fill(placeBidButtonX, buttonY + placeBidButtonHeight - 1, placeBidButtonX + placeBidButtonWidth, buttonY + placeBidButtonHeight, BORDER_COLOR);
         
-        String placeBidText = "✓ Place Bid";
+        String placeBidText = "Place Bid";
         int placeBidTextWidth = minecraft.font.width(placeBidText);
         int placeBidTextX = placeBidButtonX + (placeBidButtonWidth - placeBidTextWidth) / 2;
         int placeBidTextY = buttonY + (placeBidButtonHeight - minecraft.font.lineHeight) / 2;
@@ -220,7 +224,7 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         guiGraphics.fill(cancelButtonX + cancelButtonWidth - 1, buttonY, cancelButtonX + cancelButtonWidth, buttonY + cancelButtonHeight, BORDER_COLOR);
         guiGraphics.fill(cancelButtonX, buttonY + cancelButtonHeight - 1, cancelButtonX + cancelButtonWidth, buttonY + cancelButtonHeight, BORDER_COLOR);
         
-        String cancelText = "✗ Cancel";
+        String cancelText = "Cancel";
         int cancelTextWidth = minecraft.font.width(cancelText);
         int cancelTextX = cancelButtonX + (cancelButtonWidth - cancelTextWidth) / 2;
         int cancelTextY = buttonY + (cancelButtonHeight - minecraft.font.lineHeight) / 2;
@@ -238,7 +242,7 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         }
         
         // Handle button clicks
-        int buttonY = y + POPUP_HEIGHT - 50;
+        int buttonY = y + POPUP_HEIGHT - 60;
         
         // Place Bid button
         int placeBidButtonX = x + 30;

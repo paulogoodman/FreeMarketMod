@@ -44,7 +44,7 @@ public class CreateAuctionPopupScreen extends Screen {
     
     // UI dimensions (matching PlaceBidPopupOverlay)
     private static final int POPUP_WIDTH = 420;
-    private static final int POPUP_HEIGHT = 320;
+    private static final int POPUP_HEIGHT = 280;
     private int popupX;
     private int popupY;
     
@@ -166,7 +166,7 @@ public class CreateAuctionPopupScreen extends Screen {
         
         // Draw error message if present
         if (errorMessage != null) {
-            int errorY = popupY + POPUP_HEIGHT - 30;
+            int errorY = popupY + POPUP_HEIGHT - 80;  // Move above buttons
             int errorWidth = this.font.width(errorMessage);
             int errorX = popupX + (POPUP_WIDTH - errorWidth) / 2;
             guiGraphics.drawString(this.font, errorMessage, errorX, errorY, 0xFFFF5555);
@@ -340,7 +340,7 @@ public class CreateAuctionPopupScreen extends Screen {
         
         // Draw section labels
         guiGraphics.drawString(this.font, "Main Inventory", gridStartX, gridStartY - 15, 0xFFAAAAAA);
-        guiGraphics.drawString(this.font, "Hotbar", gridStartX, gridStartY + (3 * TOTAL_SLOT_SIZE) + HOTBAR_SPACING - 15, 0xFFAAAAAA);
+        guiGraphics.drawString(this.font, "Hotbar", gridStartX, gridStartY + (3 * TOTAL_SLOT_SIZE) + HOTBAR_SPACING - 18, 0xFFAAAAAA);
         
         for (int i = 0; i < 36; i++) {
             // Map inventory slot index to display position
@@ -495,6 +495,9 @@ public class CreateAuctionPopupScreen extends Screen {
             ItemStack stack = mc.player.getInventory().getItem(slotIndex);
             if (!stack.isEmpty()) {
                 // Item selected - transition to confirmation
+                if (mc.player != null) {
+                    mc.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
                 selectedItem = stack.copy();
                 selectedSlotIndex = slotIndex;
                 currentState = PopupState.CONFIRMATION;
@@ -571,6 +574,10 @@ public class CreateAuctionPopupScreen extends Screen {
         // Create Auction button
         int createX = popupX + 20;
         if (isButtonClicked(mouseX, mouseY, createX, buttonY, createButtonWidth, 20)) {
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             createAuction();
             return true;
         }

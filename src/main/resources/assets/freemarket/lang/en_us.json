@@ -20,6 +20,12 @@
   "gui.FreeMarket.add_item.add": "Add Item",
   "gui.FreeMarket.add_item.cancel": "Cancel",
 
+  "gui.FreeMarket.auction.create.select_item": "Select an item from your inventory to auction",
+  "gui.FreeMarket.auction.create.confirm": "Confirm Auction Item",
+  "gui.FreeMarket.auction.create.continue": "Continue",
+  "gui.FreeMarket.auction.create.back": "Back",
+  "gui.FreeMarket.auction.create.empty_slot": "This slot is empty",
+
   "key.freemarket.open_shop": "Open Free Market",
   "key.categories.freemarket": "FreeMarket",
 

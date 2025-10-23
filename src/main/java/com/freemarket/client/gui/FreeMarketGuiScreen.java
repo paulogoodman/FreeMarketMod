@@ -44,7 +44,7 @@ public class FreeMarketGuiScreen extends Screen {
     PlayerAuctionContainer auctionContainer;
     
     // Popup overlays
-    private CreateAuctionPopupOverlay createAuctionPopup;
+    private CreateAuctionPopupScreen createAuctionPopup;
     private PlaceBidPopupOverlay placeBidPopup;
     
     // Cache wallet balance to avoid retrieving it every frame
@@ -88,8 +88,8 @@ public class FreeMarketGuiScreen extends Screen {
      * Shows the create auction popup overlay.
      */
     public void showCreateAuctionPopup() {
-        if (createAuctionPopup != null) {
-            createAuctionPopup.show();
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new CreateAuctionPopupScreen(this));
         }
     }
     
@@ -110,9 +110,6 @@ public class FreeMarketGuiScreen extends Screen {
      * Hides all popup overlays.
      */
     public void hideAllPopups() {
-        if (createAuctionPopup != null) {
-            createAuctionPopup.hide();
-        }
         if (placeBidPopup != null) {
             placeBidPopup.hide();
         }
@@ -124,8 +121,7 @@ public class FreeMarketGuiScreen extends Screen {
      * @return true if any popup is visible, false otherwise
      */
     public boolean isAnyPopupVisible() {
-        return (createAuctionPopup != null && createAuctionPopup.isVisible()) ||
-               (placeBidPopup != null && placeBidPopup.isVisible());
+        return (placeBidPopup != null && placeBidPopup.isVisible());
     }
     
     /**
@@ -307,7 +303,6 @@ public class FreeMarketGuiScreen extends Screen {
         requestWalletBalance();
         
         // Initialize popup overlays
-        this.createAuctionPopup = new CreateAuctionPopupOverlay();
         this.placeBidPopup = null; // Will be created when needed
         
         // Create the appropriate container based on current screen
@@ -418,9 +413,6 @@ public class FreeMarketGuiScreen extends Screen {
         }
         
         // Render popup overlays on top of everything
-        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
-            createAuctionPopup.render(guiGraphics, mouseX, mouseY, partialTick);
-        }
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             placeBidPopup.render(guiGraphics, mouseX, mouseY, partialTick);
         }
@@ -624,11 +616,6 @@ public class FreeMarketGuiScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         // Handle popup overlay clicks first (highest priority)
-        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
-            if (createAuctionPopup.mouseClicked(mouseX, mouseY, button)) {
-                return true;
-            }
-        }
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             if (placeBidPopup.mouseClicked(mouseX, mouseY, button)) {
                 return true;
@@ -705,11 +692,6 @@ public class FreeMarketGuiScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // Handle popup overlay key presses first (highest priority)
-        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
-            if (createAuctionPopup.keyPressed(keyCode, scanCode, modifiers)) {
-                return true;
-            }
-        }
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             if (placeBidPopup.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
@@ -740,11 +722,6 @@ public class FreeMarketGuiScreen extends Screen {
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
         // Handle popup overlay character typing first (highest priority)
-        if (createAuctionPopup != null && createAuctionPopup.isVisible()) {
-            if (createAuctionPopup.charTyped(codePoint, modifiers)) {
-                return true;
-            }
-        }
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             if (placeBidPopup.charTyped(codePoint, modifiers)) {
                 return true;

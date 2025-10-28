@@ -16,7 +16,7 @@ import javax.annotation.Nonnull;
 
 /**
  * Popup screen for creating auctions with visual inventory selector.
- * Three-phase UI: Inventory Selection → Confirmation → Price/Duration Form
+ * Three-phase UI: Inventory Selection → Price/Duration Form → Confirmation
  */
 public class CreateAuctionPopupScreen extends Screen {
     
@@ -25,8 +25,8 @@ public class CreateAuctionPopupScreen extends Screen {
      */
     private enum PopupState {
         INVENTORY_SELECTION,  // Phase 1: showing inventory grid
-        CONFIRMATION,         // Phase 2: confirm selected item
-        FORM_INPUT           // Phase 3: enter price/duration
+        FORM_INPUT,          // Phase 2: enter price/duration
+        CONFIRMATION         // Phase 3: confirm selected item
     }
     
     private final FreeMarketGuiScreen parentScreen;
@@ -202,7 +202,7 @@ public class CreateAuctionPopupScreen extends Screen {
     }
     
     /**
-     * Phase 2: Render confirmation dialog
+     * Phase 3: Render confirmation dialog
      */
     private void renderConfirmation(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw title
@@ -241,20 +241,33 @@ public class CreateAuctionPopupScreen extends Screen {
         int nameY = iconY + iconSize + 20;
         guiGraphics.drawString(this.font, itemName, nameX, nameY, 0xFFFFFFFF);
         
+        // Draw auction details
+        int detailsY = nameY + 25;
+        int detailsX = popupX + 20;
+        
+        // Starting price
+        String priceText = "Starting Price: $" + startingPriceBox.getValue();
+        guiGraphics.drawString(this.font, priceText, detailsX, detailsY, 0xFFAAAAAA);
+        
+        // Duration (formatted as days, hours, minutes)
+        String durationFormatted = formatDuration(durationBox.getValue());
+        String durationText = "Duration: " + durationFormatted;
+        guiGraphics.drawString(this.font, durationText, detailsX, detailsY + 15, 0xFFAAAAAA);
+        
         // Render buttons
         int buttonY = popupY + POPUP_HEIGHT - 50;
         int buttonSpacing = 20;
         int buttonWidth = 180;
         
-        // Continue button (green)
-        renderButton(guiGraphics, "Continue", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
-        
         // Back button (gray)
-        renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        
+        // Create Auction button (green)
+        renderButton(guiGraphics, "Create Auction", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
     }
     
     /**
-     * Phase 3: Render price/duration form
+     * Phase 2: Render price/duration form
      */
     private void renderFormInput(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw title
@@ -310,19 +323,14 @@ public class CreateAuctionPopupScreen extends Screen {
         
         // Render buttons
         int buttonY = popupY + POPUP_HEIGHT - 50;
-        int buttonSpacing = 10;
-        int createButtonWidth = 180;
-        int backButtonWidth = 100;
-        int cancelButtonWidth = 100;
-        
-        // Create Auction button (green)
-        renderButton(guiGraphics, "Create Auction", popupX + 20, buttonY, createButtonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
         
         // Back button (gray)
-        renderButton(guiGraphics, "Back", popupX + 20 + createButtonWidth + buttonSpacing, buttonY, backButtonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
         
-        // Cancel button (gray)
-        renderButton(guiGraphics, "Cancel", popupX + 20 + createButtonWidth + buttonSpacing + backButtonWidth + buttonSpacing, buttonY, cancelButtonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        // Continue button (green)
+        renderButton(guiGraphics, "Continue", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
     }
     
     /**
@@ -337,10 +345,6 @@ public class CreateAuctionPopupScreen extends Screen {
         int gridWidth = 9 * TOTAL_SLOT_SIZE;
         int gridStartX = popupX + (POPUP_WIDTH - gridWidth) / 2;
         int gridStartY = popupY + 80;
-        
-        // Draw section labels
-        guiGraphics.drawString(this.font, "Main Inventory", gridStartX, gridStartY - 15, 0xFFAAAAAA);
-        guiGraphics.drawString(this.font, "Hotbar", gridStartX, gridStartY + (3 * TOTAL_SLOT_SIZE) + HOTBAR_SPACING - 18, 0xFFAAAAAA);
         
         for (int i = 0; i < 36; i++) {
             // Map inventory slot index to display position
@@ -466,6 +470,39 @@ public class CreateAuctionPopupScreen extends Screen {
         return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
     }
     
+    /**
+     * Formats duration in minutes to a readable string (days, hours, minutes)
+     */
+    private String formatDuration(String minutesStr) {
+        try {
+            long totalMinutes = Long.parseLong(minutesStr);
+            
+            long days = totalMinutes / 1440;
+            long hours = (totalMinutes % 1440) / 60;
+            long minutes = totalMinutes % 60;
+            
+            StringBuilder sb = new StringBuilder();
+            
+            if (days > 0) {
+                sb.append(days).append(days == 1 ? " day" : " days");
+            }
+            
+            if (hours > 0) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(hours).append(hours == 1 ? " hour" : " hours");
+            }
+            
+            if (minutes > 0 || sb.length() == 0) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(minutes).append(minutes == 1 ? " minute" : " minutes");
+            }
+            
+            return sb.toString();
+        } catch (NumberFormatException e) {
+            return minutesStr + " minutes";
+        }
+    }
+    
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return false; // Only left click
@@ -494,13 +531,13 @@ public class CreateAuctionPopupScreen extends Screen {
         if (slotIndex >= 0 && mc != null && mc.player != null) {
             ItemStack stack = mc.player.getInventory().getItem(slotIndex);
             if (!stack.isEmpty()) {
-                // Item selected - transition to confirmation
+                // Item selected - transition to form input
                 if (mc.player != null) {
                     mc.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
                 }
                 selectedItem = stack.copy();
                 selectedSlotIndex = slotIndex;
-                currentState = PopupState.CONFIRMATION;
+                currentState = PopupState.FORM_INPUT;
                 return true;
             } else {
                 errorMessage = "This slot is empty";
@@ -527,21 +564,22 @@ public class CreateAuctionPopupScreen extends Screen {
         int buttonSpacing = 20;
         int buttonWidth = 180;
         
-        // Continue button
-        int continueX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
-        if (isButtonClicked(mouseX, mouseY, continueX, buttonY, buttonWidth, 20)) {
-            // Transition to form input
+        // Back button
+        int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Return to form input
             currentState = PopupState.FORM_INPUT;
             return true;
         }
         
-        // Back button
-        int backX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
-        if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
-            // Return to inventory selection
-            currentState = PopupState.INVENTORY_SELECTION;
-            selectedItem = ItemStack.EMPTY;
-            selectedSlotIndex = -1;
+        // Create Auction button
+        int createX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, createX, buttonY, buttonWidth, 20)) {
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
+            createAuction();
             return true;
         }
         
@@ -566,33 +604,26 @@ public class CreateAuctionPopupScreen extends Screen {
         
         // Handle button clicks
         int buttonY = popupY + POPUP_HEIGHT - 50;
-        int buttonSpacing = 10;
-        int createButtonWidth = 180;
-        int backButtonWidth = 100;
-        int cancelButtonWidth = 100;
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
         
-        // Create Auction button
-        int createX = popupX + 20;
-        if (isButtonClicked(mouseX, mouseY, createX, buttonY, createButtonWidth, 20)) {
+        // Back button
+        int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            currentState = PopupState.INVENTORY_SELECTION;
+            selectedItem = ItemStack.EMPTY;
+            selectedSlotIndex = -1;
+            return true;
+        }
+        
+        // Continue button
+        int continueX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, continueX, buttonY, buttonWidth, 20)) {
             var player = Minecraft.getInstance().player;
             if (player != null) {
                 player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
             }
-            createAuction();
-            return true;
-        }
-        
-        // Back button
-        int backX = popupX + 20 + createButtonWidth + buttonSpacing;
-        if (isButtonClicked(mouseX, mouseY, backX, buttonY, backButtonWidth, 20)) {
             currentState = PopupState.CONFIRMATION;
-            return true;
-        }
-        
-        // Cancel button
-        int cancelX = popupX + 20 + createButtonWidth + buttonSpacing + backButtonWidth + buttonSpacing;
-        if (isButtonClicked(mouseX, mouseY, cancelX, buttonY, cancelButtonWidth, 20)) {
-            onClose();
             return true;
         }
         
@@ -603,10 +634,10 @@ public class CreateAuctionPopupScreen extends Screen {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         // ESC key handling
         if (keyCode == 256) { // ESC
-            if (currentState == PopupState.FORM_INPUT) {
-                currentState = PopupState.CONFIRMATION;
+            if (currentState == PopupState.CONFIRMATION) {
+                currentState = PopupState.FORM_INPUT;
                 return true;
-            } else if (currentState == PopupState.CONFIRMATION) {
+            } else if (currentState == PopupState.FORM_INPUT) {
                 currentState = PopupState.INVENTORY_SELECTION;
                 selectedItem = ItemStack.EMPTY;
                 selectedSlotIndex = -1;

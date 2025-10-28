@@ -43,8 +43,6 @@ public class FreeMarketGuiScreen extends Screen {
     LeaderboardContainer leaderboardContainer;
     PlayerAuctionContainer auctionContainer;
     
-    // Popup overlays
-    private CreateAuctionPopupScreen createAuctionPopup;
     private PlaceBidPopupOverlay placeBidPopup;
     private CancelAuctionConfirmationPopup cancelAuctionPopup;
     
@@ -736,7 +734,10 @@ public class FreeMarketGuiScreen extends Screen {
                 // Tab clicked - switch screen
                 switchScreen(screens[i]);
                 // Play click sound
-                Minecraft.getInstance().player.playSound(SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                var player = Minecraft.getInstance().player;
+                if (player != null) {
+                    player.playSound(SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
                 return true;
             }
         }

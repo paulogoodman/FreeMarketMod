@@ -8,7 +8,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
-import org.jetbrains.annotations.NotNull;
+import javax.annotation.Nonnull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -138,7 +138,7 @@ public class AuctionDataManager {
         }
         
         @Override
-        public CompoundTag save(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+        public CompoundTag save(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
             ListTag auctionsList = new ListTag();
             
             for (PlayerAuction auction : auctions) {
@@ -171,7 +171,7 @@ public class AuctionDataManager {
             return tag;
         }
         
-        public static AuctionSavedData load(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+        public static AuctionSavedData load(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
             AuctionSavedData data = new AuctionSavedData();
             
             if (tag.contains(AUCTIONS_LIST_KEY, Tag.TAG_LIST)) {

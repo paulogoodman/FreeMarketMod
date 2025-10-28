@@ -7,7 +7,7 @@ import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
-import org.jetbrains.annotations.NotNull;
+import javax.annotation.Nonnull;
 
 import java.util.*;
 
@@ -120,7 +120,7 @@ public class PendingRewardsManager {
         }
         
         @Override
-        public CompoundTag save(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+        public CompoundTag save(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
             ListTag rewardsList = new ListTag();
             
             for (PendingReward reward : rewards) {
@@ -148,7 +148,7 @@ public class PendingRewardsManager {
             return tag;
         }
         
-        public static PendingRewardsSavedData load(@NotNull CompoundTag tag, @NotNull HolderLookup.Provider registries) {
+        public static PendingRewardsSavedData load(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
             PendingRewardsSavedData data = new PendingRewardsSavedData();
             
             if (tag.contains(REWARDS_LIST_KEY, Tag.TAG_LIST)) {

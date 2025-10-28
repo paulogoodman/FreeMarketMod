@@ -466,11 +466,6 @@ public class FreeMarketPacketHandler {
             ResourceLocation resourceLocation = ResourceLocation.parse(itemId);
             var item = BuiltInRegistries.ITEM.get(resourceLocation);
             
-            if (item == null) {
-                FreeMarket.LOGGER.warn("Unknown item ID: {}", itemId);
-                return net.minecraft.world.item.Items.AIR.getDefaultInstance();
-            }
-            
             ItemStack itemStack = new ItemStack(item, count);
             
             // Apply component data if present

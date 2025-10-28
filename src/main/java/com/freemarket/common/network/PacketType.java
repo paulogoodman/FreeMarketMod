@@ -23,6 +23,7 @@ public enum PacketType {
     AUCTION_REQUEST,
     AUCTION_BID,
     AUCTION_CREATE,
+    AUCTION_CANCEL,
     
     // Leaderboard
     LEADERBOARD_REQUEST,
@@ -50,7 +51,10 @@ public enum PacketType {
     MARKETPLACE_SYNC,
     
     // Admin mode
-    ADMIN_MODE_SYNC;
+    ADMIN_MODE_SYNC,
+    
+    // Auction debug mode
+    AUCTION_DEBUG_MODE_SYNC;
     
     /**
      * Returns true if this packet type is sent from client to server.
@@ -58,7 +62,7 @@ public enum PacketType {
     public boolean isClientToServer() {
         return switch (this) {
             case WALLET_REQUEST, BUY_ITEM_REQUEST, SELL_ITEM_REQUEST,
-                 AUCTION_REQUEST, AUCTION_BID, AUCTION_CREATE,
+                 AUCTION_REQUEST, AUCTION_BID, AUCTION_CREATE, AUCTION_CANCEL,
                  LEADERBOARD_REQUEST, MARKETPLACE_ADD_ITEM, MARKETPLACE_REMOVE_ITEM -> true;
             default -> false;
         };

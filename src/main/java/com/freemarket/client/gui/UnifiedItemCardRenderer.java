@@ -101,8 +101,8 @@ public class UnifiedItemCardRenderer {
         // Render card background
         renderCardBackground(guiGraphics, x, y, cardWidth, cardHeight);
         
-        // Render delete button if admin mode
-        if (AdminModeHandler.isAdminMode() && config.type == CardType.MARKETPLACE) {
+        // Render delete button if admin mode (for both marketplace and auction cards)
+        if (AdminModeHandler.isAdminMode() && (config.type == CardType.MARKETPLACE || config.type == CardType.AUCTION)) {
             renderDeleteButton(guiGraphics, x, y, cardWidth, cardHeight, mouseX, mouseY);
         }
         
@@ -184,37 +184,93 @@ public class UnifiedItemCardRenderer {
         Minecraft client = Minecraft.getInstance();
         
         int iconAreaHeight = cardHeight / 3;
-        int buttonAreaHeight = cardHeight / 3;
         int infoAreaY = y + iconAreaHeight;
         
         int textX = x + 4;
         int textWidth = cardWidth - 8;
         int currentY = infoAreaY + 2;
         
+        // Calculate button area position for bid text rendering
+        int buttonAreaHeight = cardHeight / 3;
+        int buttonAreaY = y + cardHeight - buttonAreaHeight;
+        
         // Split info text by newlines and render each line
         String[] lines = infoText.split("\n");
         int lineHeight = client.font.lineHeight + 1;
         
         for (String line : lines) {
-            String truncated = truncateTextToWidth(line, textWidth);
-            
-            // Determine color based on line content (simple heuristic)
-            int color = 0xFFAAAAAA; // Default gray
-            if (line.startsWith("Bid:")) {
-                color = 0xFFFFD700; // Gold
-            } else if (line.contains("By:")) {
-                color = 0xFF888888; // Darker gray
-            } else if (line.contains("h") || line.contains("m") || line.contains("s") || line.equals("Expired")) {
-                // Time remaining - color based on urgency (simplified)
-                if (line.equals("Expired") || line.contains("Expired")) {
+            // Check if this is the bid line (starts with "Current Bid:" or "Starting Bid:")
+            if (line.startsWith("Current Bid:") || line.startsWith("Starting Bid:")) {
+                // Render bid text in the gap between icon area and button area
+                String truncated = truncateTextToWidth(line, textWidth);
+                
+                // Position horizontally centered (like a button would be)
+                int bidTextWidth = client.font.width(truncated);
+                int bidTextX = x + (cardWidth - bidTextWidth) / 2;
+                
+                // Calculate where icon actually ends (matches renderItemIcon logic)
+                int iconPadding = Math.max(2, cardWidth / 20);
+                int minIconSize = Math.max(8, (int)(12 / guiScale));
+                int maxIconSize = cardWidth - (iconPadding * 2);
+                int iconSize = Math.max(minIconSize, Math.min(maxIconSize, cardWidth / 4));
+                int iconY = y + iconPadding;
+                int maxIconY = y + cardHeight - buttonAreaHeight - iconPadding;
+                int actualIconSize = iconSize;
+                if (iconY + iconSize > maxIconY) {
+                    actualIconSize = Math.max(minIconSize, maxIconY - iconY);
+                }
+                int iconEndY = iconY + actualIconSize;
+                
+                // Calculate button area start
+                // Buttons are at the bottom 1/3 of the card
+                int buttonY = buttonAreaY; // Top of button area
+                
+                // Position bid text in the middle of the gap between icon and buttons
+                // Add extra margin from icon for better readability
+                int gapBetween = buttonY - iconEndY;
+                int marginFromIcon = (int)(gapBetween * 0.4); // Use 40% of gap as margin from icon
+                int bidTextY = iconEndY + marginFromIcon; // Position with margin from icon
+                
+                int color = 0xFFFFD700; // Gold
+                guiGraphics.drawString(client.font, truncated, bidTextX, bidTextY, color);
+            } else if (line.startsWith("🕐")) {
+                // Render time remaining in top right corner
+                String timeText = truncateTextToWidth(line, cardWidth - 8);
+                int timeTextWidth = client.font.width(timeText);
+                
+                // Account for delete button if admin mode is on (delete button is cardWidth * 0.12)
+                int deleteButtonSize = (int)(cardWidth * 0.12);
+                int margin = 0;
+                boolean needsOffset = AdminModeHandler.isAdminMode();
+                int rightPadding = needsOffset ? deleteButtonSize + margin + 4 : 4;
+                
+                int timeX = x + cardWidth - timeTextWidth - rightPadding;
+                int timeY = y + 2; // 2px padding from top
+                
+                // Determine color based on urgency
+                int color;
+                if (line.contains("Expired")) {
                     color = 0xFFFF0000; // Red
                 } else {
                     color = 0xFF4CAF50; // Green (default for time)
                 }
+                
+                guiGraphics.drawString(client.font, timeText, timeX, timeY, color);
+            } else {
+                // Render other info text in the middle area as normal
+                String truncated = truncateTextToWidth(line, textWidth);
+                
+                // Determine color based on line content (simple heuristic)
+                int color = 0xFFAAAAAA; // Default gray
+                if (line.startsWith("Bid:")) {
+                    color = 0xFFFFD700; // Gold
+                } else if (line.contains("By:")) {
+                    color = 0xFF888888; // Darker gray
+                }
+                
+                guiGraphics.drawString(client.font, truncated, textX, currentY, color);
+                currentY += lineHeight;
             }
-            
-            guiGraphics.drawString(client.font, truncated, textX, currentY, color);
-            currentY += lineHeight;
         }
     }
     
@@ -254,11 +310,7 @@ public class UnifiedItemCardRenderer {
             int color;
             boolean enabled;
             
-            if (config.isOwnAuction) {
-                text = "Place Bid";
-                color = 0xFF888888;
-                enabled = false;
-            } else if (config.isHighestBidder) {
+            if (config.isHighestBidder) {
                 text = "Highest Bid";
                 color = 0xFF4CAF50;
                 enabled = false;
@@ -274,6 +326,20 @@ public class UnifiedItemCardRenderer {
             
             renderButtonWithState(guiGraphics, text, bounds.x, bounds.y, bounds.width, bounds.height,
                                  color, enabled, config.isBidCooldown, isHovered, false);
+        }
+        
+        // Render Cancel Auction button if configured
+        if (config.showCancelAuction) {
+            ButtonBounds bounds = layout.buttons.get(buttonIndex++);
+            boolean isHovered = bounds.contains(mouseX, mouseY);
+            
+            // Cancel button is always red and enabled
+            String text = "Cancel Auction";
+            int color = 0xFFE53935; // Red color
+            boolean enabled = true;
+            
+            renderButtonWithState(guiGraphics, text, bounds.x, bounds.y, bounds.width, bounds.height,
+                                 color, enabled, false, isHovered, false);
         }
     }
     
@@ -309,16 +375,19 @@ public class UnifiedItemCardRenderer {
         
         guiGraphics.fill(x, y, x + width, y + height, backgroundColor);
         guiGraphics.fill(x, y, x + width, y + 1, 0x80404040);
-        guiGraphics.fill(x, y, x + 1, y + height, 0x80404040);
-        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0x80404040);
+        guiGraphics.fill(x, y + 1, x + 1, y + height - 1, 0x80404040);
+        guiGraphics.fill(x + width - 1, y + 1, x + width, y + height - 1, 0x80404040);
         guiGraphics.fill(x, y + height - 1, x + width, y + height, 0x80404040);
         
         Minecraft client = Minecraft.getInstance();
         int borderThickness = 1;
+        int horizontalPadding = 4; // Padding inside the border so text doesn't touch edges
         int innerWidth = width - (borderThickness * 2);
         int innerHeight = height - (borderThickness * 2);
         
-        String displayText = truncateTextToWidth(text, innerWidth);
+        // Account for padding when truncating text
+        int availableTextWidth = innerWidth - (horizontalPadding * 2);
+        String displayText = truncateTextToWidth(text, availableTextWidth);
         int textWidth = client.font.width(displayText);
         int textHeight = client.font.lineHeight;
         int textX = x + borderThickness + (innerWidth - textWidth) / 2;
@@ -355,6 +424,12 @@ public class UnifiedItemCardRenderer {
         if (config.showBid) {
             if (layout.buttons.get(buttonIndex++).contains(mouseX, mouseY)) {
                 return ButtonType.BID;
+            }
+        }
+        
+        if (config.showCancelAuction) {
+            if (layout.buttons.get(buttonIndex++).contains(mouseX, mouseY)) {
+                return ButtonType.CANCEL_AUCTION;
             }
         }
         

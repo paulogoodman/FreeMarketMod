@@ -201,6 +201,16 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             );
             
             if (buttonClicked == ButtonType.BID) {
+                // Play click sound
+                if (minecraft.player != null) {
+                    minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                
+                // Check if player is the highest bidder - if so, just consume the click without opening popup
+                if (isHighestBidder) {
+                    return true;
+                }
+                
                 // Check cooldown
                 if (isBidCooldown(currentAuction.getAuctionId())) {
                     return true; // Consume click but don't open popup
@@ -212,6 +222,40 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 // Open bid popup using overlay system
                 parentScreen.showPlaceBidPopup(currentAuction);
                 return true;
+            } else if (buttonClicked == ButtonType.CANCEL_AUCTION) {
+                // Play click sound
+                if (minecraft.player != null) {
+                    minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                
+                // Open cancel auction confirmation popup
+                parentScreen.showCancelAuctionPopup(currentAuction);
+                return true;
+            }
+            
+            // Check delete button click (only if admin mode) - match ItemCardRenderer dimensions
+            if (com.freemarket.common.handlers.AdminModeHandler.isAdminMode()) {
+                int deleteButtonSize = (int)(calculatedItemWidth * 0.12); // 12% of card width (match ItemCardRenderer)
+                int margin = 0; // No margin - match ItemCardRenderer
+                int deleteButtonX = cardX + calculatedItemWidth - deleteButtonSize - margin; // Right at the edge
+                int deleteButtonY = cardY + margin; // Top at the edge
+                
+                if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
+                    mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
+                    // Play note block sound for delete action
+                    if (minecraft.player != null) {
+                        minecraft.player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.5f);
+                    }
+                    
+                    // Send delete request to server via network packet (using AUCTION_CANCEL with admin privileges)
+                    com.google.gson.JsonObject json = new com.google.gson.JsonObject();
+                    json.addProperty("auctionId", currentAuction.getAuctionId());
+                    com.freemarket.common.network.FreeMarketPacket packet = com.freemarket.common.network.FreeMarketPacket.withJson(
+                        com.freemarket.common.network.PacketType.AUCTION_CANCEL, json.toString());
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    return true;
+                }
             }
         }
         
@@ -233,8 +277,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         
         // Draw border
         guiGraphics.fill(x, y, x + width, y + 2, 0x80404040);
-        guiGraphics.fill(x, y, x + 2, y + height, 0x80404040);
-        guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040);
+        guiGraphics.fill(x, y + 2, x + 2, y + height - 2, 0x80404040);
+        guiGraphics.fill(x + width - 2, y + 2, x + width, y + height - 2, 0x80404040);
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040);
         
         // Render search box
@@ -350,15 +394,16 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         String timeText = getTimeRemainingText(auction);
         
         // Format current price vs starting price
+        // Show "Current Bid" if there's any bidder, even if the value equals starting price
         String currentPriceText;
-        if (auction.getCurrentBid() > auction.getStartingPrice()) {
+        if (auction.hasBids()) {
             currentPriceText = String.format("Current Bid: $%d", auction.getCurrentBid());
         } else {
             currentPriceText = String.format("Starting Bid: $%d", auction.getStartingPrice());
         }
         
-        // Format time remaining with proper label
-        String timeLabelText = String.format("Time remaining: %s", timeText);
+        // Format time remaining with clock emoji (placeholder until icon is added)
+        String timeLabelText = String.format("🕐 %s", timeText);
         
         return String.format("%s\n%s", 
             currentPriceText,
@@ -481,8 +526,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         
         // Button border
         guiGraphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + 1, 0xFF404040);
-        guiGraphics.fill(buttonX, buttonY, buttonX + 1, buttonY + buttonHeight, 0xFF404040);
-        guiGraphics.fill(buttonX + buttonWidth - 1, buttonY, buttonX + buttonWidth, buttonY + buttonHeight, 0xFF404040);
+        guiGraphics.fill(buttonX, buttonY + 1, buttonX + 1, buttonY + buttonHeight - 1, 0xFF404040);
+        guiGraphics.fill(buttonX + buttonWidth - 1, buttonY + 1, buttonX + buttonWidth, buttonY + buttonHeight - 1, 0xFF404040);
         guiGraphics.fill(buttonX, buttonY + buttonHeight - 1, buttonX + buttonWidth, buttonY + buttonHeight, 0xFF404040);
         
         // Button text
@@ -500,6 +545,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
      */
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return false; // Only left click
+        
+        Minecraft minecraft = Minecraft.getInstance();
         
         // Block all clicks if a popup is visible (except search box to allow unfocusing)
         boolean popupVisible = parentScreen != null && parentScreen.isAnyPopupVisible();
@@ -543,6 +590,10 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 int currentCategoryY = categoryY + i * categoryHeight;
                 
                 if (mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight) {
+                    // Play click sound
+                    if (minecraft.player != null) {
+                        minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                    }
                     selectedCategory = categories.get(i);
                     scrollOffset = 0; // Reset scroll when changing category
                     return true;
@@ -558,12 +609,15 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         
         if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
             mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+            // Play click sound
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             // Open create auction popup using overlay system
             parentScreen.showCreateAuctionPopup();
             return true;
         }
         
-        Minecraft minecraft = Minecraft.getInstance();
         float guiScale = (float) minecraft.getWindow().getGuiScale();
         String playerUuid = minecraft.player != null ? minecraft.player.getStringUUID() : null;
         
@@ -621,6 +675,16 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             );
             
             if (buttonClicked == ButtonType.BID) {
+                // Play click sound
+                if (minecraft.player != null) {
+                    minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                
+                // Check if player is the highest bidder - if so, just consume the click without opening popup
+                if (isHighestBidder) {
+                    return true;
+                }
+                
                 // Check cooldown
                 if (isBidCooldown(auction.getAuctionId())) {
                     return true; // Consume click but don't open popup
@@ -631,6 +695,15 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 
                 // Open bid popup using overlay system
                 parentScreen.showPlaceBidPopup(auction);
+                return true;
+            } else if (buttonClicked == ButtonType.CANCEL_AUCTION) {
+                // Play click sound
+                if (minecraft.player != null) {
+                    minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                
+                // Open cancel auction confirmation popup
+                parentScreen.showCancelAuctionPopup(auction);
                 return true;
             }
         }

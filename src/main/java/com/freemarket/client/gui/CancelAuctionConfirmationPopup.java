@@ -1,0 +1,257 @@
+package com.freemarket.client.gui;
+
+import com.freemarket.FreeMarket;
+import com.freemarket.common.data.PlayerAuction;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.network.chat.Component;
+
+/**
+ * Confirmation popup for canceling an auction.
+ * Renders on top of the existing screen without replacing it.
+ */
+public class CancelAuctionConfirmationPopup extends PopupOverlay {
+    
+    private final PlayerAuction auction;
+    
+    // UI Constants
+    private static final int POPUP_WIDTH = 400;
+    private static final int POPUP_HEIGHT = 220;
+    private static final int HEADER_HEIGHT = 40;
+    private static final int SECTION_SPACING = 8;
+    
+    public CancelAuctionConfirmationPopup(PlayerAuction auction) {
+        super(0, 0, POPUP_WIDTH, POPUP_HEIGHT);
+        this.auction = auction;
+    }
+    
+    @Override
+    public void show() {
+        super.show();
+        
+        // Calculate popup position (centered)
+        int screenWidth = Minecraft.getInstance().getWindow().getGuiScaledWidth();
+        int screenHeight = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+        
+        // Update position to be centered
+        this.x = (screenWidth - POPUP_WIDTH) / 2;
+        this.y = (screenHeight - POPUP_HEIGHT) / 2;
+    }
+    
+    @Override
+    protected Component getTitle() {
+        return Component.literal("⚠ Cancel Auction");
+    }
+    
+    @Override
+    protected void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        Minecraft minecraft = Minecraft.getInstance();
+        
+        // Draw header section
+        drawRoundedRect(guiGraphics, x, y, POPUP_WIDTH, HEADER_HEIGHT, BACKGROUND_COLOR);
+        
+        // Draw header border
+        guiGraphics.fill(x, y + HEADER_HEIGHT - 1, x + POPUP_WIDTH, y + HEADER_HEIGHT, BORDER_COLOR);
+        
+        // Draw title with icon
+        Component title = Component.literal("⚠ Cancel Auction");
+        int titleWidth = minecraft.font.width(title);
+        int titleX = x + (POPUP_WIDTH - titleWidth) / 2;
+        int titleY = y + (HEADER_HEIGHT - minecraft.font.lineHeight) / 2;
+        guiGraphics.drawString(minecraft.font, title, titleX, titleY, WARNING_COLOR);
+        
+        // Draw content sections
+        int contentY = y + HEADER_HEIGHT + SECTION_SPACING + 20;
+        drawConfirmationMessage(guiGraphics, contentY);
+        
+        // Draw buttons
+        renderButtons(guiGraphics, mouseX, mouseY);
+    }
+    
+    private void drawConfirmationMessage(GuiGraphics guiGraphics, int startY) {
+        Minecraft minecraft = Minecraft.getInstance();
+        int centerX = x + POPUP_WIDTH / 2;
+        
+        // Warning message
+        String warningLine1 = "Are you sure you want to cancel this auction?";
+        int warningWidth1 = minecraft.font.width(warningLine1);
+        guiGraphics.drawString(minecraft.font, warningLine1, 
+            centerX - warningWidth1 / 2, startY, TEXT_PRIMARY);
+        
+        startY += minecraft.font.lineHeight + 10;
+        
+        // Item info
+        String itemInfo = "Item: " + getItemDisplayName();
+        int itemWidth = minecraft.font.width(itemInfo);
+        guiGraphics.drawString(minecraft.font, itemInfo,
+            centerX - itemWidth / 2, startY, ACCENT_COLOR);
+        
+        startY += minecraft.font.lineHeight + 6;
+        
+        // Current bid info
+        String bidInfo;
+        if (auction.getBidderName() != null && !auction.getBidderName().isEmpty()) {
+            bidInfo = "Current Bid: $" + auction.getCurrentBid() + " by " + auction.getBidderName();
+        } else {
+            bidInfo = "Starting Price: $" + auction.getStartingPrice() + " (No bids yet)";
+        }
+        int bidWidth = minecraft.font.width(bidInfo);
+        guiGraphics.drawString(minecraft.font, bidInfo,
+            centerX - bidWidth / 2, startY, TEXT_SECONDARY);
+        
+        startY += minecraft.font.lineHeight + 15;
+        
+        // Return message
+        String returnMessage = "The item will be returned to your inventory.";
+        int returnWidth = minecraft.font.width(returnMessage);
+        guiGraphics.drawString(minecraft.font, returnMessage,
+            centerX - returnWidth / 2, startY, SUCCESS_COLOR);
+        
+        // Refund message if there are bids
+        if (auction.getBidderName() != null && !auction.getBidderName().isEmpty()) {
+            startY += minecraft.font.lineHeight + 4;
+            String refundMessage = "The bidder will be refunded $" + auction.getCurrentBid() + ".";
+            int refundWidth = minecraft.font.width(refundMessage);
+            guiGraphics.drawString(minecraft.font, refundMessage,
+                centerX - refundWidth / 2, startY, TEXT_MUTED);
+        }
+    }
+    
+    private String getItemDisplayName() {
+        // Extract simple name from item ID
+        String itemId = auction.getItemId();
+        if (itemId.contains(":")) {
+            itemId = itemId.substring(itemId.lastIndexOf(":") + 1);
+        }
+        // Convert snake_case to Title Case
+        String[] parts = itemId.split("_");
+        StringBuilder result = new StringBuilder();
+        for (String part : parts) {
+            if (result.length() > 0) result.append(" ");
+            result.append(Character.toUpperCase(part.charAt(0)))
+                  .append(part.substring(1).toLowerCase());
+        }
+        return result.toString() + (auction.getQuantity() > 1 ? " x" + auction.getQuantity() : "");
+    }
+    
+    private void renderButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        Minecraft minecraft = Minecraft.getInstance();
+        int buttonY = y + POPUP_HEIGHT - 50;
+        int buttonWidth = 150;
+        int buttonHeight = 28;
+        int buttonGap = 20;
+        
+        // Calculate button positions (centered)
+        int totalWidth = (buttonWidth * 2) + buttonGap;
+        int startX = x + (POPUP_WIDTH - totalWidth) / 2;
+        
+        // Keep Auction button (left, gray)
+        int keepAuctionButtonX = startX;
+        boolean keepAuctionHovered = mouseX >= keepAuctionButtonX && mouseX <= keepAuctionButtonX + buttonWidth &&
+                                     mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+        
+        int keepAuctionBgColor = keepAuctionHovered ? 0xCC666666 : 0x99666666; // Gray
+        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, keepAuctionBgColor);
+        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR);
+        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR);
+        guiGraphics.fill(keepAuctionButtonX + buttonWidth - 1, buttonY, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        guiGraphics.fill(keepAuctionButtonX, buttonY + buttonHeight - 1, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        
+        String keepAuctionText = "Keep Auction";
+        int keepAuctionTextWidth = minecraft.font.width(keepAuctionText);
+        int keepAuctionTextX = keepAuctionButtonX + (buttonWidth - keepAuctionTextWidth) / 2;
+        int keepAuctionTextY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
+        guiGraphics.drawString(minecraft.font, keepAuctionText, keepAuctionTextX, keepAuctionTextY, TEXT_PRIMARY);
+        
+        // Cancel Auction button (right, red)
+        int cancelAuctionButtonX = startX + buttonWidth + buttonGap;
+        boolean cancelAuctionHovered = mouseX >= cancelAuctionButtonX && mouseX <= cancelAuctionButtonX + buttonWidth &&
+                                       mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+        
+        int cancelAuctionBgColor = cancelAuctionHovered ? 0xCCE53935 : 0x99E53935; // Red
+        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, cancelAuctionBgColor);
+        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR);
+        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR);
+        guiGraphics.fill(cancelAuctionButtonX + buttonWidth - 1, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        guiGraphics.fill(cancelAuctionButtonX, buttonY + buttonHeight - 1, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        
+        String cancelAuctionText = "Cancel Auction";
+        int cancelAuctionTextWidth = minecraft.font.width(cancelAuctionText);
+        int cancelAuctionTextX = cancelAuctionButtonX + (buttonWidth - cancelAuctionTextWidth) / 2;
+        int cancelAuctionTextY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
+        guiGraphics.drawString(minecraft.font, cancelAuctionText, cancelAuctionTextX, cancelAuctionTextY, TEXT_PRIMARY);
+    }
+    
+    @Override
+    protected boolean handlePopupKeyPress(int keyCode, int scanCode, int modifiers) {
+        // Handle ESC key to close popup
+        if (keyCode == 256) { // ESC key
+            hide();
+            return true;
+        }
+        return false;
+    }
+    
+    @Override
+    protected boolean handlePopupCharTyped(char codePoint, int modifiers) {
+        // No character input needed for confirmation popup
+        return false;
+    }
+    
+    @Override
+    protected boolean handlePopupClick(double mouseX, double mouseY, int button) {
+        if (button != 0) return false; // Only left click
+        
+        int buttonY = y + POPUP_HEIGHT - 50;
+        int buttonWidth = 150;
+        int buttonHeight = 28;
+        int buttonGap = 20;
+        
+        // Calculate button positions
+        int totalWidth = (buttonWidth * 2) + buttonGap;
+        int startX = x + (POPUP_WIDTH - totalWidth) / 2;
+        
+        // Keep Auction button (left)
+        int keepAuctionButtonX = startX;
+        if (mouseX >= keepAuctionButtonX && mouseX <= keepAuctionButtonX + buttonWidth &&
+            mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
+            hide();
+            return true;
+        }
+        
+        // Cancel Auction button (right)
+        int cancelAuctionButtonX = startX + buttonWidth + buttonGap;
+        if (mouseX >= cancelAuctionButtonX && mouseX <= cancelAuctionButtonX + buttonWidth &&
+            mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
+            cancelAuction();
+            return true;
+        }
+        
+        return false;
+    }
+    
+    private void cancelAuction() {
+        // Send cancel auction packet to server
+        String jsonData = String.format("{\"auctionId\":\"%s\"}", auction.getAuctionId());
+        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CANCEL, jsonData);
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+        
+        FreeMarket.LOGGER.info("Cancelled auction {}", auction.getAuctionId());
+        
+        // Hide popup
+        hide();
+    }
+}
+

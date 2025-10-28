@@ -46,6 +46,7 @@ public class FreeMarketGuiScreen extends Screen {
     // Popup overlays
     private CreateAuctionPopupScreen createAuctionPopup;
     private PlaceBidPopupOverlay placeBidPopup;
+    private CancelAuctionConfirmationPopup cancelAuctionPopup;
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
@@ -107,11 +108,27 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Shows the cancel auction confirmation popup overlay for the given auction.
+     */
+    public void showCancelAuctionPopup(com.freemarket.common.data.PlayerAuction auction) {
+        if (cancelAuctionPopup == null) {
+            cancelAuctionPopup = new CancelAuctionConfirmationPopup(auction);
+        } else {
+            // Update the auction data if popup already exists
+            cancelAuctionPopup = new CancelAuctionConfirmationPopup(auction);
+        }
+        cancelAuctionPopup.show();
+    }
+    
+    /**
      * Hides all popup overlays.
      */
     public void hideAllPopups() {
         if (placeBidPopup != null) {
             placeBidPopup.hide();
+        }
+        if (cancelAuctionPopup != null) {
+            cancelAuctionPopup.hide();
         }
     }
     
@@ -121,7 +138,8 @@ public class FreeMarketGuiScreen extends Screen {
      * @return true if any popup is visible, false otherwise
      */
     public boolean isAnyPopupVisible() {
-        return (placeBidPopup != null && placeBidPopup.isVisible());
+        return (placeBidPopup != null && placeBidPopup.isVisible()) ||
+               (cancelAuctionPopup != null && cancelAuctionPopup.isVisible());
     }
     
     /**
@@ -302,11 +320,22 @@ public class FreeMarketGuiScreen extends Screen {
         // Request wallet balance from server (for multiplayer)
         requestWalletBalance();
         
+        // Pre-fetch auction data when opening the shop
+        requestAuctionData();
+        
         // Initialize popup overlays
         this.placeBidPopup = null; // Will be created when needed
         
         // Create the appropriate container based on current screen
         createContainerForCurrentScreen();
+    }
+    
+    /**
+     * Pre-fetches auction data from the server when opening the shop.
+     */
+    private void requestAuctionData() {
+        FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.AUCTION_REQUEST);
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
     }
     
     /**
@@ -416,6 +445,9 @@ public class FreeMarketGuiScreen extends Screen {
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             placeBidPopup.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            cancelAuctionPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
     }
     
     /**
@@ -467,8 +499,8 @@ public class FreeMarketGuiScreen extends Screen {
             
             // Draw tab border
             guiGraphics.fill(tabX, tabY, tabX + tabWidth, tabY + 1, 0x80404040); // Top
-            guiGraphics.fill(tabX, tabY, tabX + 1, tabY + tabHeight, 0x80404040); // Left
-            guiGraphics.fill(tabX + tabWidth - 1, tabY, tabX + tabWidth, tabY + tabHeight, 0x80404040); // Right
+            guiGraphics.fill(tabX, tabY + 1, tabX + 1, tabY + tabHeight - 1, 0x80404040); // Left
+            guiGraphics.fill(tabX + tabWidth - 1, tabY + 1, tabX + tabWidth, tabY + tabHeight - 1, 0x80404040); // Right
             guiGraphics.fill(tabX, tabY + tabHeight - 1, tabX + tabWidth, tabY + tabHeight, 0x80404040); // Bottom
             
             // Draw tab label (centered)
@@ -622,6 +654,12 @@ public class FreeMarketGuiScreen extends Screen {
             }
         }
         
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
         // Don't process tab clicks or container clicks if popup is visible
         if (isAnyPopupVisible()) {
             return false; // Let popup handle all clicks
@@ -698,6 +736,12 @@ public class FreeMarketGuiScreen extends Screen {
             }
         }
         
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
         // Route to appropriate container
         switch (currentScreen) {
             case MARKETPLACE:
@@ -724,6 +768,12 @@ public class FreeMarketGuiScreen extends Screen {
         // Handle popup overlay character typing first (highest priority)
         if (placeBidPopup != null && placeBidPopup.isVisible()) {
             if (placeBidPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.charTyped(codePoint, modifiers)) {
                 return true;
             }
         }

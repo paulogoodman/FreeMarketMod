@@ -6,19 +6,16 @@ import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
-import javax.annotation.Nonnull;
-
 /**
  * Popup screen for creating auctions with visual inventory selector.
  * Three-phase UI: Inventory Selection → Price/Duration Form → Confirmation
  */
-public class CreateAuctionPopupScreen extends Screen {
+public class CreateAuctionPopupScreen extends BasePopupScreen {
     
     /**
      * Enum for tracking the current UI phase
@@ -29,45 +26,25 @@ public class CreateAuctionPopupScreen extends Screen {
         CONFIRMATION         // Phase 3: confirm selected item
     }
     
-    private final FreeMarketGuiScreen parentScreen;
     private PopupState currentState = PopupState.INVENTORY_SELECTION;
     
     // Selected item state
     private ItemStack selectedItem = ItemStack.EMPTY;
     private int selectedSlotIndex = -1;
     
-    // Form input fields (Phase 3)
+    // Form input fields (Phase 2)
     private EditBox startingPriceBox;
     private EditBox durationBox;
     
-    private String errorMessage = null;
-    
-    // UI dimensions (matching PlaceBidPopupOverlay)
-    private static final int POPUP_WIDTH = 420;
-    private static final int POPUP_HEIGHT = 280;
-    private int popupX;
-    private int popupY;
-    
-    // Inventory grid constants
-    private static final int SLOT_SIZE = 18;
-    private static final int SLOT_MARGIN = 2;
-    private static final int TOTAL_SLOT_SIZE = SLOT_SIZE + SLOT_MARGIN;
-    private static final int HOTBAR_SPACING = 4;
-    
     public CreateAuctionPopupScreen(FreeMarketGuiScreen parent) {
-        super(Component.literal("Create Auction"));
-        this.parentScreen = parent;
+        super(Component.literal("Create Auction"), parent);
     }
     
     @Override
     protected void init() {
         super.init();
         
-        // Calculate popup position (centered)
-        popupX = (this.width - POPUP_WIDTH) / 2;
-        popupY = (this.height - POPUP_HEIGHT) / 2;
-        
-        // Initialize form fields for Phase 3
+        // Initialize form fields for Phase 2
         initializeFormFields();
     }
     
@@ -97,60 +74,8 @@ public class CreateAuctionPopupScreen extends Screen {
         this.durationBox.setMaxLength(6);
     }
     
-    /**
-     * Renders only the background elements of the parent screen without widgets.
-     */
-    private void renderParentBackground(GuiGraphics guiGraphics, float partialTick) {
-        // Draw wallet display in top right of screen
-        parentScreen.renderWalletDisplay(guiGraphics);
-        
-        // Render tab navigation buttons
-        parentScreen.renderTabButtons(guiGraphics, -1, -1);
-        
-        // Render the appropriate container based on current screen (background only)
-        switch (parentScreen.getCurrentScreen()) {
-            case MARKETPLACE:
-                if (parentScreen.freeMarketContainer != null) {
-                    parentScreen.freeMarketContainer.render(guiGraphics, -1, -1, partialTick);
-                }
-                break;
-            case AUCTIONS:
-                if (parentScreen.auctionContainer != null) {
-                    parentScreen.auctionContainer.render(guiGraphics, -1, -1, partialTick);
-                }
-                break;
-            case LEADERBOARD:
-                if (parentScreen.leaderboardContainer != null) {
-                    parentScreen.leaderboardContainer.render(guiGraphics, -1, -1, partialTick);
-                }
-                break;
-        }
-    }
-    
     @Override
-    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Render parent screen background
-        if (parentScreen != null) {
-            renderParentBackground(guiGraphics, partialTick);
-        }
-        
-        // Push pose to render popup at a higher z-level (in front of everything)
-        guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0, 0, 400); // Push popup forward in z-space
-        
-        // Apply semi-transparent overlay
-        guiGraphics.fill(0, 0, this.width, this.height, 0xA0000000);
-        
-        // Draw popup background
-        guiGraphics.fill(popupX, popupY, popupX + POPUP_WIDTH, popupY + POPUP_HEIGHT, 0xFF1E1E1E);
-        guiGraphics.fill(popupX + 1, popupY + 1, popupX + POPUP_WIDTH - 1, popupY + POPUP_HEIGHT - 1, 0xFF2A2A2A);
-        
-        // Draw border
-        guiGraphics.fill(popupX, popupY, popupX + POPUP_WIDTH, popupY + 2, 0xFF404040);
-        guiGraphics.fill(popupX, popupY, popupX + 2, popupY + POPUP_HEIGHT, 0xFF404040);
-        guiGraphics.fill(popupX + POPUP_WIDTH - 2, popupY, popupX + POPUP_WIDTH, popupY + POPUP_HEIGHT, 0xFF404040);
-        guiGraphics.fill(popupX, popupY + POPUP_HEIGHT - 2, popupX + POPUP_WIDTH, popupY + POPUP_HEIGHT, 0xFF404040);
-        
+    protected void renderPopupContent(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Render content based on current state
         switch (currentState) {
             case INVENTORY_SELECTION:
@@ -163,17 +88,6 @@ public class CreateAuctionPopupScreen extends Screen {
                 renderFormInput(guiGraphics, mouseX, mouseY, partialTick);
                 break;
         }
-        
-        // Draw error message if present
-        if (errorMessage != null) {
-            int errorY = popupY + POPUP_HEIGHT - 80;  // Move above buttons
-            int errorWidth = this.font.width(errorMessage);
-            int errorX = popupX + (POPUP_WIDTH - errorWidth) / 2;
-            guiGraphics.drawString(this.font, errorMessage, errorX, errorY, 0xFFFF5555);
-        }
-        
-        // Pop pose to restore original z-level
-        guiGraphics.pose().popPose();
     }
     
     /**
@@ -336,139 +250,25 @@ public class CreateAuctionPopupScreen extends Screen {
     /**
      * Renders the inventory grid (9x4 layout)
      */
-    @SuppressWarnings("null")
     private void renderInventoryGrid(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.player == null) return;
-        
-        Inventory inventory = mc.player.getInventory();
-        int gridWidth = 9 * TOTAL_SLOT_SIZE;
+        int gridWidth = InventoryGridHelper.getGridWidth();
         int gridStartX = popupX + (POPUP_WIDTH - gridWidth) / 2;
         int gridStartY = popupY + 80;
         
-        for (int i = 0; i < 36; i++) {
-            // Map inventory slot index to display position
-            // Slots 9-35 are main inventory (display at top)
-            // Slots 0-8 are hotbar (display at bottom)
-            int displayIndex;
-            if (i < 9) {
-                // Hotbar: map to bottom row (slots 27-35 in display)
-                displayIndex = i + 27;
-            } else {
-                // Main inventory: map to top 3 rows (slots 0-26 in display)
-                displayIndex = i - 9;
-            }
-            
-            int row = displayIndex / 9;
-            int col = displayIndex % 9;
-            int slotX = gridStartX + (col * TOTAL_SLOT_SIZE);
-            int slotY = gridStartY + (row * TOTAL_SLOT_SIZE);
-            
-            // Add spacing between main inventory and hotbar
-            if (displayIndex >= 27) {
-                slotY += HOTBAR_SPACING;
-            }
-            
-            ItemStack stack = inventory.getItem(i);
-            boolean isHovered = isMouseOverSlot(mouseX, mouseY, slotX, slotY);
-            
-            // Render slot background
-            int bgColor = isHovered ? 0xFF3A3A3A : 0xFF2A2A2A;
-            guiGraphics.fill(slotX, slotY, slotX + SLOT_SIZE, slotY + SLOT_SIZE, bgColor);
-            
-            // Render slot border
-            guiGraphics.fill(slotX, slotY, slotX + SLOT_SIZE, slotY + 1, 0xFF404040);
-            guiGraphics.fill(slotX, slotY, slotX + 1, slotY + SLOT_SIZE, 0xFF404040);
-            guiGraphics.fill(slotX + SLOT_SIZE - 1, slotY, slotX + SLOT_SIZE, slotY + SLOT_SIZE, 0xFF404040);
-            guiGraphics.fill(slotX, slotY + SLOT_SIZE - 1, slotX + SLOT_SIZE, slotY + SLOT_SIZE, 0xFF404040);
-            
-            // Render item
-            if (!stack.isEmpty()) {
-                guiGraphics.renderItem(stack, slotX + 1, slotY + 1);
-                guiGraphics.renderItemDecorations(this.font, stack, slotX + 1, slotY + 1);
-                
-                // Render tooltip on hover
-                if (isHovered) {
-                    guiGraphics.renderTooltip(this.font, stack, mouseX, mouseY);
-                }
-            }
-        }
-    }
-    
-    /**
-     * Checks if mouse is over a specific slot
-     */
-    private boolean isMouseOverSlot(int mouseX, int mouseY, int slotX, int slotY) {
-        return mouseX >= slotX && mouseX < slotX + SLOT_SIZE &&
-               mouseY >= slotY && mouseY < slotY + SLOT_SIZE;
+        InventoryGridHelper.renderInventoryGrid(guiGraphics, this.font, mouseX, mouseY, gridStartX, gridStartY);
     }
     
     /**
      * Gets the clicked slot index from mouse coordinates
      */
     private int getClickedSlot(double mouseX, double mouseY) {
-        Minecraft mc = Minecraft.getInstance();
-        if (mc == null || mc.player == null) return -1;
-        
-        int gridWidth = 9 * TOTAL_SLOT_SIZE;
+        int gridWidth = InventoryGridHelper.getGridWidth();
         int gridStartX = popupX + (POPUP_WIDTH - gridWidth) / 2;
         int gridStartY = popupY + 80;
         
-        for (int i = 0; i < 36; i++) {
-            // Map inventory slot index to display position (same as rendering)
-            int displayIndex;
-            if (i < 9) {
-                displayIndex = i + 27;
-            } else {
-                displayIndex = i - 9;
-            }
-            
-            int row = displayIndex / 9;
-            int col = displayIndex % 9;
-            int slotX = gridStartX + (col * TOTAL_SLOT_SIZE);
-            int slotY = gridStartY + (row * TOTAL_SLOT_SIZE);
-            
-            if (displayIndex >= 27) {
-                slotY += HOTBAR_SPACING;
-            }
-            
-            if (mouseX >= slotX && mouseX < slotX + SLOT_SIZE &&
-                mouseY >= slotY && mouseY < slotY + SLOT_SIZE) {
-                return i;
-            }
-        }
-        return -1;
+        return InventoryGridHelper.getClickedSlot(mouseX, mouseY, gridStartX, gridStartY);
     }
     
-    /**
-     * Renders a button with hover effect
-     */
-    private void renderButton(GuiGraphics guiGraphics, String text, int x, int y, int width, int height, int mouseX, int mouseY, int normalColor, int hoverColor) {
-        boolean isHovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
-        int bgColor = isHovered ? hoverColor : normalColor;
-        
-        // Button background
-        guiGraphics.fill(x, y, x + width, y + height, bgColor);
-        
-        // Button border
-        guiGraphics.fill(x, y, x + width, y + 1, 0xFF404040);
-        guiGraphics.fill(x, y, x + 1, y + height, 0xFF404040);
-        guiGraphics.fill(x + width - 1, y, x + width, y + height, 0xFF404040);
-        guiGraphics.fill(x, y + height - 1, x + width, y + height, 0xFF404040);
-        
-        // Button text (centered)
-        int textWidth = this.font.width(text);
-        int textX = x + (width - textWidth) / 2;
-        int textY = y + (height - this.font.lineHeight) / 2;
-        guiGraphics.drawString(this.font, text, textX, textY, 0xFFFFFFFF);
-    }
-    
-    /**
-     * Checks if a button is clicked
-     */
-    private boolean isButtonClicked(double mouseX, double mouseY, int x, int y, int width, int height) {
-        return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
-    }
     
     /**
      * Formats duration in minutes to a readable string (days, hours, minutes)
@@ -549,6 +349,11 @@ public class CreateAuctionPopupScreen extends Screen {
         int cancelX = popupX + (POPUP_WIDTH - 180) / 2;
         int cancelY = popupY + POPUP_HEIGHT - 50;
         if (isButtonClicked(mouseX, mouseY, cancelX, cancelY, 180, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             onClose();
             return true;
         }
@@ -567,6 +372,11 @@ public class CreateAuctionPopupScreen extends Screen {
         // Back button
         int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
         if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             // Return to form input
             currentState = PopupState.FORM_INPUT;
             return true;
@@ -610,6 +420,11 @@ public class CreateAuctionPopupScreen extends Screen {
         // Back button
         int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
         if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             currentState = PopupState.INVENTORY_SELECTION;
             selectedItem = ItemStack.EMPTY;
             selectedSlotIndex = -1;
@@ -784,15 +599,4 @@ public class CreateAuctionPopupScreen extends Screen {
         onClose();
     }
     
-    @Override
-    public void onClose() {
-        if (this.minecraft != null) {
-            this.minecraft.setScreen(parentScreen);
-        }
-    }
-    
-    @Override
-    public boolean isPauseScreen() {
-        return false; // Don't pause game in multiplayer
-    }
 }

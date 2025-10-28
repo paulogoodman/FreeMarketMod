@@ -1,368 +1,559 @@
 package com.freemarket.client.gui;
 
-import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.Button;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Item;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
-
-import javax.annotation.Nonnull;
-
 import com.freemarket.FreeMarket;
-import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
-import com.freemarket.common.attachments.ItemComponentHandler;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 
 /**
- * Popup screen for adding items to the marketplace.
- * This screen appears when the '+' button is clicked in the main shop GUI.
+ * Popup screen for adding items to the marketplace with visual inventory selector.
+ * Three-phase UI: Inventory Selection → Price Configuration → Confirmation
  */
-public class AddItemPopupScreen extends Screen {
+public class AddItemPopupScreen extends BasePopupScreen {
     
-    private final FreeMarketGuiScreen parentScreen;
-    private EditBox itemIdBox;
+    /**
+     * Enum for tracking the current UI phase
+     */
+    private enum PopupState {
+        INVENTORY_SELECTION,  // Phase 1: showing inventory grid
+        FORM_INPUT,          // Phase 2: enter buy/sell prices
+        CONFIRMATION         // Phase 3: confirm selected item
+    }
+    
+    private PopupState currentState = PopupState.INVENTORY_SELECTION;
+    
+    // Selected item state
+    private ItemStack selectedItem = ItemStack.EMPTY;
+    private int selectedSlotIndex = -1;
+    
+    // Form input fields (Phase 2)
     private EditBox buyPriceBox;
     private EditBox sellPriceBox;
-    private EditBox quantityBox;
-    private EditBox componentDataBox;
-    private Button addButton;
-    private Button cancelButton;
-    
-    // Current selected item
-    private ItemStack selectedItem = null;
-    private String itemIdError = null;
-    private String componentDataError = null;
     
     public AddItemPopupScreen(FreeMarketGuiScreen parent) {
-        super(Component.translatable("gui.FreeMarket.add_item.title"));
-        this.parentScreen = parent;
+        super(Component.literal("Add Item to Marketplace"), parent);
     }
     
     @Override
     protected void init() {
         super.init();
         
-        // Calculate popup dimensions and position (centered) with responsive scaling
-        int popupWidth = GuiScalingHelper.responsiveWidth(500, 400, 600);
-        int popupHeight = GuiScalingHelper.responsiveHeight(320, 260, 400);
-        int popupX = GuiScalingHelper.centerX(popupWidth);
-        int popupY = GuiScalingHelper.centerY(popupHeight);
-        
-        // Item ID input
-        this.itemIdBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(50, 40, 65), 
-            GuiScalingHelper.responsiveWidth(200, 160, 250), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.FreeMarket.add_item.item_id"));
-        this.itemIdBox.setValue("");
-        this.itemIdBox.setResponder(this::onItemIdChanged);
-        this.addRenderableWidget(this.itemIdBox);
-        
-        
+        // Initialize form fields for Phase 2
+        initializeFormFields();
+    }
+    
+    private void initializeFormFields() {
         // Buy price input
-        this.buyPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(90, 75, 110), 
-            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.FreeMarket.add_item.buy_price"));
+        this.buyPriceBox = new EditBox(
+            this.font,
+            popupX + 20,
+            popupY + 125,
+            200,
+            20,
+            Component.literal("Buy Price")
+        );
         this.buyPriceBox.setValue("100");
-        this.addRenderableWidget(this.buyPriceBox);
+        this.buyPriceBox.setMaxLength(10);
         
         // Sell price input
-        this.sellPriceBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(130, 110, 150), 
-            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.FreeMarket.add_item.sell_price"));
+        this.sellPriceBox = new EditBox(
+            this.font,
+            popupX + 20,
+            popupY + 175,
+            200,
+            20,
+            Component.literal("Sell Price")
+        );
         this.sellPriceBox.setValue("80");
-        this.addRenderableWidget(this.sellPriceBox);
-        
-        // Quantity input
-        this.quantityBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(170, 145, 190), 
-            GuiScalingHelper.responsiveWidth(120, 100, 150), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.FreeMarket.add_item.quantity"));
-        this.quantityBox.setValue("1");
-        this.addRenderableWidget(this.quantityBox);
-        
-        // Component data input (optional) - stores all item components as JSON
-        this.componentDataBox = new EditBox(this.font, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(210, 175, 230), 
-            GuiScalingHelper.responsiveWidth(450, 360, 550), GuiScalingHelper.responsiveHeight(20, 16, 26), 
-            Component.translatable("gui.FreeMarket.add_item.component_data"));
-        this.componentDataBox.setValue(""); // Start empty - users can add their own
-        this.componentDataBox.setResponder(this::onComponentDataChanged);
-        this.componentDataBox.setMaxLength(Integer.MAX_VALUE);
-        this.addRenderableWidget(this.componentDataBox);
-        
-        // Add button
-        this.addButton = Button.builder(
-            Component.translatable("gui.FreeMarket.add_item.add"),
-            button -> addItemToList()
-        ).bounds(popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
-            GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
-        this.addRenderableWidget(this.addButton);
-        
-        // Cancel button
-        this.cancelButton = Button.builder(
-            Component.translatable("gui.FreeMarket.add_item.cancel"),
-            button -> onClose()
-        ).bounds(popupX + GuiScalingHelper.responsiveWidth(120, 100, 150), popupY + GuiScalingHelper.responsiveHeight(250, 220, 280), 
-            GuiScalingHelper.responsiveWidth(80, 60, 100), GuiScalingHelper.responsiveHeight(20, 16, 26)).build();
-        this.addRenderableWidget(this.cancelButton);
+        this.sellPriceBox.setMaxLength(10);
     }
     
-    private void onItemIdChanged(String itemId) {
-        itemIdError = null;
-        selectedItem = null;
+    @Override
+    protected void renderPopupContent(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Render content based on current state
+        switch (currentState) {
+            case INVENTORY_SELECTION:
+                renderInventorySelection(guiGraphics, mouseX, mouseY, partialTick);
+                break;
+            case CONFIRMATION:
+                renderConfirmation(guiGraphics, mouseX, mouseY, partialTick);
+                break;
+            case FORM_INPUT:
+                renderFormInput(guiGraphics, mouseX, mouseY, partialTick);
+                break;
+        }
+    }
+    
+    /**
+     * Phase 1: Render inventory selection screen
+     */
+    private void renderInventorySelection(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Draw title
+        Component title = Component.literal("Add Item to Marketplace");
+        int titleWidth = this.font.width(title);
+        int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
+        int titleY = popupY + 15;
+        guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFFFF);
         
-        if (itemId.isEmpty()) {
-            return;
+        // Draw instructions
+        String instruction = "Select an item from your inventory:";
+        int instWidth = this.font.width(instruction);
+        int instX = popupX + (POPUP_WIDTH - instWidth) / 2;
+        int instY = popupY + 40;
+        guiGraphics.drawString(this.font, instruction, instX, instY, 0xFFAAAAAA);
+        
+        // Render inventory grid
+        renderInventoryGrid(guiGraphics, mouseX, mouseY);
+        
+        // Render cancel button
+        renderButton(guiGraphics, "Cancel", popupX + (POPUP_WIDTH - 180) / 2, popupY + POPUP_HEIGHT - 50, 180, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+    }
+    
+    /**
+     * Phase 3: Render confirmation dialog
+     */
+    private void renderConfirmation(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Draw title
+        Component title = Component.literal("Confirm Marketplace Item");
+        int titleWidth = this.font.width(title);
+        int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
+        int titleY = popupY + 15;
+        guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFFFF);
+        
+        // Draw large item icon with stack count
+        int iconSize = 48;
+        int iconX = popupX + (POPUP_WIDTH - iconSize) / 2;
+        int iconY = popupY + 80;
+        
+        // Check if mouse is over icon for tooltip
+        boolean isHovered = mouseX >= iconX && mouseX <= iconX + iconSize &&
+                           mouseY >= iconY && mouseY <= iconY + iconSize;
+        
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(iconX + iconSize / 2, iconY + iconSize / 2, 0);
+        float scale = (float) iconSize / 16.0f;
+        guiGraphics.pose().scale(scale, scale, scale);
+        guiGraphics.renderItem(selectedItem, -8, -8);
+        guiGraphics.renderItemDecorations(this.font, selectedItem, -8, -8);
+        guiGraphics.pose().popPose();
+        
+        // Render tooltip if hovered
+        if (isHovered) {
+            guiGraphics.renderTooltip(this.font, selectedItem, mouseX, mouseY);
         }
         
-        try {
-            ResourceLocation itemLocation = ResourceLocation.parse(itemId);
-            
-            if (BuiltInRegistries.ITEM.containsKey(itemLocation)) {
-                Item item = BuiltInRegistries.ITEM.get(itemLocation);
-                selectedItem = new ItemStack(item, 1);
+        // Draw item name
+        Component itemName = selectedItem.getHoverName();
+        int nameWidth = this.font.width(itemName);
+        int nameX = popupX + (POPUP_WIDTH - nameWidth) / 2;
+        int nameY = iconY + iconSize + 20;
+        guiGraphics.drawString(this.font, itemName, nameX, nameY, 0xFFFFFFFF);
+        
+        // Draw item details
+        int detailsY = nameY + 25;
+        int detailsX = popupX + 20;
+        
+        // Buy price
+        String buyPriceText = "Buy Price: $" + buyPriceBox.getValue();
+        guiGraphics.drawString(this.font, buyPriceText, detailsX, detailsY, 0xFFAAAAAA);
+        
+        // Sell price
+        String sellPriceText = "Sell Price: $" + sellPriceBox.getValue();
+        guiGraphics.drawString(this.font, sellPriceText, detailsX, detailsY + 15, 0xFFAAAAAA);
+        
+        // Quantity
+        String quantityText = "Quantity: " + selectedItem.getCount();
+        guiGraphics.drawString(this.font, quantityText, detailsX, detailsY + 30, 0xFFAAAAAA);
+        
+        // Render buttons
+        int buttonY = popupY + POPUP_HEIGHT - 50;
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
+        
+        // Back button (gray)
+        renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        
+        // Add to Marketplace button (green)
+        renderButton(guiGraphics, "Add to Marketplace", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
+    }
+    
+    /**
+     * Phase 2: Render price configuration form
+     */
+    private void renderFormInput(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
+        // Draw title
+        Component title = Component.literal("Add Item to Marketplace");
+        int titleWidth = this.font.width(title);
+        int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
+        int titleY = popupY + 15;
+        guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFFFF);
+        
+        // Draw selected item display
+        int iconSize = 32;
+        int iconX = popupX + 20;
+        int iconY = popupY + 60;
+        
+        // Check if mouse is over icon for tooltip
+        boolean isIconHovered = mouseX >= iconX && mouseX <= iconX + iconSize &&
+                               mouseY >= iconY && mouseY <= iconY + iconSize;
+        
+        // Item icon background
+        guiGraphics.fill(iconX - 2, iconY - 2, iconX + iconSize + 2, iconY + iconSize + 2, 0xFF404040);
+        guiGraphics.fill(iconX - 1, iconY - 1, iconX + iconSize + 1, iconY + iconSize + 1, 0xFF2A2A2A);
+        
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().translate(iconX + iconSize / 2, iconY + iconSize / 2, 0);
+        float scale = (float) iconSize / 16.0f;
+        guiGraphics.pose().scale(scale, scale, scale);
+        guiGraphics.renderItem(selectedItem, -8, -8);
+        guiGraphics.renderItemDecorations(this.font, selectedItem, -8, -8);
+        guiGraphics.pose().popPose();
+        
+        // Render tooltip if hovered
+        if (isIconHovered) {
+            guiGraphics.renderTooltip(this.font, selectedItem, mouseX, mouseY);
+        }
+        
+        // Item name next to icon
+        Component itemName = selectedItem.getHoverName();
+        guiGraphics.drawString(this.font, itemName, iconX + iconSize + 10, iconY + 5, 0xFFFFFFFF);
+        
+        // Draw form labels and fields
+        int formStartY = popupY + 110;
+        
+        // Buy Price
+        guiGraphics.drawString(this.font, "Buy Price ($):", popupX + 20, formStartY, 0xFFAAAAAA);
+        buyPriceBox.setPosition(popupX + 20, formStartY + 15);
+        buyPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        
+        // Sell Price
+        guiGraphics.drawString(this.font, "Sell Price ($):", popupX + 20, formStartY + 50, 0xFFAAAAAA);
+        guiGraphics.drawString(this.font, "Should be less than buy price", popupX + 180, formStartY + 50, 0xFF808080);
+        sellPriceBox.setPosition(popupX + 20, formStartY + 65);
+        sellPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        
+        // Render buttons
+        int buttonY = popupY + POPUP_HEIGHT - 50;
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
+        
+        // Back button (gray)
+        renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
+        
+        // Continue button (green)
+        renderButton(guiGraphics, "Continue", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
+    }
+    
+    /**
+     * Renders the inventory grid (9x4 layout)
+     */
+    private void renderInventoryGrid(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int gridWidth = InventoryGridHelper.getGridWidth();
+        int gridStartX = popupX + (POPUP_WIDTH - gridWidth) / 2;
+        int gridStartY = popupY + 80;
+        
+        InventoryGridHelper.renderInventoryGrid(guiGraphics, this.font, mouseX, mouseY, gridStartX, gridStartY);
+    }
+    
+    /**
+     * Gets the clicked slot index from mouse coordinates
+     */
+    private int getClickedSlot(double mouseX, double mouseY) {
+        int gridWidth = InventoryGridHelper.getGridWidth();
+        int gridStartX = popupX + (POPUP_WIDTH - gridWidth) / 2;
+        int gridStartY = popupY + 80;
+        
+        return InventoryGridHelper.getClickedSlot(mouseX, mouseY, gridStartX, gridStartY);
+    }
+    
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (button != 0) return false; // Only left click
+        
+        errorMessage = null; // Clear error on any click
+        
+        switch (currentState) {
+            case INVENTORY_SELECTION:
+                return handleInventorySelectionClick(mouseX, mouseY);
+            case CONFIRMATION:
+                return handleConfirmationClick(mouseX, mouseY);
+            case FORM_INPUT:
+                return handleFormInputClick(mouseX, mouseY);
+        }
+        
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+    
+    /**
+     * Handle clicks in inventory selection phase
+     */
+    private boolean handleInventorySelectionClick(double mouseX, double mouseY) {
+        // Check for slot click
+        int slotIndex = getClickedSlot(mouseX, mouseY);
+        Minecraft mc = Minecraft.getInstance();
+        if (slotIndex >= 0 && mc != null && mc.player != null) {
+            ItemStack stack = mc.player.getInventory().getItem(slotIndex);
+            if (!stack.isEmpty()) {
+                // Item selected - transition to form input
+                if (mc.player != null) {
+                    mc.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                selectedItem = stack.copy();
+                selectedSlotIndex = slotIndex;
+                currentState = PopupState.FORM_INPUT;
+                return true;
             } else {
-                itemIdError = "Invalid item ID: " + itemId;
+                errorMessage = "This slot is empty";
+                return true;
             }
-        } catch (Exception e) {
-            itemIdError = "Invalid format: " + itemId;
-        }
-    }
-    
-    private void onComponentDataChanged(String componentDataString) {
-        componentDataError = null;
-        try {
-            if (componentDataString != null && !componentDataString.trim().isEmpty()) {
-                // Validate component data JSON format
-                net.minecraft.nbt.TagParser.parseTag(componentDataString.trim());
-            }
-        } catch (Exception e) {
-            componentDataError = "Invalid component data format";
-        }
-    }
-    
-    
-    private ItemStack createItemWithComponents(Item item, int count, String componentDataString) {
-        ItemStack itemStack = new ItemStack(item, count);
-        
-        // Apply component data if provided
-        if (componentDataString != null && !componentDataString.trim().isEmpty()) {
-            FreeMarket.LOGGER.info("Applying component data to item: {}", componentDataString);
-            ItemComponentHandler.applyComponentData(itemStack, componentDataString);
-            FreeMarket.LOGGER.info("Component data applied. Item now has components: {}", 
-                ItemComponentHandler.hasComponentData(itemStack));
-        } else {
-            FreeMarket.LOGGER.info("No component data provided for item");
         }
         
-        return itemStack;
-    }
-    
-    private void addItemToList() {
-        try {
-            // Get input values
-            String itemId = this.itemIdBox.getValue();
-            String buyPriceStr = this.buyPriceBox.getValue();
-            String sellPriceStr = this.sellPriceBox.getValue();
-            String quantityStr = this.quantityBox.getValue();
-            
-            // Validate item ID first (in case user clicked Add without losing focus)
-            onItemIdChanged(itemId);
-            
-            // Validate inputs
-            if (itemId.isEmpty() || buyPriceStr.isEmpty() || sellPriceStr.isEmpty() || quantityStr.isEmpty()) {
-                FreeMarket.LOGGER.warn("All fields must be filled");
-                return;
-            }
-            
-            if (selectedItem == null) {
-                FreeMarket.LOGGER.warn("Please enter a valid item ID");
-                return;
-            }
-            
-            int buyPrice, sellPrice, quantity;
-            try {
-                buyPrice = Integer.parseInt(buyPriceStr);
-                sellPrice = Integer.parseInt(sellPriceStr);
-                quantity = Integer.parseInt(quantityStr);
-            } catch (NumberFormatException e) {
-                FreeMarket.LOGGER.warn("Invalid number format in price or quantity fields");
-                return;
-            }
-            
-            // Validate component data if provided
-            if (componentDataError != null) {
-                FreeMarket.LOGGER.warn("Component data validation failed: {}", componentDataError);
-                return;
-            }
-            
-            // Get the selected item stack with component data applied
-            ItemStack itemStack = createItemWithComponents(selectedItem.getItem(), quantity, 
-                this.componentDataBox.getValue());
-            
-            // Get the actual player name
-            String playerName = "Unknown Player";
-            if (this.minecraft != null && this.minecraft.player != null) {
-                playerName = this.minecraft.player.getName().getString();
-            }
-            
-            // Create marketplace item with component data
-            FreeMarketItem FreeMarketItem = new FreeMarketItem(
-                itemStack, 
-                buyPrice, 
-                sellPrice, 
-                quantity, 
-                playerName, // Use actual player name
-                null, // GUID will be generated
-                this.componentDataBox.getValue() // Pass the component data from the text field
-            );
-            
-            // Add to marketplace via network packet (server-side)
-            String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"quantity\":%d}", 
-                itemId, this.componentDataBox.getValue(), buyPrice, sellPrice, quantity);
-            FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
-            net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-            
-            FreeMarket.LOGGER.info("Added item to marketplace: {} - Buy: {} - Sell: {} - Quantity: {}", 
-                itemStack.getItem().getDescription().getString(), buyPrice, sellPrice, quantity);
-            
-            // Close the popup
+        // Check for cancel button
+        int cancelX = popupX + (POPUP_WIDTH - 180) / 2;
+        int cancelY = popupY + POPUP_HEIGHT - 50;
+        if (isButtonClicked(mouseX, mouseY, cancelX, cancelY, 180, 20)) {
             onClose();
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to add item to marketplace", e);
+            return true;
         }
+        
+        return false;
     }
     
-    @Override
-    public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        // Calculate popup dimensions and position with responsive scaling
-        int popupWidth = GuiScalingHelper.responsiveWidth(500, 400, 600);
-        int popupHeight = GuiScalingHelper.responsiveHeight(320, 260, 400);
-        int popupX = GuiScalingHelper.centerX(popupWidth);
-        int popupY = GuiScalingHelper.centerY(popupHeight);
+    /**
+     * Handle clicks in confirmation phase
+     */
+    private boolean handleConfirmationClick(double mouseX, double mouseY) {
+        int buttonY = popupY + POPUP_HEIGHT - 50;
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
         
-        // Render the parent screen first (so we can see the container behind)
-        if (parentScreen != null) {
-            parentScreen.render(guiGraphics, -1, -1, partialTick);
+        // Back button
+        int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Return to form input
+            currentState = PopupState.FORM_INPUT;
+            return true;
         }
         
-        // Apply semi-transparent overlay with blur effect over entire screen
-        guiGraphics.fill(0, 0, this.width, this.height, 0xA0000000);
-        
-        // Draw popup background on top of the blur (matching container colors)
-        guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF1E1E1E);
-        guiGraphics.fill(popupX + 1, popupY + 1, popupX + popupWidth - 1, popupY + popupHeight - 1, 0xFF2A2A2A);
-        
-
-        // Draw popup border
-        guiGraphics.fill(popupX, popupY, popupX + popupWidth, popupY + 1, 0xFF808080);
-        guiGraphics.fill(popupX, popupY, popupX + 1, popupY + popupHeight, 0xFF808080);
-        guiGraphics.fill(popupX + popupWidth - 1, popupY, popupX + popupWidth, popupY + popupHeight, 0xFF808080);
-        guiGraphics.fill(popupX, popupY + popupHeight - 1, popupX + popupWidth, popupY + popupHeight, 0xFF808080);
-        
-        // Render all widgets on top of the background
-        if (itemIdBox != null) itemIdBox.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (buyPriceBox != null) buyPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (sellPriceBox != null) sellPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (quantityBox != null) quantityBox.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (componentDataBox != null) componentDataBox.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (addButton != null) addButton.render(guiGraphics, mouseX, mouseY, partialTick);
-        if (cancelButton != null) cancelButton.render(guiGraphics, mouseX, mouseY, partialTick);
-        
-        // Draw title (after widgets to ensure it's on top)
-        int titleWidth = this.font.width(this.title);
-        int titleX = popupX + (popupWidth - titleWidth) / 2;
-        guiGraphics.drawString(this.font, this.title, titleX, popupY + GuiScalingHelper.responsiveHeight(10, 8, 15), 0xFFFFFF);
-        
-        // Draw labels (after widgets to ensure they're on top)
-        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.item_id"), 
-            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(40, 32, 50), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.buy_price"), 
-            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(80, 65, 95), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.sell_price"), 
-            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(120, 95, 140), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.quantity"), 
-            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(160, 130, 180), 0xCCCCCC);
-        guiGraphics.drawString(this.font, Component.translatable("gui.FreeMarket.add_item.component_data"), 
-            popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(200, 165, 200), 0xCCCCCC);
-        
-        // Draw item preview and error messages
-        if (selectedItem != null) {
-            // Calculate item preview size and position (50x50 with responsive scaling)
-            int itemPreviewSize = GuiScalingHelper.responsiveWidth(50, 40, 60);
-            int itemPreviewX = popupX + GuiScalingHelper.responsiveWidth(300, 250, 350);
-            int itemPreviewY = popupY + GuiScalingHelper.responsiveHeight(50, 40, 65);
-            
-            // Draw item icon with scaling (similar to FreeMarketContainer)
-            guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(itemPreviewX, itemPreviewY, 0);
-            float scale = (float) itemPreviewSize / 16f; // Scale to fit the responsive size
-            guiGraphics.pose().scale(scale, scale, 1.0f);
-            guiGraphics.renderItem(selectedItem, 0, 0);
-            guiGraphics.renderItemDecorations(this.font, selectedItem, 0, 0);
-            guiGraphics.pose().popPose();
-            
-            // Draw item name (centered underneath the item image)
-            String itemName = selectedItem.getItem().getDescription().getString();
-            if (itemName.length() > 15) {
-                itemName = itemName.substring(0, 15) + "...";
+        // Add to Marketplace button
+        int addX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, addX, buttonY, buttonWidth, 20)) {
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
             }
-            int itemNameWidth = this.font.width(itemName);
-            int itemNameX = itemPreviewX + (itemPreviewSize - itemNameWidth) / 2; // Center horizontally
-            guiGraphics.drawString(this.font, itemName, itemNameX, itemPreviewY + itemPreviewSize + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFFFFFF);
-        } else if (itemIdError != null) {
-            // Calculate error preview size and position (50x50 with responsive scaling)
-            int errorPreviewSize = GuiScalingHelper.responsiveWidth(50, 40, 60);
-            int errorPreviewX = popupX + GuiScalingHelper.responsiveWidth(300, 250, 350);
-            int errorPreviewY = popupY + GuiScalingHelper.responsiveHeight(50, 40, 65);
-            
-            // Draw barrier item (red X) with scaling
-            ItemStack barrierItem = new ItemStack(net.minecraft.world.item.Items.BARRIER);
-            guiGraphics.pose().pushPose();
-            guiGraphics.pose().translate(errorPreviewX, errorPreviewY, 0);
-            float scale = (float) errorPreviewSize / 16f; // Scale to fit the responsive size
-            guiGraphics.pose().scale(scale, scale, 1.0f);
-            guiGraphics.renderItem(barrierItem, 0, 0);
-            guiGraphics.renderItemDecorations(this.font, barrierItem, 0, 0);
-            guiGraphics.pose().popPose();
-            
-            // Draw "Invalid Item ID" text (centered underneath the barrier item)
-            String errorText = "Invalid Item ID";
-            int errorTextWidth = this.font.width(errorText);
-            int errorTextX = errorPreviewX + (errorPreviewSize - errorTextWidth) / 2; // Center horizontally
-            guiGraphics.drawString(this.font, errorText, errorTextX, errorPreviewY + errorPreviewSize + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFF6666);
+            addItemToMarketplace();
+            return true;
         }
         
-        // Draw component data error message
-        if (componentDataError != null) {
-            guiGraphics.drawString(this.font, componentDataError, popupX + GuiScalingHelper.responsiveWidth(20, 15, 30), popupY + GuiScalingHelper.responsiveHeight(230, 195, 250), 0xFF6666);
-        }
+        return false;
     }
     
-    @Override
-    public boolean isPauseScreen() {
+    /**
+     * Handle clicks in form input phase
+     */
+    private boolean handleFormInputClick(double mouseX, double mouseY) {
+        // Handle text field clicks
+        if (buyPriceBox.mouseClicked(mouseX, mouseY, 0)) {
+            buyPriceBox.setFocused(true);
+            sellPriceBox.setFocused(false);
+            return true;
+        }
+        if (sellPriceBox.mouseClicked(mouseX, mouseY, 0)) {
+            sellPriceBox.setFocused(true);
+            buyPriceBox.setFocused(false);
+            return true;
+        }
+        
+        // Handle button clicks
+        int buttonY = popupY + POPUP_HEIGHT - 50;
+        int buttonSpacing = 20;
+        int buttonWidth = 180;
+        
+        // Back button
+        int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            currentState = PopupState.INVENTORY_SELECTION;
+            selectedItem = ItemStack.EMPTY;
+            selectedSlotIndex = -1;
+            return true;
+        }
+        
+        // Continue button
+        int continueX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, continueX, buttonY, buttonWidth, 20)) {
+            var player = Minecraft.getInstance().player;
+            if (player != null) {
+                player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
+            currentState = PopupState.CONFIRMATION;
+            return true;
+        }
+        
         return false;
     }
     
     @Override
-    public boolean shouldCloseOnEsc() {
-        return true;
-    }
-    
-        @Override
-        public void onClose() {
-            // Refresh the marketplace before returning to parent screen
-            if (parentScreen != null) {
-                parentScreen.refreshMarketplace();
-            }
-            
-            if (this.minecraft != null) {
-                this.minecraft.setScreen(this.parentScreen);
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        // ESC key handling
+        if (keyCode == 256) { // ESC
+            if (currentState == PopupState.CONFIRMATION) {
+                currentState = PopupState.FORM_INPUT;
+                return true;
+            } else if (currentState == PopupState.FORM_INPUT) {
+                currentState = PopupState.INVENTORY_SELECTION;
+                selectedItem = ItemStack.EMPTY;
+                selectedSlotIndex = -1;
+                return true;
+            } else {
+                onClose();
+                return true;
             }
         }
+        
+        // Handle text field key presses in form input phase
+        if (currentState == PopupState.FORM_INPUT) {
+            if (buyPriceBox.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+            if (sellPriceBox.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
+        return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+    
+    @Override
+    public boolean charTyped(char codePoint, int modifiers) {
+        // Handle text field character typing in form input phase
+        if (currentState == PopupState.FORM_INPUT) {
+            if (buyPriceBox.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+            if (sellPriceBox.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        return super.charTyped(codePoint, modifiers);
+    }
+    
+    /**
+     * Adds the item to the marketplace with validation
+     */
+    private void addItemToMarketplace() {
+        errorMessage = null;
+        
+        if (selectedItem.isEmpty()) {
+            errorMessage = "No item selected";
+            return;
+        }
+        
+        // Verify player still has the exact item (including components)
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.player != null) {
+            Inventory inventory = mc.player.getInventory();
+            ItemStack currentStack = inventory.getItem(selectedSlotIndex);
+            
+            // Check if slot is empty
+            if (currentStack.isEmpty()) {
+                errorMessage = "Item no longer in inventory!";
+                return;
+            }
+            
+            // Check if item type and components match exactly
+            if (!ItemStack.isSameItemSameComponents(currentStack, selectedItem)) {
+                errorMessage = "Item has been modified or moved!";
+                return;
+            }
+            
+            if (currentStack.getCount() < selectedItem.getCount()) {
+                errorMessage = "Not enough items in inventory!";
+                return;
+            }
+        }
+        
+        // Use the quantity from the selected item stack
+        int quantity = selectedItem.getCount();
+        if (quantity < 1 || quantity > 64) {
+            errorMessage = "Invalid item quantity";
+            return;
+        }
+        
+        // Parse and validate buy price
+        long buyPrice;
+        try {
+            buyPrice = Long.parseLong(buyPriceBox.getValue());
+            if (buyPrice < 0) {
+                errorMessage = "Buy price cannot be negative";
+                return;
+            }
+        } catch (NumberFormatException e) {
+            errorMessage = "Invalid buy price";
+            return;
+        }
+        
+        // Parse and validate sell price
+        long sellPrice;
+        try {
+            sellPrice = Long.parseLong(sellPriceBox.getValue());
+            if (sellPrice < 0) {
+                errorMessage = "Sell price cannot be negative";
+                return;
+            }
+        } catch (NumberFormatException e) {
+            errorMessage = "Invalid sell price";
+            return;
+        }
+        
+        // Validate that at least one price is greater than zero
+        if (buyPrice <= 0 && sellPrice <= 0) {
+            errorMessage = "At least one price must be greater than zero";
+            return;
+        }
+        
+        // Extract item ID from ItemStack
+        String itemId = BuiltInRegistries.ITEM.getKey(selectedItem.getItem()).toString();
+        
+        // Serialize component data from actual item using ItemComponentHandler
+        String componentData = ItemComponentHandler.getComponentData(selectedItem);
+        
+        // Escape the component data string for JSON
+        String escapedComponentData = componentData
+            .replace("\\", "\\\\")  // Escape backslashes first
+            .replace("\"", "\\\"")  // Escape quotes
+            .replace("\n", "\\n")   // Escape newlines
+            .replace("\r", "\\r")   // Escape carriage returns
+            .replace("\t", "\\t");  // Escape tabs
+        
+        // Send add item packet to server
+        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"quantity\":%d}", 
+            itemId, escapedComponentData, buyPrice, sellPrice, quantity);
+        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+        
+        FreeMarket.LOGGER.info("Added item to marketplace: {} x{} - Buy: ${}, Sell: ${}", 
+            itemId, quantity, buyPrice, sellPrice);
+        
+        // Close popup and return to marketplace screen
+        onClose();
+    }
+    
+    @Override
+    public void onClose() {
+        // Refresh the marketplace before returning to parent screen
+        if (parentScreen != null) {
+            parentScreen.refreshMarketplace();
+        }
+        
+        super.onClose();
+    }
 }
-
-

@@ -13,6 +13,9 @@ public enum ButtonType {
     /** Bid button was clicked */
     BID,
     
+    /** Cancel auction button was clicked */
+    CANCEL_AUCTION,
+    
     /** Delete/manage button was clicked */
     MANAGE,
     

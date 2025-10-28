@@ -57,6 +57,7 @@ public class FreeMarketPacketHandler {
             case AUCTION_REQUEST -> handleAuctionRequest(packet, context);
             case AUCTION_BID -> handleAuctionBid(packet, context);
             case AUCTION_CREATE -> handleAuctionCreate(packet, context);
+            case AUCTION_CANCEL -> handleAuctionCancel(packet, context);
             case LEADERBOARD_REQUEST -> handleLeaderboardRequest(packet, context);
             case MARKETPLACE_ADD_ITEM -> handleMarketplaceAddItem(packet, context);
             case MARKETPLACE_REMOVE_ITEM -> handleMarketplaceRemoveItem(packet, context);
@@ -70,6 +71,7 @@ public class FreeMarketPacketHandler {
             case LEADERBOARD_SYNC -> handleLeaderboardSync(packet, context);
             case MARKETPLACE_SYNC -> handleMarketplaceSync(packet, context);
             case ADMIN_MODE_SYNC -> handleAdminModeSync(packet, context);
+            case AUCTION_DEBUG_MODE_SYNC -> handleAuctionDebugModeSync(packet, context);
         }
     }
     
@@ -221,6 +223,25 @@ public class FreeMarketPacketHandler {
                 componentData, quantity, startingPrice, durationMinutes);
             
             if (success) {
+                var auctions = AuctionDataManager.loadAuctions(level);
+                PacketDistributor.sendToAllPlayers(
+                    FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, GSON.toJson(auctions)));
+            }
+        });
+    }
+    
+    private static void handleAuctionCancel(FreeMarketPacket packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) return;
+            
+            JsonObject json = JsonParser.parseString(packet.data()).getAsJsonObject();
+            String auctionId = json.get("auctionId").getAsString();
+            
+            ServerLevel level = player.serverLevel();
+            boolean success = ServerAuctionHandler.cancelAuction(level, player, auctionId);
+            
+            if (success) {
+                // Broadcast updated auction list to all players
                 var auctions = AuctionDataManager.loadAuctions(level);
                 PacketDistributor.sendToAllPlayers(
                     FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, GSON.toJson(auctions)));
@@ -432,6 +453,14 @@ public class FreeMarketPacketHandler {
             boolean adminMode = Boolean.parseBoolean(packet.data());
             AdminModeHandler.setAdminMode(adminMode);
             FreeMarket.LOGGER.info("Admin mode: {}", adminMode ? "enabled" : "disabled");
+        });
+    }
+    
+    private static void handleAuctionDebugModeSync(FreeMarketPacket packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            boolean auctionDebugMode = Boolean.parseBoolean(packet.data());
+            com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(auctionDebugMode);
+            FreeMarket.LOGGER.info("Auction debug mode: {}", auctionDebugMode ? "enabled" : "disabled");
         });
     }
     

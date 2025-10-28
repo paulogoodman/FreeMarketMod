@@ -4,6 +4,8 @@ import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.data.PlayerAuction;
 import com.freemarket.server.data.AuctionDataManager;
+import com.freemarket.server.data.PendingReward;
+import com.freemarket.server.data.PendingRewardsManager;
 import com.google.gson.GsonBuilder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -187,6 +189,106 @@ public class ServerAuctionHandler {
     }
     
     /**
+     * Cancels an auction and returns the item to the seller.
+     * @return true if successful
+     */
+    public static boolean cancelAuction(ServerLevel level, ServerPlayer player, String auctionId) {
+        try {
+            // Load auctions from NBT storage
+            List<PlayerAuction> auctions = AuctionDataManager.loadAuctions(level);
+            PlayerAuction auction = null;
+            
+            // Find the auction
+            for (PlayerAuction a : auctions) {
+                if (a.getAuctionId().equals(auctionId)) {
+                    auction = a;
+                    break;
+                }
+            }
+            
+            if (auction == null) {
+                player.sendSystemMessage(Component.literal("Auction not found!"));
+                return false;
+            }
+            
+            // Check if player is the seller (unless admin mode is enabled)
+            boolean isAdminMode = com.freemarket.common.handlers.AdminModeHandler.isAdminMode();
+            boolean isOwnAuction = auction.getSellerUuid().equals(player.getUUID().toString());
+            
+            if (!isOwnAuction && !isAdminMode) {
+                player.sendSystemMessage(Component.literal("You can only cancel your own auctions!"));
+                return false;
+            }
+            
+            // Check if expired
+            if (auction.isExpired()) {
+                player.sendSystemMessage(Component.literal("This auction has already expired!"));
+                return false;
+            }
+            
+            // Refund the current bidder if there is one
+            if (auction.getBidderUuid() != null) {
+                ServerPlayer bidder = level.getServer().getPlayerList().getPlayer(
+                    java.util.UUID.fromString(auction.getBidderUuid())
+                );
+                if (bidder != null) {
+                    ServerWalletHandler.addMoney(bidder, auction.getCurrentBid());
+                    bidder.sendSystemMessage(Component.literal("The auction you bid on was cancelled. Your bid of $" + 
+                        auction.getCurrentBid() + " has been refunded."));
+                }
+            }
+            
+            // Create ItemStack from auction data
+            ItemStack itemStack = createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity());
+            if (itemStack == null) {
+                player.sendSystemMessage(Component.literal("Failed to restore item!"));
+                return false;
+            }
+            
+            // Return item to seller's inventory (or admin's if admin deleted)
+            ServerPlayer seller = isOwnAuction ? player : level.getServer().getPlayerList().getPlayer(
+                java.util.UUID.fromString(auction.getSellerUuid())
+            );
+            
+            if (seller != null) {
+                boolean added = seller.getInventory().add(itemStack);
+                if (!added) {
+                    // Try to drop the item if inventory is full
+                    seller.drop(itemStack, false);
+                    seller.sendSystemMessage(Component.literal("Auction cancelled! Item dropped because inventory is full."));
+                } else {
+                    seller.sendSystemMessage(Component.literal("Auction cancelled! Item returned to your inventory."));
+                }
+            } else {
+                // Seller is offline - return to admin's inventory if admin deleted
+                if (isAdminMode && !isOwnAuction) {
+                    boolean added = player.getInventory().add(itemStack);
+                    if (!added) {
+                        player.drop(itemStack, false);
+                        player.sendSystemMessage(Component.literal("Admin deleted auction. Seller is offline. Item dropped."));
+                    } else {
+                        player.sendSystemMessage(Component.literal("Admin deleted auction. Seller is offline. Item given to you."));
+                    }
+                }
+            }
+            
+            // Remove auction from storage
+            AuctionDataManager.removeAuction(level, auctionId);
+            
+            FreeMarket.LOGGER.info("Player {} {} auction {}", 
+                player.getName().getString(), 
+                isAdminMode && !isOwnAuction ? "admin-deleted" : "cancelled", 
+                auctionId);
+            
+            return true;
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to cancel auction: {}", e.getMessage(), e);
+            player.sendSystemMessage(Component.literal("Failed to cancel auction!"));
+            return false;
+        }
+    }
+    
+    /**
      * Syncs auction data to all players.
      * Data is loaded from NBT storage only when syncing (render operations).
      */
@@ -258,8 +360,15 @@ public class ServerAuctionHandler {
                         ServerWalletHandler.addMoney(seller, auction.getCurrentBid());
                         seller.sendSystemMessage(Component.literal("Your auction sold for $" + auction.getCurrentBid() + "!"));
                     } else {
-                        // Seller offline - TODO: store money for later (pending rewards system)
-                        FreeMarket.LOGGER.info("Seller {} is offline, money will be credited on login", auction.getSellerName());
+                        // Seller offline - store money for when they log in
+                        PendingReward reward = new PendingReward(
+                            auction.getSellerUuid(),
+                            auction.getSellerName(),
+                            auction.getCurrentBid(),
+                            "Auction sold: " + auction.getItemId()
+                        );
+                        PendingRewardsManager.addPendingReward(level, reward);
+                        FreeMarket.LOGGER.info("Seller {} is offline, stored ${} reward for login", auction.getSellerName(), auction.getCurrentBid());
                     }
                     
                     // Give item to winner
@@ -270,11 +379,26 @@ public class ServerAuctionHandler {
                             winner.sendSystemMessage(Component.literal("You won an auction! Item added to your inventory."));
                         } else {
                             winner.sendSystemMessage(Component.literal("You won an auction, but your inventory is full!"));
-                            // TODO: Store item for later (pending rewards system)
+                            // Store item for later - player was online but inventory was full
+                            PendingReward reward = new PendingReward(
+                                auction.getBidderUuid(),
+                                auction.getBidderName(),
+                                itemStack,
+                                "Won auction: " + auction.getItemId()
+                            );
+                            PendingRewardsManager.addPendingReward(level, reward);
+                            FreeMarket.LOGGER.info("Winner {} inventory full, stored item for later", auction.getBidderName());
                         }
                     } else {
-                        // Winner offline - TODO: store item for later (pending rewards system)
-                        FreeMarket.LOGGER.info("Winner {} is offline, item will be given on login", auction.getBidderName());
+                        // Winner offline - store item for when they log in
+                        PendingReward reward = new PendingReward(
+                            auction.getBidderUuid(),
+                            auction.getBidderName(),
+                            itemStack,
+                            "Won auction: " + auction.getItemId()
+                        );
+                        PendingRewardsManager.addPendingReward(level, reward);
+                        FreeMarket.LOGGER.info("Winner {} is offline, stored item for login", auction.getBidderName());
                     }
                     
                     FreeMarket.LOGGER.info("Auction {} completed: {} sold to {} for ${}", 
@@ -293,11 +417,26 @@ public class ServerAuctionHandler {
                             seller.sendSystemMessage(Component.literal("Your auction expired with no bids. Item returned to your inventory."));
                         } else {
                             seller.sendSystemMessage(Component.literal("Your auction expired with no bids, but your inventory is full!"));
-                            // TODO: Store item for later (pending rewards system)
+                            // Store item for later - player was online but inventory was full
+                            PendingReward reward = new PendingReward(
+                                auction.getSellerUuid(),
+                                auction.getSellerName(),
+                                itemStack,
+                                "Auction expired (no bids): " + auction.getItemId()
+                            );
+                            PendingRewardsManager.addPendingReward(level, reward);
+                            FreeMarket.LOGGER.info("Seller {} inventory full, stored item for later", auction.getSellerName());
                         }
                     } else {
-                        // Seller offline - TODO: store item for later (pending rewards system)
-                        FreeMarket.LOGGER.info("Seller {} is offline, item will be returned on login", auction.getSellerName());
+                        // Seller offline - store item for when they log in
+                        PendingReward reward = new PendingReward(
+                            auction.getSellerUuid(),
+                            auction.getSellerName(),
+                            itemStack,
+                            "Auction expired (no bids): " + auction.getItemId()
+                        );
+                        PendingRewardsManager.addPendingReward(level, reward);
+                        FreeMarket.LOGGER.info("Seller {} is offline, stored item for login", auction.getSellerName());
                     }
                     
                     FreeMarket.LOGGER.info("Auction {} expired with no bids", auction.getAuctionId());

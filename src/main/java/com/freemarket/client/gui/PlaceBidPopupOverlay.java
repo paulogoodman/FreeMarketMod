@@ -251,6 +251,11 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         
         if (mouseX >= placeBidButtonX && mouseX <= placeBidButtonX + placeBidButtonWidth &&
             mouseY >= buttonY && mouseY <= buttonY + placeBidButtonHeight) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             placeBid();
             return true;
         }
@@ -262,6 +267,11 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         
         if (mouseX >= cancelButtonX && mouseX <= cancelButtonX + cancelButtonWidth &&
             mouseY >= buttonY && mouseY <= buttonY + cancelButtonHeight) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             hide();
             return true;
         }

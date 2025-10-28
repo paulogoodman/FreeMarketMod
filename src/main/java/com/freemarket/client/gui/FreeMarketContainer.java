@@ -117,8 +117,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         
         // Draw subtle border with rounded corners effect (semi-transparent)
         guiGraphics.fill(x, y, x + width, y + 2, 0x80404040); // 50% opacity
-        guiGraphics.fill(x, y, x + 2, y + height, 0x80404040); // 50% opacity
-        guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040); // 50% opacity
+        guiGraphics.fill(x, y + 2, x + 2, y + height - 2, 0x80404040); // 50% opacity
+        guiGraphics.fill(x + width - 2, y + 2, x + width, y + height - 2, 0x80404040); // 50% opacity
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040); // 50% opacity
         
         // Render search box

@@ -18,13 +18,13 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 
 import com.freemarket.server.data.FreeMarketDataManager;
 import com.freemarket.server.data.LeaderboardDataManager;
-import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.server.commands.FreeMarketCommands;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
 import com.freemarket.common.network.NetworkRegistry;
 import com.freemarket.server.events.ServerEventHandler;
 import com.freemarket.server.events.ServerMarketplaceEventHandler;
 import com.freemarket.server.events.LeaderboardEventHandler;
+import com.freemarket.server.events.PendingRewardsHandler;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(FreeMarket.MODID)
@@ -58,6 +58,9 @@ public class FreeMarket {
         
         // Register leaderboard event handler for player login/logout
         NeoForge.EVENT_BUS.register(LeaderboardEventHandler.class);
+        
+        // Register pending rewards handler for offline player rewards
+        NeoForge.EVENT_BUS.register(PendingRewardsHandler.class);
 
         // Register our mod's ModConfigSpec so that FML can create and load the config file for us
         modContainer.registerConfig(ModConfig.Type.COMMON, Config.SPEC);

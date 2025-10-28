@@ -11,6 +11,7 @@ public class CardButtonConfig {
     public final boolean showBuy;
     public final boolean showSell;
     public final boolean showBid;
+    public final boolean showCancelAuction;
     
     // Prices
     public final long buyPrice;
@@ -33,6 +34,7 @@ public class CardButtonConfig {
     public final boolean isExpired;
     
     private CardButtonConfig(CardType type, boolean showBuy, boolean showSell, boolean showBid,
+                            boolean showCancelAuction,
                             long buyPrice, long sellPrice, long bidPrice,
                             boolean canBuy, boolean canSell, boolean canBid,
                             boolean isBuyCooldown, boolean isSellCooldown, boolean isBidCooldown,
@@ -41,6 +43,7 @@ public class CardButtonConfig {
         this.showBuy = showBuy;
         this.showSell = showSell;
         this.showBid = showBid;
+        this.showCancelAuction = showCancelAuction;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
         this.bidPrice = bidPrice;
@@ -63,7 +66,7 @@ public class CardButtonConfig {
                                                   boolean isBuyCooldown, boolean isSellCooldown) {
         return new CardButtonConfig(
             CardType.MARKETPLACE,
-            true, true, false,  // show buy, show sell, don't show bid
+            true, true, false, false,  // show buy, show sell, don't show bid, don't show cancel
             buyPrice, sellPrice, 0,
             canBuy, canSell, false,
             isBuyCooldown, isSellCooldown, false,
@@ -76,9 +79,17 @@ public class CardButtonConfig {
      */
     public static CardButtonConfig forAuction(long currentBid, boolean canBid, boolean isBidCooldown,
                                              boolean isOwnAuction, boolean isHighestBidder, boolean isExpired) {
+        // Check if auction debug mode is enabled
+        boolean auctionDebugMode = com.freemarket.common.handlers.AuctionDebugModeHandler.isAuctionDebugMode();
+        
+        // In debug mode, show bid button even for own auctions
+        // Otherwise, show cancel button for own auctions, bid button for others
+        boolean showBid = auctionDebugMode || !isOwnAuction;
+        boolean showCancel = !auctionDebugMode && isOwnAuction;
+        
         return new CardButtonConfig(
             CardType.AUCTION,
-            false, false, true,  // don't show buy/sell, show bid
+            false, false, showBid, showCancel,  // don't show buy/sell, show bid OR cancel
             0, 0, currentBid,
             false, false, canBid,
             false, false, isBidCooldown,
@@ -94,6 +105,7 @@ public class CardButtonConfig {
         if (showBuy && buyPrice > 0) count++;
         if (showSell && sellPrice > 0) count++;
         if (showBid) count++;
+        if (showCancelAuction) count++;
         return count;
     }
 }

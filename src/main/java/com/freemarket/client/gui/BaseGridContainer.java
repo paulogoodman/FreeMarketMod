@@ -329,6 +329,11 @@ public abstract class BaseGridContainer<T> implements Renderable {
                 int currentCategoryY = categoryY + i * categoryHeight;
                 
                 if (mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight) {
+                    // Play click sound
+                    net.minecraft.client.Minecraft minecraft = net.minecraft.client.Minecraft.getInstance();
+                    if (minecraft.player != null) {
+                        minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                    }
                     selectedCategory = categories.get(i);
                     scrollOffset = 0; // Reset scroll when changing category
                     return true;

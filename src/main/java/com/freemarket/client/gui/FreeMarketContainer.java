@@ -126,6 +126,11 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
         
+        // Draw Add Item button (top-right) - only visible in admin mode
+        if (com.freemarket.common.handlers.AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            renderAddItemButton(guiGraphics, mouseX, mouseY);
+        }
+        
         // Draw category sidebar
         renderCategorySidebar(guiGraphics, mouseX, mouseY);
         
@@ -138,11 +143,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         // Draw scroll bar
         drawScrollBar(guiGraphics);
         
-        // Draw item count (exclude add item from count)
+        // Draw item count
         int actualItemCount = itemsToRender.size();
-        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
-            actualItemCount--; // Subtract 1 for the add item
-        }
         Component countText = Component.translatable("gui.FreeMarket.marketplace.count", actualItemCount, allItems.size());
         guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + GuiScalingHelper.responsiveWidth(10, 8, 15), y + height - GuiScalingHelper.responsiveHeight(15, 12, 20), 0xCCCCCC);
     }
@@ -197,6 +199,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
         
+        // Track tooltip to render last (after all cards)
+        ItemStack tooltipStack = null;
+        
         for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
             for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
                 // Use the new ItemCardRenderer for proper GUI scaling
@@ -205,33 +210,38 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
                 
-                // Check if this is the special "add item" entry
-                if (isAddItemEntry(item)) {
-                    // Render special add item card with plus icon (no buy/sell buttons)
-                    renderAddItemCard(guiGraphics, itemX, itemY, calculatedItemWidth, cardHeight, mouseX, mouseY);
-                } else {
-                    // Create item stack with the marketplace quantity for display
-                    net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
-                    displayStack.setCount(item.getQuantity());
-                    
-                    // Render using unified renderer with GUI scale and cooldown states
-                    Minecraft client = Minecraft.getInstance();
-                    float guiScale = (float) client.getWindow().getGuiScale();
-                    
-                    // Create button config for marketplace
-                    CardButtonConfig config = CardButtonConfig.forMarketplace(
-                        item.getBuyPrice(), item.getSellPrice(),
-                        getCachedCanBuyState(item), getCachedCanSellState(item),
-                        isBuyButtonInCooldown(item), isSellButtonInCooldown(item)
-                    );
-                    
-                    unifiedRenderer.renderCard(guiGraphics, displayStack, config, null,
-                                              itemX, itemY, calculatedItemWidth, cardHeight, 
-                                              mouseX, mouseY, guiScale, 
-                                              parentScreen != null && parentScreen.isAnyPopupVisible());
+                // Create item stack with the marketplace quantity for display
+                net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
+                displayStack.setCount(item.getQuantity());
+                
+                // Render using unified renderer with GUI scale and cooldown states
+                Minecraft client = Minecraft.getInstance();
+                float guiScale = (float) client.getWindow().getGuiScale();
+                
+                // Create button config for marketplace
+                CardButtonConfig config = CardButtonConfig.forMarketplace(
+                    item.getBuyPrice(), item.getSellPrice(),
+                    getCachedCanBuyState(item), getCachedCanSellState(item),
+                    isBuyButtonInCooldown(item), isSellButtonInCooldown(item)
+                );
+                
+                ItemStack cardTooltip = unifiedRenderer.renderCard(guiGraphics, displayStack, config, null,
+                                          itemX, itemY, calculatedItemWidth, cardHeight, 
+                                          mouseX, mouseY, guiScale, 
+                                          parentScreen != null && parentScreen.isAnyPopupVisible());
+                
+                // Collect tooltip for deferred rendering
+                if (cardTooltip != null) {
+                    tooltipStack = cardTooltip;
                 }
+                
                 itemsRendered++;
             }
+        }
+        
+        // Render tooltip AFTER all cards (so it appears on top)
+        if (tooltipStack != null) {
+            UnifiedItemCardRenderer.renderItemTooltip(guiGraphics, tooltipStack, mouseX, mouseY);
         }
     }
     
@@ -254,22 +264,6 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 int cardWidth = calculatedItemWidth;
                 int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
-                
-                // Check if this is the add item entry
-                if (isAddItemEntry(currentItem)) {
-                    // Handle click on add item card (use same dimensions as rendering)
-                    if (mouseX >= itemX && mouseX <= itemX + cardWidth &&
-                        mouseY >= itemY && mouseY <= itemY + cardHeight) {
-                        // Open add item popup
-                        if (parentScreen != null) {
-                            net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
-                        }
-                        return true;
-                    }
-                    // Skip buy/sell button checks for add item entry - continue to next item
-                    itemsRendered++;
-                    continue;
-                }
                 
                 // Regular item card - check delete button and buy/sell buttons
                 {
@@ -333,8 +327,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                     FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, currentItem.getGuid());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
-                    // Update button states after buy operation
-                    updateButtonStates();
+                    // Don't update button states here - wait for server response
+                    // Button states will be updated when server responds
                     
                     return true; // Consume the click
                 } else if (buttonClicked == ButtonType.SELL) {
@@ -356,8 +350,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                     FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, currentItem.getGuid());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
-                    // Update button states after sell operation
-                    updateButtonStates();
+                    // Don't update button states here - wait for server response
+                    // Button states will be updated when server responds
                     
                     return true; // Consume the click
                 }
@@ -367,23 +361,6 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         }
         
         return false;
-    }
-    
-    /**
-     * Creates a special marketplace item entry for adding new items.
-     * This item has a special GUID that identifies it as the add button.
-     */
-    private FreeMarketItem createAddItemEntry() {
-        // Create a dummy item stack (we won't actually use it for rendering)
-        net.minecraft.world.item.ItemStack dummyStack = net.minecraft.world.item.Items.AIR.getDefaultInstance();
-        return new FreeMarketItem(dummyStack, 0, 0, 0, "admin", "ADD_ITEM_SPECIAL");
-    }
-    
-    /**
-     * Checks if a marketplace item is the special "add item" entry.
-     */
-    private boolean isAddItemEntry(FreeMarketItem item) {
-        return "ADD_ITEM_SPECIAL".equals(item.getGuid());
     }
     
     private List<FreeMarketItem> getItemsToRender() {
@@ -408,12 +385,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             }
             
-            // Add special "add item" entry if in admin mode and not searching
-            if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
-                // Create a special marketplace item for adding new items
-                FreeMarketItem addItem = createAddItemEntry();
-                categoryFiltered.add(addItem);
-            }
+            // No longer adding add item entry to the list - it's now a button in the top-right
             
             cachedFilteredData = categoryFiltered;
             lastFilteredCategory = selectedCategory;
@@ -427,45 +399,34 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     
     
     /**
-     * Renders the special "add item" card that looks like a marketplace item but with a big plus icon.
+     * Renders the Add Item button in the top-right of the container.
      */
-    private void renderAddItemCard(GuiGraphics guiGraphics, int itemX, int itemY, int cardWidth, int cardHeight, int mouseX, int mouseY) {
-        // Modern card background with gradient effect
-        int backgroundColor = 0x801A1A1A; // 50% opacity
-        int borderColor = 0x80404040; // 50% opacity
+    private void renderAddItemButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int buttonWidth = 120;
+        int buttonHeight = 20;
+        int buttonX = x + width - buttonWidth - 10;
+        int buttonY = y + 10;
         
-        // Draw card background
-        guiGraphics.fill(itemX, itemY, itemX + cardWidth, itemY + cardHeight, backgroundColor);
+        boolean isHovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                           mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
         
-        // Draw card border
-        guiGraphics.fill(itemX, itemY, itemX + cardWidth, itemY + 2, borderColor); // Top
-        guiGraphics.fill(itemX, itemY, itemX + 2, itemY + cardHeight, borderColor); // Left
-        guiGraphics.fill(itemX + cardWidth - 2, itemY, itemX + cardWidth, itemY + cardHeight, borderColor); // Right
-        guiGraphics.fill(itemX, itemY + cardHeight - 2, itemX + cardWidth, itemY + cardHeight, borderColor); // Bottom
+        // Button background
+        int bgColor = isHovered ? 0xCC4CAF50 : 0x994CAF50; // Green
+        guiGraphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + buttonHeight, bgColor);
         
-        // Check if mouse is hovering over the add item card
-        boolean isHovered = mouseX >= itemX && mouseX <= itemX + cardWidth &&
-                           mouseY >= itemY && mouseY <= itemY + cardHeight;
+        // Button border
+        guiGraphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + 1, 0xFF404040);
+        guiGraphics.fill(buttonX, buttonY + 1, buttonX + 1, buttonY + buttonHeight - 1, 0xFF404040);
+        guiGraphics.fill(buttonX + buttonWidth - 1, buttonY + 1, buttonX + buttonWidth, buttonY + buttonHeight - 1, 0xFF404040);
+        guiGraphics.fill(buttonX, buttonY + buttonHeight - 1, buttonX + buttonWidth, buttonY + buttonHeight, 0xFF404040);
         
-        // Draw a big plus icon in the upper-center of the card
-        int centerX = itemX + cardWidth / 2; // Center horizontally
-        int centerY = itemY + cardHeight / 3; // Upper third of card (raised from center)
-        int plusSize = Math.min(cardWidth, cardHeight) / 3; // Scale with card size
-        int plusThickness = Math.max(2, plusSize / 10); // Thickness scales with size
-        int plusColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A; // Green color, brighter on hover
-        
-        // Draw + lines (horizontal and vertical)
-        guiGraphics.fill(centerX - plusSize/2, centerY - plusThickness, centerX + plusSize/2, centerY + plusThickness, plusColor);
-        guiGraphics.fill(centerX - plusThickness, centerY - plusSize/2, centerX + plusThickness, centerY + plusSize/2, plusColor);
-        
-        // Draw "Add Item" text below the plus
-        String addText = "Add Item";
-        int textWidth = net.minecraft.client.Minecraft.getInstance().font.width(addText);
-        int textX = itemX + (cardWidth - textWidth) / 2; // Center the text
-        int textY = centerY + plusSize/2 + 10; // Below the plus
-        int textColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A;
-        
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, addText, textX, textY, textColor);
+        // Button text
+        Minecraft minecraft = Minecraft.getInstance();
+        String buttonText = "+ Add Item";
+        int textWidth = minecraft.font.width(buttonText);
+        int textX = buttonX + (buttonWidth - textWidth) / 2;
+        int textY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
+        guiGraphics.drawString(minecraft.font, buttonText, textX, textY, 0xFFFFFFFF);
     }
     
     
@@ -505,7 +466,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         return getMaxScroll();
     }
     
-    private int getMaxScroll() {
+    protected int getMaxScroll() {
         List<FreeMarketItem> itemsToRender = getItemsToRender();
         return Math.max(0, (itemsToRender.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
     }
@@ -522,6 +483,28 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         // Block remaining clicks if popup is visible
         if (popupVisible) {
             return false; // Don't consume - let popup handle it
+        }
+        
+        // Handle Add Item button clicks (top-right) - only in admin mode
+        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            int buttonWidth = 120;
+            int buttonHeight = 20;
+            int buttonX = x + width - buttonWidth - 10;
+            int buttonY = y + 10;
+            
+            if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+                // Play click sound
+                var player = Minecraft.getInstance().player;
+                if (player != null) {
+                    player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                // Open add item popup
+                if (parentScreen != null) {
+                    net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
+                }
+                return true;
+            }
         }
         
         // Handle category sidebar clicks

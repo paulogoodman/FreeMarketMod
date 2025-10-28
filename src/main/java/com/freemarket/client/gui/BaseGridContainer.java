@@ -442,4 +442,40 @@ public abstract class BaseGridContainer<T> implements Renderable {
      * Handles clicks on data items.
      */
     protected abstract boolean handleDataClick(T item, double mouseX, double mouseY, int button);
+    
+    /**
+     * Draws the scroll bar visualization.
+     * Identical to FreeMarketContainer implementation.
+     */
+    protected void drawScrollBar(GuiGraphics guiGraphics, List<T> dataToRender) {
+        int totalItems = dataToRender.size();
+        int totalRows = (int) Math.ceil((double) totalItems / itemsPerRow);
+        int maxScroll = Math.max(0, totalRows - rowsOfItems);
+        
+        if (maxScroll <= 0) return; // No scrolling needed
+        
+        int scrollBarWidth = 8;
+        int scrollBarX = x + width - scrollBarWidth - 2;
+        int scrollBarY = y + 35;
+        int scrollBarHeight = height - 50;
+        
+        // Draw scroll bar background (semi-transparent)
+        guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0x80000000); // 50% opacity
+        
+        // Calculate thumb position and size (matching FreeMarketContainer formula)
+        int thumbHeight = Math.max(20, (scrollBarHeight * scrollBarHeight) / (totalItems * itemHeight / itemsPerRow + scrollBarHeight));
+        int thumbY = scrollBarY + (scrollBarHeight - thumbHeight) * scrollOffset / maxScroll;
+        
+        // Draw scroll thumb (semi-transparent)
+        guiGraphics.fill(scrollBarX + 1, thumbY, scrollBarX + scrollBarWidth - 1, thumbY + thumbHeight, 0x80808080); // 50% opacity
+    }
+    
+    /**
+     * Gets the maximum scroll offset.
+     */
+    protected int getMaxScroll() {
+        int totalItems = getFilteredData().size();
+        int totalRows = (int) Math.ceil((double) totalItems / itemsPerRow);
+        return Math.max(0, totalRows - rowsOfItems);
+    }
 }

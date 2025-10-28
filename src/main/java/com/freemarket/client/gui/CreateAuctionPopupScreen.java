@@ -514,15 +514,6 @@ public class CreateAuctionPopupScreen extends BasePopupScreen {
                 return;
             }
             
-            // Debug logging
-            FreeMarket.LOGGER.info("=== Auction Creation Validation ===");
-            FreeMarket.LOGGER.info("Selected item: {} (count: {})", selectedItem.getItem(), selectedItem.getCount());
-            FreeMarket.LOGGER.info("Current stack: {} (count: {})", currentStack.getItem(), currentStack.getCount());
-            FreeMarket.LOGGER.info("Items match: {}", currentStack.is(selectedItem.getItem()));
-            FreeMarket.LOGGER.info("Same item same components: {}", ItemStack.isSameItemSameComponents(currentStack, selectedItem));
-            FreeMarket.LOGGER.info("Selected components: {}", selectedItem.getComponents());
-            FreeMarket.LOGGER.info("Current components: {}", currentStack.getComponents());
-            
             // Check if item type and components match exactly
             // This prevents exploits like auctioning a Sharpness 5 sword but only having Sharpness 1
             if (!ItemStack.isSameItemSameComponents(currentStack, selectedItem)) {

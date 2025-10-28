@@ -39,7 +39,7 @@
   "command.FreeMarket.economy.remove.notify": "%d coins were removed from your account. New balance: %d",
   "command.FreeMarket.economy.remove.insufficient": "Cannot remove %d coins from %s. Current balance: %d",
   "command.FreeMarket.economy.set.success": "Set %s's balance from %d to %d coins",
-  "command.FreeMarket.economy.set.notify": "Your balance has been set to %d coins",
+  "command.FreeMarket.economy.set.notify": "Your balance has been set to $%d",
   "command.FreeMarket.economy.player_not_found": "Player %s not found or not online.",
   "command.FreeMarket.economy.not_player": "This command can only be executed by a player.",
   

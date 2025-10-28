@@ -235,7 +235,6 @@ public class AddItemPopupScreen extends BasePopupScreen {
         
         // Sell Price
         guiGraphics.drawString(this.font, "Sell Price ($):", popupX + 20, formStartY + 50, 0xFFAAAAAA);
-        guiGraphics.drawString(this.font, "Should be less than buy price", popupX + 180, formStartY + 50, 0xFF808080);
         sellPriceBox.setPosition(popupX + 20, formStartY + 65);
         sellPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
         

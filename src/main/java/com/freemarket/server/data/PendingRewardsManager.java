@@ -6,7 +6,6 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.saveddata.SavedData;
 import org.jetbrains.annotations.NotNull;
 
@@ -132,11 +131,11 @@ public class PendingRewardsManager {
                 rewardTag.putString("reason", reward.getReason());
                 rewardTag.putLong("timestamp", reward.getTimestamp());
                 
-                // Save item if present
+                // Save item data if present
                 if (reward.hasItem()) {
-                    CompoundTag itemTag = new CompoundTag();
-                    reward.getItemStack().save(registries, itemTag);
-                    rewardTag.put("item", itemTag);
+                    rewardTag.putString("itemId", reward.getItemId());
+                    rewardTag.putString("componentData", reward.getComponentData() != null ? reward.getComponentData() : "");
+                    rewardTag.putInt("itemCount", reward.getItemCount());
                 }
                 
                 rewardsList.add(rewardTag);
@@ -166,12 +165,15 @@ public class PendingRewardsManager {
                     
                     PendingReward reward;
                     
-                    // Load item if present
-                    if (rewardTag.contains("item", Tag.TAG_COMPOUND)) {
-                        ItemStack itemStack = ItemStack.parseOptional(registries, rewardTag.getCompound("item"));
-                        reward = new PendingReward(uuid, playerName, moneyAmount, itemStack, reason, timestamp);
+                    // Load item data if present
+                    if (rewardTag.contains("itemId")) {
+                        String itemId = rewardTag.getString("itemId");
+                        String componentData = rewardTag.getString("componentData");
+                        int itemCount = rewardTag.getInt("itemCount");
+                        reward = new PendingReward(uuid, playerName, moneyAmount, itemId, componentData, itemCount, reason, timestamp);
                     } else {
-                        reward = new PendingReward(uuid, playerName, moneyAmount, null, reason, timestamp);
+                        // Fallback: old format with ItemStack (for backwards compatibility)
+                        reward = new PendingReward(uuid, playerName, moneyAmount, reason);
                     }
                     
                     data.rewards.add(reward);

@@ -8,13 +8,10 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.freemarket.server.handlers.ServerWalletHandler;
-import com.freemarket.server.handlers.ServerAuctionHandler;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.server.events.PendingRewardsHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
-import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.data.PlayerAuction;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.network.chat.Component;
@@ -95,9 +92,7 @@ public class FreeMarketCommands {
             .then(buildMailCommand())
             .then(buildAdminModeCommand())
             .then(buildItemDataCommand())
-            .then(buildListCommand())
-            .then(buildDebugAuctionCommand())
-            .then(buildAuctionDebugModeCommand()));
+            .then(buildListCommand()));
     }
     
     /**
@@ -177,30 +172,6 @@ public class FreeMarketCommands {
         return Commands.literal("itemdata")
             .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
             .executes(FreeMarketCommands::getHeldItemData);
-    }
-    
-    /**
-     * Builds debug auction command for testing bidding functionality.
-     * 
-     * @return Command builder for debug auction command
-     */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildDebugAuctionCommand() {
-        return Commands.literal("debugauction")
-            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-            .executes(FreeMarketCommands::listAuctionsAsNonSeller);
-    }
-    
-    /**
-     * Builds auction debug mode command for enabling/disabling bidding on own auctions.
-     * 
-     * @return Command builder for auction debug mode command
-     */
-    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildAuctionDebugModeCommand() {
-        return Commands.literal("auctiondebug")
-            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
-            .then(Commands.argument(ARG_ENABLED, BoolArgumentType.bool())
-                .executes(FreeMarketCommands::setAuctionDebugMode))
-            .executes(FreeMarketCommands::toggleAuctionDebugMode);
     }
     
     /**
@@ -763,8 +734,6 @@ public class FreeMarketCommands {
             source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket list hand <buyPrice> <sellPrice>§r - Add the item in your hand to marketplace (at least one price must be > 0)"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket list item <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace (at least one price must be > 0)"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket debugauction§r - List all auctions as if you weren't the seller (debug)"), false);
-            source.sendSuccess(() -> Component.literal("§7/freemarket auctiondebug [true/false]§r - Enable/disable bidding on own auctions (debug)"), false);
         }
         
         source.sendSuccess(() -> Component.literal("§6Use §e/fm§6 as a shortcut for §e/freemarket§r"), false);
@@ -867,83 +836,6 @@ public class FreeMarketCommands {
         return 1;
     }
     
-    /**
-     * Debug command to list all auctions as if the player wasn't the seller.
-     * This allows testing the bidding functionality on your own auctions.
-     * 
-     * <p>Usage: /freemarket debugauction</p>
-     * <p>Permission: OP Level 2 (admin only)</p>
-     * 
-     * @param context The command context containing the source
-     * @return 1 if successful, 0 if error occurs
-     * @throws CommandSyntaxException if command syntax is invalid
-     */
-    private static int listAuctionsAsNonSeller(CommandContext<CommandSourceStack> context) throws CommandSyntaxException {
-        CommandSourceStack source = context.getSource();
-        
-        if (!(source.getEntity() instanceof ServerPlayer player)) {
-            source.sendFailure(Component.literal("This command can only be used by players"));
-            return 0;
-        }
-        
-        try {
-            ServerLevel level = player.serverLevel();
-            List<PlayerAuction> auctions = AuctionDataManager.loadAuctions(level);
-            
-            if (auctions.isEmpty()) {
-                source.sendSuccess(() -> Component.literal("§eNo auctions found in this world"), false);
-                return 1;
-            }
-            
-            source.sendSuccess(() -> Component.literal("§6=== DEBUG: All Auctions (as non-seller) ==="), false);
-            
-            int[] count = {0};
-            for (PlayerAuction auction : auctions) {
-                if (auction.isExpired()) continue;
-                
-                count[0]++;
-                long timeRemaining = auction.getTimeRemaining();
-                long hours = timeRemaining / (1000 * 60 * 60);
-                long minutes = (timeRemaining % (1000 * 60 * 60)) / (1000 * 60);
-                
-                String timeStr = hours > 0 ? String.format("%dh %dm", hours, minutes) : String.format("%dm", minutes);
-                
-                source.sendSuccess(() -> Component.literal(String.format(
-                    "§7%d. §f%s §7x%d §8| §a$%d §8| §e%s §8| §b%s §8| §6%s left",
-                    count[0],
-                    auction.getItemId(),
-                    auction.getQuantity(),
-                    auction.getCurrentBid(),
-                    auction.getSellerName(),
-                    auction.getBidderName() != null ? auction.getBidderName() : "No bids",
-                    timeStr
-                )), false);
-            }
-            
-            if (count[0] == 0) {
-                source.sendSuccess(() -> Component.literal("§eNo active auctions found"), false);
-            } else {
-                source.sendSuccess(() -> Component.literal(String.format("§6Found %d active auction(s)", count[0])), false);
-            }
-            
-            return 1;
-            
-        } catch (Exception e) {
-            source.sendFailure(Component.literal("Error loading auctions: " + e.getMessage()));
-            FreeMarket.LOGGER.error("Error in debug auction command: {}", e.getMessage(), e);
-            return 0;
-        }
-    }
-    
-    /**
-     * Sets auction debug mode with a boolean argument.
-     * 
-     * <p>Usage: /freemarket auctiondebug <true/false></p>
-     * <p>Permission: OP Level 2 (admin only)</p>
-     * 
-     * @param context The command context containing the source and arguments
-     * @return 1 if successful
-     */
     private static int claimMail(CommandContext<CommandSourceStack> context) {
         if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
             context.getSource().sendFailure(Component.literal("§cThis command can only be used by players!"));
@@ -951,54 +843,5 @@ public class FreeMarketCommands {
         }
         
         return PendingRewardsHandler.claimMail(player) ? 1 : 0;
-    }
-    
-    private static int setAuctionDebugMode(CommandContext<CommandSourceStack> context) {
-        boolean enabled = BoolArgumentType.getBool(context, "enabled");
-        CommandSourceStack source = context.getSource();
-        
-        // Get the server instance for syncing
-        net.minecraft.server.MinecraftServer server = source.getServer();
-        
-        if (enabled) {
-            ServerAuctionHandler.enableDebugMode();
-            com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(true, server);
-            context.getSource().sendSuccess(() -> Component.literal("§aAuction debug mode enabled - you can now bid on your own auctions!"), true);
-        } else {
-            ServerAuctionHandler.disableDebugMode();
-            com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(false, server);
-            context.getSource().sendSuccess(() -> Component.literal("§cAuction debug mode disabled"), true);
-        }
-        
-        return 1;
-    }
-    
-    /**
-     * Toggles auction debug mode when no argument is provided.
-     * 
-     * <p>Usage: /freemarket auctiondebug</p>
-     * <p>Permission: OP Level 2 (admin only)</p>
-     * 
-     * @param context The command context containing the source
-     * @return 1 if successful
-     */
-    private static int toggleAuctionDebugMode(CommandContext<CommandSourceStack> context) {
-        boolean currentState = ServerAuctionHandler.isDebugModeEnabled();
-        CommandSourceStack source = context.getSource();
-        
-        // Get the server instance for syncing
-        net.minecraft.server.MinecraftServer server = source.getServer();
-        
-        if (currentState) {
-            ServerAuctionHandler.disableDebugMode();
-            com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(false, server);
-            context.getSource().sendSuccess(() -> Component.literal("§cAuction debug mode disabled"), true);
-        } else {
-            ServerAuctionHandler.enableDebugMode();
-            com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(true, server);
-            context.getSource().sendSuccess(() -> Component.literal("§aAuction debug mode enabled - you can now bid on your own auctions!"), true);
-        }
-        
-        return 1;
     }
 }

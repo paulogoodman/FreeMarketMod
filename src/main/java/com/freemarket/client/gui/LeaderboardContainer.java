@@ -81,6 +81,33 @@ public class LeaderboardContainer implements Renderable {
         scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + delta));
     }
     
+    /**
+     * Scrolls to a specific position in the leaderboard.
+     * @param position the scroll position to jump to
+     */
+    public void scrollToPosition(int position) {
+        List<PlayerBalanceData> leaderboard = ClientLeaderboardCache.getTopPlayers(TOP_PLAYERS_LIMIT);
+        int maxScroll = Math.max(0, leaderboard.size() - maxVisibleRows);
+        scrollOffset = Math.max(0, Math.min(maxScroll, position));
+    }
+    
+    /**
+     * Gets the current scroll position.
+     * @return the current scroll position
+     */
+    public int getScrollPosition() {
+        return scrollOffset;
+    }
+    
+    /**
+     * Gets the maximum scroll position.
+     * @return the maximum scroll position
+     */
+    public int getMaxScrollPosition() {
+        List<PlayerBalanceData> leaderboard = ClientLeaderboardCache.getTopPlayers(TOP_PLAYERS_LIMIT);
+        return Math.max(0, leaderboard.size() - maxVisibleRows);
+    }
+    
     @Override
     public void render(@Nonnull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Note: Auto-refresh moved to event-based system to avoid per-frame network calls
@@ -168,8 +195,7 @@ public class LeaderboardContainer implements Renderable {
         
         // Draw player count
         Component countText = Component.literal("Showing " + Math.min(maxVisibleRows, leaderboard.size()) + " of " + leaderboard.size() + " players");
-        int countWidth = Minecraft.getInstance().font.width(countText);
-        int countX = x + width - countWidth - 10;
+        int countX = x + 10;
         int countY = y + height - 20;
         guiGraphics.drawString(Minecraft.getInstance().font, countText, countX, countY, 0xFF999999);
     }
@@ -178,20 +204,23 @@ public class LeaderboardContainer implements Renderable {
      * Draws the scroll bar.
      */
     private void drawScrollBar(GuiGraphics guiGraphics, int totalPlayers) {
-        int scrollBarX = x + width - 10;
+        int maxScroll = Math.max(1, totalPlayers - maxVisibleRows);
+        if (maxScroll <= 0) return; // No scrolling needed
+        
+        int scrollBarWidth = 8; // Match FreeMarketContainer scroll bar width
+        int scrollBarX = x + width - scrollBarWidth - 2; // Match FreeMarketContainer positioning
         int scrollBarY = y + 50;
         int scrollBarHeight = height - 80;
         
-        // Draw scroll bar background
-        guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + 6, scrollBarY + scrollBarHeight, 0x80000000);
+        // Draw scroll bar background (semi-transparent)
+        guiGraphics.fill(scrollBarX, scrollBarY, scrollBarX + scrollBarWidth, scrollBarY + scrollBarHeight, 0x80000000);
         
         // Calculate scroll bar thumb position and size
-        int maxScroll = Math.max(1, totalPlayers - maxVisibleRows);
         int thumbHeight = Math.max(20, (maxVisibleRows * scrollBarHeight) / totalPlayers);
-        int thumbY = scrollBarY + (scrollOffset * (scrollBarHeight - thumbHeight)) / maxScroll;
+        int thumbY = scrollBarY + (scrollBarHeight - thumbHeight) * scrollOffset / maxScroll;
         
-        // Draw scroll bar thumb
-        guiGraphics.fill(scrollBarX, thumbY, scrollBarX + 6, thumbY + thumbHeight, 0xCC808080);
+        // Draw scroll bar thumb (semi-transparent)
+        guiGraphics.fill(scrollBarX + 1, thumbY, scrollBarX + scrollBarWidth - 1, thumbY + thumbHeight, 0x80808080);
     }
     
     /**
@@ -256,7 +285,27 @@ public class LeaderboardContainer implements Renderable {
             return false; // Don't consume - let popup handle it
         }
         
-        // No clickable elements in leaderboard
+        // Handle scroll bar clicks
+        List<PlayerBalanceData> leaderboard = ClientLeaderboardCache.getTopPlayers(TOP_PLAYERS_LIMIT);
+        if (leaderboard.size() > maxVisibleRows) {
+            int scrollBarWidth = 8; // Match FreeMarketContainer scroll bar width
+            int scrollBarX = x + width - scrollBarWidth - 2; // Match FreeMarketContainer positioning
+            int scrollBarY = y + 50;
+            int scrollBarHeight = height - 80;
+            
+            if (mouseX >= scrollBarX && mouseX <= scrollBarX + scrollBarWidth &&
+                mouseY >= scrollBarY && mouseY <= scrollBarY + scrollBarHeight) {
+                
+                // Calculate new scroll position based on click
+                int maxScroll = Math.max(1, leaderboard.size() - maxVisibleRows);
+                double relativeY = (mouseY - scrollBarY) / scrollBarHeight;
+                int newScroll = (int) (relativeY * maxScroll);
+                scrollToPosition(newScroll);
+                return true;
+            }
+        }
+        
+        // No other clickable elements in leaderboard
         return false;
     }
     

@@ -94,8 +94,9 @@ public class UnifiedItemCardRenderer {
      * Main render method for unified card rendering.
      * @param infoText Optional info text to display (e.g., auction details). Pass null for marketplace.
      * @param popupVisible Whether any popup is currently visible (prevents tooltip rendering)
+     * @return The ItemStack if tooltip should be shown, null otherwise (to be rendered after all cards)
      */
-    public void renderCard(GuiGraphics guiGraphics, ItemStack itemStack, CardButtonConfig config,
+    public ItemStack renderCard(GuiGraphics guiGraphics, ItemStack itemStack, CardButtonConfig config,
                           String infoText, int x, int y, int cardWidth, int cardHeight,
                           int mouseX, int mouseY, float guiScale, boolean popupVisible) {
         // Render card background
@@ -109,9 +110,10 @@ public class UnifiedItemCardRenderer {
         // Render item icon
         renderItemIcon(guiGraphics, itemStack, x, y, cardWidth, cardHeight, guiScale);
         
-        // Render tooltip on hover (only if no popup is visible)
+        // Check if tooltip should be shown (but don't render it yet - return for deferred rendering)
+        ItemStack tooltipStack = null;
         if (!popupVisible && isMouseOverIcon(x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale)) {
-            renderItemTooltip(guiGraphics, itemStack, mouseX, mouseY);
+            tooltipStack = itemStack;
         }
         
         // Render info text if provided (auction cards)
@@ -121,17 +123,27 @@ public class UnifiedItemCardRenderer {
         
         // Render buttons based on config
         renderButtons(guiGraphics, config, x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale);
+        
+        return tooltipStack;
     }
     
     private void renderCardBackground(GuiGraphics guiGraphics, int x, int y, int cardWidth, int cardHeight) {
         int backgroundColor = 0x801A1A1A;
         int borderColor = 0x80404040;
+        int borderWidth = 2;
         
+        // Fill background
         guiGraphics.fill(x, y, x + cardWidth, y + cardHeight, backgroundColor);
-        guiGraphics.fill(x, y, x + cardWidth, y + 2, borderColor);
-        guiGraphics.fill(x, y, x + 2, y + cardHeight, borderColor);
-        guiGraphics.fill(x + cardWidth - 2, y, x + cardWidth, y + cardHeight, borderColor);
-        guiGraphics.fill(x, y + cardHeight - 2, x + cardWidth, y + cardHeight, borderColor);
+        
+        // Draw borders without corner overlaps
+        // Top border: 2 rows, full width (creates top corners)
+        guiGraphics.fill(x, y, x + cardWidth, y + borderWidth, borderColor);
+        // Left border: 2 columns, skip top and bottom rows
+        guiGraphics.fill(x, y + borderWidth, x + borderWidth, y + cardHeight - borderWidth, borderColor);
+        // Right border: 2 columns, skip top and bottom rows
+        guiGraphics.fill(x + cardWidth - borderWidth, y + borderWidth, x + cardWidth, y + cardHeight - borderWidth, borderColor);
+        // Bottom border: 2 rows, full width (creates bottom corners)
+        guiGraphics.fill(x, y + cardHeight - borderWidth, x + cardWidth, y + cardHeight, borderColor);
     }
     
     private void renderDeleteButton(GuiGraphics guiGraphics, int x, int y, int cardWidth, int cardHeight, int mouseX, int mouseY) {
@@ -234,18 +246,12 @@ public class UnifiedItemCardRenderer {
                 int color = 0xFFFFD700; // Gold
                 guiGraphics.drawString(client.font, truncated, bidTextX, bidTextY, color);
             } else if (line.startsWith("🕐")) {
-                // Render time remaining in top right corner
+                // Render time remaining in top left corner
                 String timeText = truncateTextToWidth(line, cardWidth - 8);
-                int timeTextWidth = client.font.width(timeText);
                 
-                // Account for delete button if admin mode is on (delete button is cardWidth * 0.12)
-                int deleteButtonSize = (int)(cardWidth * 0.12);
-                int margin = 0;
-                boolean needsOffset = AdminModeHandler.isAdminMode();
-                int rightPadding = needsOffset ? deleteButtonSize + margin + 4 : 4;
-                
-                int timeX = x + cardWidth - timeTextWidth - rightPadding;
-                int timeY = y + 2; // 2px padding from top
+                // Position at top left with margin from border
+                int timeX = x + 4; // 4px padding from left edge
+                int timeY = y + 4; // 4px padding from top for margin
                 
                 // Determine color based on urgency
                 int color;
@@ -528,7 +534,10 @@ public class UnifiedItemCardRenderer {
                mouseY >= iconY && mouseY <= iconY + iconSize;
     }
     
-    private void renderItemTooltip(GuiGraphics guiGraphics, ItemStack itemStack, int mouseX, int mouseY) {
+    /**
+     * Renders tooltip for an item stack (should be called AFTER all cards are rendered).
+     */
+    public static void renderItemTooltip(GuiGraphics guiGraphics, ItemStack itemStack, int mouseX, int mouseY) {
         java.util.List<net.minecraft.network.chat.Component> tooltip = itemStack.getTooltipLines(
             net.minecraft.world.item.Item.TooltipContext.EMPTY,
             Minecraft.getInstance().player,

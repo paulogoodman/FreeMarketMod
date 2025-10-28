@@ -212,7 +212,7 @@ public class ServerAuctionHandler {
             }
             
             // Check if player is the seller (unless admin mode is enabled)
-            boolean isAdminMode = com.freemarket.common.handlers.AdminModeHandler.isAdminMode();
+            boolean isAdminMode = player.hasPermissions(2); // OP Level 2
             boolean isOwnAuction = auction.getSellerUuid().equals(player.getUUID().toString());
             
             if (!isOwnAuction && !isAdminMode) {
@@ -260,15 +260,32 @@ public class ServerAuctionHandler {
                     seller.sendSystemMessage(Component.literal("Auction cancelled! Item returned to your inventory."));
                 }
             } else {
-                // Seller is offline - return to admin's inventory if admin deleted
+                // Seller is offline
                 if (isAdminMode && !isOwnAuction) {
-                    boolean added = player.getInventory().add(itemStack);
-                    if (!added) {
-                        player.drop(itemStack, false);
-                        player.sendSystemMessage(Component.literal("Admin deleted auction. Seller is offline. Item dropped."));
-                    } else {
-                        player.sendSystemMessage(Component.literal("Admin deleted auction. Seller is offline. Item given to you."));
-                    }
+                    // Admin deleted auction - store item as pending reward for seller
+                    PendingReward reward = createItemReward(
+                        auction.getSellerUuid(),
+                        auction.getSellerName(),
+                        itemStack,
+                        "Auction cancelled by admin: " + auction.getItemId()
+                    );
+                    PendingRewardsManager.addPendingReward(level, reward);
+                    
+                    player.sendSystemMessage(Component.literal("Auction cancelled. Item stored for seller (offline)."));
+                    FreeMarket.LOGGER.info("Admin {} cancelled auction for offline seller {}, stored item as pending reward", 
+                        player.getName().getString(), auction.getSellerName());
+                } else {
+                    // Player cancelled their own auction but is offline - store as pending reward
+                    PendingReward reward = createItemReward(
+                        auction.getSellerUuid(),
+                        auction.getSellerName(),
+                        itemStack,
+                        "Auction cancelled: " + auction.getItemId()
+                    );
+                    PendingRewardsManager.addPendingReward(level, reward);
+                    
+                    FreeMarket.LOGGER.info("Player {} cancelled their own auction while offline, stored item as pending reward", 
+                        auction.getSellerName());
                 }
             }
             
@@ -380,7 +397,7 @@ public class ServerAuctionHandler {
                         } else {
                             winner.sendSystemMessage(Component.literal("You won an auction, but your inventory is full!"));
                             // Store item for later - player was online but inventory was full
-                            PendingReward reward = new PendingReward(
+                            PendingReward reward = createItemReward(
                                 auction.getBidderUuid(),
                                 auction.getBidderName(),
                                 itemStack,
@@ -391,7 +408,7 @@ public class ServerAuctionHandler {
                         }
                     } else {
                         // Winner offline - store item for when they log in
-                        PendingReward reward = new PendingReward(
+                        PendingReward reward = createItemReward(
                             auction.getBidderUuid(),
                             auction.getBidderName(),
                             itemStack,
@@ -418,7 +435,7 @@ public class ServerAuctionHandler {
                         } else {
                             seller.sendSystemMessage(Component.literal("Your auction expired with no bids, but your inventory is full!"));
                             // Store item for later - player was online but inventory was full
-                            PendingReward reward = new PendingReward(
+                            PendingReward reward = createItemReward(
                                 auction.getSellerUuid(),
                                 auction.getSellerName(),
                                 itemStack,
@@ -429,7 +446,7 @@ public class ServerAuctionHandler {
                         }
                     } else {
                         // Seller offline - store item for when they log in
-                        PendingReward reward = new PendingReward(
+                        PendingReward reward = createItemReward(
                             auction.getSellerUuid(),
                             auction.getSellerName(),
                             itemStack,
@@ -457,6 +474,16 @@ public class ServerAuctionHandler {
      */
     private static ItemStack createItemFromAuction(PlayerAuction auction) {
         return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity());
+    }
+    
+    /**
+     * Creates a pending reward with an item. Extracts item data to avoid registry reference issues.
+     */
+    private static PendingReward createItemReward(String uuid, String playerName, ItemStack itemStack, String reason) {
+        String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(itemStack.getItem()).toString();
+        String componentData = com.freemarket.common.attachments.ItemComponentHandler.getComponentData(itemStack);
+        int count = itemStack.getCount();
+        return new PendingReward(uuid, playerName, itemId, componentData, count, reason);
     }
     
     /**

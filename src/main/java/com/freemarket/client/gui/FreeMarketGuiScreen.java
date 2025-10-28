@@ -460,14 +460,16 @@ public class FreeMarketGuiScreen extends Screen {
         int containerX = (width - containerWidth) / 2;
         int containerY = (height - containerHeight) / 2;
         
-        // Tab button dimensions
-        int tabMargin = 4;
-        int tabWidth = (containerWidth - (tabMargin * 4)) / 3;
+        // Tab button dimensions - match container width exactly
+        ScreenType[] screens = ScreenType.values();
+        int numTabs = screens.length;
+        int tabMargin = 4; // Spacing between tabs
+        int totalTabArea = containerWidth; // Total width to use for tabs
+        int tabWidth = (totalTabArea - (tabMargin * (numTabs - 1))) / numTabs;
         int tabHeight = 24;
         int tabY = containerY - tabHeight - 4; // Position above container
         
         // Render each tab button
-        ScreenType[] screens = ScreenType.values();
         String[] tabLabels = {"Marketplace", "Auctions", "Leaderboard"};
         
         for (int i = 0; i < screens.length; i++) {
@@ -513,7 +515,7 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     void renderWalletDisplay(GuiGraphics guiGraphics) {
-        // Draw wallet display in top right of screen with background
+        // Draw wallet display in top right corner with percentage-based positioning
         long money = cachedBalance; // Use only cached balance - no polling
         String formattedMoney = "$" + formatPrice(money);
         
@@ -526,27 +528,40 @@ public class FreeMarketGuiScreen extends Screen {
         int moneyWidth = this.font.width(walletText);
         int maxTextWidth = Math.max(titleWidth, moneyWidth);
         
-        // Calculate background box dimensions first
-        int marginX = GuiScalingHelper.responsiveWidth(15, 10, 20);
-        int marginY = GuiScalingHelper.responsiveHeight(8, 6, 12);
-        int backgroundWidth = maxTextWidth + (marginX * 2);
-        int backgroundHeight = GuiScalingHelper.responsiveHeight(40, 30, 50); // Fixed height for better centering
+        // Calculate background box dimensions using percentage-based scaling
+        int paddingX = (int)(width * 0.01); // 1% of screen width for horizontal padding
+        int paddingY = (int)(height * 0.008); // 0.8% of screen height for vertical padding
         
-        // Position background box in top right
-        int backgroundX = GuiScalingHelper.percentageX(0.85f) - backgroundWidth; // 85% from left, minus width
-        int backgroundY = GuiScalingHelper.responsiveHeight(15, 10, 25);
+        // Width: text width plus horizontal padding (stretches to fit text)
+        int backgroundWidth = maxTextWidth + (paddingX * 2);
+        
+        // Height: percentage-based, but ensure it fits both text lines with padding
+        int minHeightForText = (paddingY * 2) + (this.font.lineHeight * 2) + 4; // 4px spacing between lines
+        int backgroundHeight = Math.max((int)(height * 0.035), minHeightForText); // 3.5% of screen height or min required
+        
+        // Position in top-right corner using percentage-based positioning
+        int widgetMarginX = (int)(width * 0.03); // 3% margin from edges
+        int widgetMarginY = (int)(height * 0.03); // 3% margin from edges
+        int backgroundX = width - backgroundWidth - widgetMarginX; // Right edge
+        int backgroundY = widgetMarginY; // Top edge
         
         // Draw background box with semi-transparent colors (matching container)
         guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0x801E1E1E); // 50% opacity
         guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0x802A2A2A); // 50% opacity
+        
+        // Draw border
+        guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + 2, 0x80404040);
+        guiGraphics.fill(backgroundX, backgroundY + 2, backgroundX + 2, backgroundY + backgroundHeight - 2, 0x80404040);
+        guiGraphics.fill(backgroundX + backgroundWidth - 2, backgroundY + 2, backgroundX + backgroundWidth, backgroundY + backgroundHeight - 2, 0x80404040);
+        guiGraphics.fill(backgroundX, backgroundY + backgroundHeight - 2, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0x80404040);
         
         // Calculate text positions (centered within background box)
         int titleX = backgroundX + (backgroundWidth - titleWidth) / 2;
         int moneyX = backgroundX + (backgroundWidth - moneyWidth) / 2;
         
         // Calculate vertical centering
-        int titleY = backgroundY + marginY;
-        int moneyY = backgroundY + backgroundHeight - marginY - GuiScalingHelper.responsiveHeight(8, 6, 12);
+        int titleY = backgroundY + paddingY;
+        int moneyY = backgroundY + backgroundHeight - paddingY - this.font.lineHeight;
         
         // Draw title (centered horizontally and vertically)
         guiGraphics.drawString(this.font, titleText, titleX, titleY, 0xFFFFFFFF);
@@ -703,14 +718,16 @@ public class FreeMarketGuiScreen extends Screen {
         int containerX = (width - containerWidth) / 2;
         int containerY = (height - containerHeight) / 2;
         
-        // Tab button dimensions
+        // Tab button dimensions - match container width exactly
+        ScreenType[] screens = ScreenType.values();
+        int numTabs = screens.length;
         int tabMargin = 4;
-        int tabWidth = (containerWidth - (tabMargin * 4)) / 3;
+        int totalTabArea = containerWidth; // Total width to use for tabs
+        int tabWidth = (totalTabArea - (tabMargin * (numTabs - 1))) / numTabs;
         int tabHeight = 24;
         int tabY = containerY - tabHeight - 4;
         
         // Check each tab button
-        ScreenType[] screens = ScreenType.values();
         for (int i = 0; i < screens.length; i++) {
             int tabX = containerX + (i * (tabWidth + tabMargin));
             
@@ -805,15 +822,16 @@ public class FreeMarketGuiScreen extends Screen {
         switch (currentScreen) {
             case MARKETPLACE:
                 if (freeMarketContainer != null) {
-                    // Use smoother scrolling with smaller increments
-                    int scrollAmount = (int) (-deltaY * 2); // Multiply by 2 for smoother scrolling
+                    // Scroll by single row (same as auction container)
+                    int scrollAmount = (int) -deltaY;
                     freeMarketContainer.scroll(scrollAmount);
                     return true;
                 }
                 break;
             case AUCTIONS:
                 if (auctionContainer != null) {
-                    int scrollAmount = (int) (-deltaY * 2);
+                    // Scroll by single row (same as marketplace container)
+                    int scrollAmount = (int) -deltaY;
                     auctionContainer.scroll(scrollAmount);
                     return true;
                 }

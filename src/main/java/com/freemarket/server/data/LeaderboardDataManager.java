@@ -108,7 +108,6 @@ public class LeaderboardDataManager {
                 }
             }
             
-            FreeMarket.LOGGER.info("Loaded {} player balances from leaderboard.json", players.size());
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to load leaderboard data from world: {}", level.dimension().location(), e);
         }

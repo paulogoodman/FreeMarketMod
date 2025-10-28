@@ -125,10 +125,6 @@ public class FreeMarketPacketHandler {
             ServerWalletHandler.removeMoney(player, itemToBuy.getBuyPrice());
             
             sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, true, "Purchase successful");
-            
-            FreeMarket.LOGGER.info("Player {} bought {} for {} coins", 
-                player.getName().getString(), itemToBuy.getItemStack().getDisplayName().getString(), 
-                itemToBuy.getBuyPrice());
         });
     }
     
@@ -168,10 +164,6 @@ public class FreeMarketPacketHandler {
             ServerWalletHandler.addMoney(player, itemToSell.getSellPrice());
             
             sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, true, "Sale successful");
-            
-            FreeMarket.LOGGER.info("Player {} sold {} for {} coins", 
-                player.getName().getString(), itemToSell.getItemStack().getDisplayName().getString(), 
-                itemToSell.getSellPrice());
         });
     }
     
@@ -281,8 +273,8 @@ public class FreeMarketPacketHandler {
                 long sellPrice = jsonData.get("sellPrice").getAsLong();
                 int quantity = jsonData.get("quantity").getAsInt();
                 
-                // Create ItemStack from itemId
-                ItemStack itemStack = createItemStackFromId(itemId, componentData);
+                // Create ItemStack from itemId with the correct count
+                ItemStack itemStack = createItemStackFromId(itemId, componentData, quantity);
                 
                 // Create FreeMarketItem
                 FreeMarketItem item = new FreeMarketItem(
@@ -302,9 +294,6 @@ public class FreeMarketPacketHandler {
                 
                 // Sync to all players
                 ServerMarketplaceSync.syncToAllPlayers(level, items);
-                
-                FreeMarket.LOGGER.info("Admin {} added item to marketplace: {} x{} (Buy: {}, Sell: {})", 
-                    player.getName().getString(), itemId, quantity, buyPrice, sellPrice);
                     
             } catch (Exception e) {
                 FreeMarket.LOGGER.error("Failed to add marketplace item: {}", e.getMessage(), e);
@@ -331,7 +320,6 @@ public class FreeMarketPacketHandler {
             if (removed) {
                 FreeMarketDataManager.saveFreeMarketItems(level, items);
                 ServerMarketplaceSync.syncToAllPlayers(level, items);
-                FreeMarket.LOGGER.info("Player {} removed item from marketplace", player.getName().getString());
             }
         });
     }
@@ -376,8 +364,6 @@ public class FreeMarketPacketHandler {
             
             if (response.success) {
                 player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0F, pitch);
-            } else {
-                FreeMarket.LOGGER.warn("Operation failed: {}", response.message);
             }
         }
     }
@@ -443,7 +429,6 @@ public class FreeMarketPacketHandler {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
                 screen.updateMarketplaceData(items);
-                FreeMarket.LOGGER.info("Client received marketplace sync: {} items", items.size());
             }
         });
     }
@@ -452,7 +437,6 @@ public class FreeMarketPacketHandler {
         context.enqueueWork(() -> {
             boolean adminMode = Boolean.parseBoolean(packet.data());
             AdminModeHandler.setAdminMode(adminMode);
-            FreeMarket.LOGGER.info("Admin mode: {}", adminMode ? "enabled" : "disabled");
         });
     }
     
@@ -460,7 +444,6 @@ public class FreeMarketPacketHandler {
         context.enqueueWork(() -> {
             boolean auctionDebugMode = Boolean.parseBoolean(packet.data());
             com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(auctionDebugMode);
-            FreeMarket.LOGGER.info("Auction debug mode: {}", auctionDebugMode ? "enabled" : "disabled");
         });
     }
     
@@ -471,6 +454,14 @@ public class FreeMarketPacketHandler {
      * Used for client-side reconstruction of items from DTOs.
      */
     private static ItemStack createItemStackFromId(String itemId, String componentData) {
+        return createItemStackFromId(itemId, componentData, 1);
+    }
+    
+    /**
+     * Creates an ItemStack from an item ID string with a specified count.
+     * Used for server-side marketplace item creation.
+     */
+    private static ItemStack createItemStackFromId(String itemId, String componentData, int count) {
         try {
             ResourceLocation resourceLocation = ResourceLocation.parse(itemId);
             var item = BuiltInRegistries.ITEM.get(resourceLocation);
@@ -480,7 +471,7 @@ public class FreeMarketPacketHandler {
                 return net.minecraft.world.item.Items.AIR.getDefaultInstance();
             }
             
-            ItemStack itemStack = new ItemStack(item);
+            ItemStack itemStack = new ItemStack(item, count);
             
             // Apply component data if present
             if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {

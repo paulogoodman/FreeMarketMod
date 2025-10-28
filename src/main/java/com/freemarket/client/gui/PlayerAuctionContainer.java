@@ -248,10 +248,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                     }
                     
                     // Send delete request to server via network packet (using AUCTION_CANCEL with admin privileges)
-                    com.google.gson.JsonObject json = new com.google.gson.JsonObject();
-                    json.addProperty("auctionId", currentAuction.getAuctionId());
-                    com.freemarket.common.network.FreeMarketPacket packet = com.freemarket.common.network.FreeMarketPacket.withJson(
-                        com.freemarket.common.network.PacketType.AUCTION_CANCEL, json.toString());
+                    String jsonData = String.format("{\"auctionId\":\"%s\"}", currentAuction.getAuctionId());
+                    FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CANCEL, jsonData);
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
                     return true;
@@ -313,6 +311,9 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             renderDataGrid(guiGraphics, auctionsToRender, mouseX, mouseY, partialTick);
         }
         
+        // Draw scroll bar if needed
+        drawScrollBar(guiGraphics, auctionsToRender);
+        
         // Draw auction count
         int actualAuctionCount = auctionsToRender.size();
         Component countText = Component.translatable("gui.FreeMarket.auction.count", actualAuctionCount, getCachedAuctionData().size());
@@ -339,6 +340,9 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         // Calculate visible range
         int startIndex = scrollOffset * itemsPerRow;
         int endIndex = Math.min(startIndex + maxVisibleItems, auctions.size());
+        
+        // Track tooltip to render last (after all cards)
+        ItemStack tooltipStack = null;
         
         // Render visible auctions
         for (int i = startIndex; i < endIndex; i++) {
@@ -378,11 +382,21 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             
             // Render auction card using unified renderer
             int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin) - match market container
-            unifiedRenderer.renderCard(guiGraphics, itemStack, config, infoText,
+            ItemStack cardTooltip = unifiedRenderer.renderCard(guiGraphics, itemStack, config, infoText,
                                       cardX, cardY, calculatedItemWidth, 
                                       cardHeight,
                                       mouseX, mouseY, guiScale,
                                       parentScreen != null && parentScreen.isAnyPopupVisible());
+            
+            // Collect tooltip for deferred rendering
+            if (cardTooltip != null) {
+                tooltipStack = cardTooltip;
+            }
+        }
+        
+        // Render tooltip AFTER all cards (so it appears on top)
+        if (tooltipStack != null) {
+            UnifiedItemCardRenderer.renderItemTooltip(guiGraphics, tooltipStack, mouseX, mouseY);
         }
     }
     
@@ -705,6 +719,29 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 // Open cancel auction confirmation popup
                 parentScreen.showCancelAuctionPopup(auction);
                 return true;
+            }
+            
+            // Check delete button click (only if admin mode) - match ItemCardRenderer dimensions
+            if (com.freemarket.common.handlers.AdminModeHandler.isAdminMode()) {
+                int deleteButtonSize = (int)(calculatedItemWidth * 0.12); // 12% of card width (match ItemCardRenderer)
+                int margin = 0; // No margin - match ItemCardRenderer
+                int deleteButtonX = cardX + calculatedItemWidth - deleteButtonSize - margin; // Right at the edge
+                int deleteButtonY = cardY + margin; // Top at the edge
+                
+                if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
+                    mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
+                    // Play note block sound for delete action
+                    if (minecraft.player != null) {
+                        minecraft.player.playSound(net.minecraft.sounds.SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.5f);
+                    }
+                    
+                    // Send delete request to server via network packet (using AUCTION_CANCEL with admin privileges)
+                    String jsonData = String.format("{\"auctionId\":\"%s\"}", auction.getAuctionId());
+                    FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CANCEL, jsonData);
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    return true;
+                }
             }
         }
         

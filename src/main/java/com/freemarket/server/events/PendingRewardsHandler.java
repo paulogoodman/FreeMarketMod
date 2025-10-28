@@ -107,22 +107,27 @@ public class PendingRewardsHandler {
             
             // Give item if present
             if (reward.hasItem()) {
-                ItemStack itemStack = reward.getItemStack().copy();
-                boolean added = player.getInventory().add(itemStack);
-                
-                itemCount++;
-                if (added) {
-                    messageBuilder.append("§b+ ").append(itemStack.getDisplayName().getString());
-                    messageBuilder.append(" §7(").append(reward.getReason()).append(")");
-                    messageBuilder.append("\n");
+                // Reconstruct ItemStack from stored data
+                ItemStack itemStack = createItemStackFromReward(reward);
+                if (itemStack != null && !itemStack.isEmpty()) {
+                    boolean added = player.getInventory().add(itemStack);
+                    
+                    itemCount++;
+                    if (added) {
+                        messageBuilder.append("§b+ ").append(itemStack.getDisplayName().getString());
+                        messageBuilder.append(" §7(").append(reward.getReason()).append(")");
+                        messageBuilder.append("\n");
+                    } else {
+                        // Inventory full - drop the item
+                        player.drop(itemStack, false);
+                        messageBuilder.append("§c⚠ ").append(itemStack.getDisplayName().getString());
+                        messageBuilder.append(" §7(dropped, inventory full - ").append(reward.getReason()).append(")");
+                        messageBuilder.append("\n");
+                        FreeMarket.LOGGER.warn("Inventory full for player {}, dropped pending reward item", 
+                            player.getName().getString());
+                    }
                 } else {
-                    // Inventory full - drop the item
-                    player.drop(itemStack, false);
-                    messageBuilder.append("§c⚠ ").append(itemStack.getDisplayName().getString());
-                    messageBuilder.append(" §7(dropped, inventory full - ").append(reward.getReason()).append(")");
-                    messageBuilder.append("\n");
-                    FreeMarket.LOGGER.warn("Inventory full for player {}, dropped pending reward item", 
-                        player.getName().getString());
+                    FreeMarket.LOGGER.error("Failed to reconstruct item for reward: {}", reward.getReason());
                 }
             }
             
@@ -137,6 +142,35 @@ public class PendingRewardsHandler {
             player.getName().getString(), itemCount, moneyAmount);
         
         return true;
+    }
+    
+    /**
+     * Creates an ItemStack from pending reward data.
+     */
+    private static ItemStack createItemStackFromReward(PendingReward reward) {
+        try {
+            // Get item from registry
+            net.minecraft.resources.ResourceLocation itemLocation = net.minecraft.resources.ResourceLocation.parse(reward.getItemId());
+            net.minecraft.world.item.Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(itemLocation);
+            
+            if (item == null || item == net.minecraft.world.item.Items.AIR) {
+                FreeMarket.LOGGER.error("Failed to find item: {}", reward.getItemId());
+                return ItemStack.EMPTY;
+            }
+            
+            // Create base item stack
+            ItemStack itemStack = new ItemStack(item, reward.getItemCount());
+            
+            // Apply component data if present
+            if (reward.getComponentData() != null && !reward.getComponentData().isEmpty()) {
+                com.freemarket.common.attachments.ItemComponentHandler.applyComponentData(itemStack, reward.getComponentData());
+            }
+            
+            return itemStack;
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to create ItemStack from reward: {}", e.getMessage(), e);
+            return ItemStack.EMPTY;
+        }
     }
 }
 

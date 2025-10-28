@@ -17,9 +17,6 @@ public abstract class PopupOverlay implements Renderable {
     protected boolean visible = false;
     protected String errorMessage = null;
     
-    // UI Constants for modern design
-    protected static final int BORDER_RADIUS = 6;
-    
     // Color scheme
     protected static final int BACKGROUND_COLOR = 0xFF1A1A1A;
     protected static final int SURFACE_COLOR = 0xFF2D2D2D;
@@ -91,14 +88,9 @@ public abstract class PopupOverlay implements Renderable {
         int screenHeight = net.minecraft.client.Minecraft.getInstance().getWindow().getGuiScaledHeight();
         guiGraphics.fill(0, 0, screenWidth, screenHeight, 0x80000000);
         
-        // Draw main popup background with rounded corners effect
-        drawRoundedRect(guiGraphics, x, y, width, height, SURFACE_COLOR);
-        
-        // Draw border
-        guiGraphics.fill(x, y, x + width, y + 2, BORDER_COLOR);
-        guiGraphics.fill(x, y, x + 2, y + height, BORDER_COLOR);
-        guiGraphics.fill(x + width - 2, y, x + width, y + height, BORDER_COLOR);
-        guiGraphics.fill(x, y + height - 2, x + width, y + height, BORDER_COLOR);
+        // Draw popup background (matching BasePopupScreen approach)
+        guiGraphics.fill(x, y, x + width, y + height, BORDER_COLOR);
+        guiGraphics.fill(x + 2, y + 2, x + width - 2, y + height - 2, SURFACE_COLOR);
         
         // Draw title
         Component title = getTitle();
@@ -120,33 +112,39 @@ public abstract class PopupOverlay implements Renderable {
     }
     
     /**
-     * Draws a rounded rectangle effect.
-     */
-    protected void drawRoundedRect(GuiGraphics guiGraphics, int x, int y, int width, int height, int color) {
-        // Draw main rectangle
-        guiGraphics.fill(x + BORDER_RADIUS, y, x + width - BORDER_RADIUS, y + height, color);
-        guiGraphics.fill(x, y + BORDER_RADIUS, x + width, y + height - BORDER_RADIUS, color);
-        
-        // Draw rounded corners (simplified)
-        guiGraphics.fill(x + BORDER_RADIUS, y + BORDER_RADIUS, x + width - BORDER_RADIUS, y + height - BORDER_RADIUS, color);
-    }
-    
-    /**
      * Draws an error message at the bottom of the popup.
      */
     protected void drawErrorMessage(GuiGraphics guiGraphics) {
         if (errorMessage == null) return;
         
-        int errorY = y + height - 25;
-        int errorWidth = net.minecraft.client.Minecraft.getInstance().font.width(errorMessage);
-        int errorX = x + (width - errorWidth) / 2;
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        var font = minecraft.font;
         
-        // Error background
-        guiGraphics.fill(errorX - 8, errorY - 2, errorX + errorWidth + 8, errorY + net.minecraft.client.Minecraft.getInstance().font.lineHeight + 2, 0x4DFF6B6B);
-        guiGraphics.fill(errorX - 7, errorY - 1, errorX + errorWidth + 7, errorY + net.minecraft.client.Minecraft.getInstance().font.lineHeight + 1, BACKGROUND_COLOR);
+        int errorY = y + height - 25;
+        int maxWidth = width - 40; // Leave 20px padding on each side
+        
+        // Add warning icon
+        String fullMessage = "⚠ " + errorMessage;
+        
+        // Truncate message if it's too long
+        String displayMessage = fullMessage;
+        int messageWidth = font.width(fullMessage);
+        
+        if (messageWidth > maxWidth) {
+            // Truncate and add ellipsis
+            displayMessage = font.plainSubstrByWidth(fullMessage, maxWidth - font.width("...")) + "...";
+            messageWidth = font.width(displayMessage);
+        }
+        
+        int errorX = x + (width - messageWidth) / 2;
+        
+        // Error background with proper bounds
+        int padding = 8;
+        guiGraphics.fill(errorX - padding, errorY - 2, errorX + messageWidth + padding, errorY + font.lineHeight + 2, 0x4DFF6B6B);
+        guiGraphics.fill(errorX - padding + 1, errorY - 1, errorX + messageWidth + padding - 1, errorY + font.lineHeight + 1, BACKGROUND_COLOR);
         
         // Error text
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, "⚠ " + errorMessage, errorX, errorY, ERROR_COLOR);
+        guiGraphics.drawString(font, displayMessage, errorX, errorY, ERROR_COLOR);
     }
     
     /**

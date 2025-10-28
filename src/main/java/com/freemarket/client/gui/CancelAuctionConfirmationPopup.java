@@ -19,8 +19,6 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
     // UI Constants
     private static final int POPUP_WIDTH = 400;
     private static final int POPUP_HEIGHT = 220;
-    private static final int HEADER_HEIGHT = 40;
-    private static final int SECTION_SPACING = 8;
     
     public CancelAuctionConfirmationPopup(PlayerAuction auction) {
         super(0, 0, POPUP_WIDTH, POPUP_HEIGHT);
@@ -47,23 +45,8 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
     
     @Override
     protected void renderContent(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
-        Minecraft minecraft = Minecraft.getInstance();
-        
-        // Draw header section
-        drawRoundedRect(guiGraphics, x, y, POPUP_WIDTH, HEADER_HEIGHT, BACKGROUND_COLOR);
-        
-        // Draw header border
-        guiGraphics.fill(x, y + HEADER_HEIGHT - 1, x + POPUP_WIDTH, y + HEADER_HEIGHT, BORDER_COLOR);
-        
-        // Draw title with icon
-        Component title = Component.literal("⚠ Cancel Auction");
-        int titleWidth = minecraft.font.width(title);
-        int titleX = x + (POPUP_WIDTH - titleWidth) / 2;
-        int titleY = y + (HEADER_HEIGHT - minecraft.font.lineHeight) / 2;
-        guiGraphics.drawString(minecraft.font, title, titleX, titleY, WARNING_COLOR);
-        
-        // Draw content sections
-        int contentY = y + HEADER_HEIGHT + SECTION_SPACING + 20;
+        // Draw content sections (title is drawn by base class)
+        int contentY = y + 60; // Start below the base class title
         drawConfirmationMessage(guiGraphics, contentY);
         
         // Draw buttons
@@ -154,10 +137,11 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
         
         int keepAuctionBgColor = keepAuctionHovered ? 0xCC666666 : 0x99666666; // Gray
         guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, keepAuctionBgColor);
-        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR);
-        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR);
-        guiGraphics.fill(keepAuctionButtonX + buttonWidth - 1, buttonY, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
-        guiGraphics.fill(keepAuctionButtonX, buttonY + buttonHeight - 1, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        // Draw borders without corner overlap
+        guiGraphics.fill(keepAuctionButtonX, buttonY, keepAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR); // Top
+        guiGraphics.fill(keepAuctionButtonX, buttonY + 1, keepAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR); // Left
+        guiGraphics.fill(keepAuctionButtonX + buttonWidth - 1, buttonY + 1, keepAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR); // Right
+        guiGraphics.fill(keepAuctionButtonX + 1, buttonY + buttonHeight - 1, keepAuctionButtonX + buttonWidth - 1, buttonY + buttonHeight, BORDER_COLOR); // Bottom
         
         String keepAuctionText = "Keep Auction";
         int keepAuctionTextWidth = minecraft.font.width(keepAuctionText);
@@ -172,10 +156,11 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
         
         int cancelAuctionBgColor = cancelAuctionHovered ? 0xCCE53935 : 0x99E53935; // Red
         guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, cancelAuctionBgColor);
-        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR);
-        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR);
-        guiGraphics.fill(cancelAuctionButtonX + buttonWidth - 1, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
-        guiGraphics.fill(cancelAuctionButtonX, buttonY + buttonHeight - 1, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR);
+        // Draw borders without corner overlap
+        guiGraphics.fill(cancelAuctionButtonX, buttonY, cancelAuctionButtonX + buttonWidth, buttonY + 1, BORDER_COLOR); // Top
+        guiGraphics.fill(cancelAuctionButtonX, buttonY + 1, cancelAuctionButtonX + 1, buttonY + buttonHeight, BORDER_COLOR); // Left
+        guiGraphics.fill(cancelAuctionButtonX + buttonWidth - 1, buttonY + 1, cancelAuctionButtonX + buttonWidth, buttonY + buttonHeight, BORDER_COLOR); // Right
+        guiGraphics.fill(cancelAuctionButtonX + 1, buttonY + buttonHeight - 1, cancelAuctionButtonX + buttonWidth - 1, buttonY + buttonHeight, BORDER_COLOR); // Bottom
         
         String cancelAuctionText = "Cancel Auction";
         int cancelAuctionTextWidth = minecraft.font.width(cancelAuctionText);

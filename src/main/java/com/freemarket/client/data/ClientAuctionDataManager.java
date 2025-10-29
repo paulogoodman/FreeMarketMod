@@ -2,8 +2,6 @@ package com.freemarket.client.data;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.PlayerAuction;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -22,7 +20,6 @@ import java.util.List;
 public class ClientAuctionDataManager {
     
     private static final String AUCTION_FILE_NAME = "auctions.json";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     // Cache for loaded auctions
     private static List<PlayerAuction> cachedAuctions = null;

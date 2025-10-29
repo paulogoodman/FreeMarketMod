@@ -390,16 +390,11 @@ public class ServerAuctionHandler {
     /**
      * Syncs auction data to all players.
      * Data is loaded from NBT storage only when syncing (render operations).
+     * @deprecated Use {@link com.freemarket.server.network.ServerAuctionSync#syncAuctionData(ServerLevel)} instead
      */
+    @Deprecated
     public static void syncAuctionsToAllPlayers(ServerLevel level) {
-        try {
-            // Load auctions from NBT storage (only when syncing for render)
-            var auctions = AuctionDataManager.loadAuctions(level);
-            FreeMarketPacket syncPacket = FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, new GsonBuilder().create().toJson(auctions));
-            net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(syncPacket);
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to sync auctions to players: {}", e.getMessage(), e);
-        }
+        com.freemarket.server.network.ServerAuctionSync.syncAuctionData(level);
     }
     
     /**

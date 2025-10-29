@@ -12,6 +12,7 @@ import com.freemarket.common.data.PlayerBalanceData;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.server.data.*;
 import com.freemarket.server.handlers.*;
+import com.freemarket.server.network.ServerAuctionSync;
 import com.freemarket.server.network.ServerMarketplaceSync;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -191,10 +192,9 @@ public class FreeMarketPacketHandler {
             boolean success = ServerAuctionHandler.placeBid(level, player, auctionId, bidAmount);
             
             if (success) {
-                // Broadcast to all players
-                var auctions = AuctionDataManager.loadAuctions(level);
-                PacketDistributor.sendToAllPlayers(
-                    FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, GSON.toJson(auctions)));
+                // Broadcast to all players using reliable sync
+                FreeMarket.LOGGER.info("Player {} placed bid, syncing auctions to all players", player.getName().getString());
+                ServerAuctionSync.syncAuctionData(level);
             }
         });
     }
@@ -214,9 +214,9 @@ public class FreeMarketPacketHandler {
                 quantity, startingPrice, durationMinutes);
             
             if (success) {
-                var auctions = AuctionDataManager.loadAuctions(level);
-                PacketDistributor.sendToAllPlayers(
-                    FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, GSON.toJson(auctions)));
+                // Broadcast to all players using reliable sync
+                FreeMarket.LOGGER.info("Player {} created auction, syncing to all players", player.getName().getString());
+                ServerAuctionSync.syncAuctionData(level);
             }
         });
     }
@@ -232,10 +232,9 @@ public class FreeMarketPacketHandler {
             boolean success = ServerAuctionHandler.cancelAuction(level, player, auctionId);
             
             if (success) {
-                // Broadcast updated auction list to all players
-                var auctions = AuctionDataManager.loadAuctions(level);
-                PacketDistributor.sendToAllPlayers(
-                    FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, GSON.toJson(auctions)));
+                // Broadcast updated auction list to all players using reliable sync
+                FreeMarket.LOGGER.info("Player {} cancelled auction, syncing to all players", player.getName().getString());
+                ServerAuctionSync.syncAuctionData(level);
             }
         });
     }
@@ -371,6 +370,7 @@ public class FreeMarketPacketHandler {
         context.enqueueWork(() -> {
             List<PlayerAuction> auctions = GSON.fromJson(packet.data(), 
                 com.google.gson.reflect.TypeToken.getParameterized(List.class, PlayerAuction.class).getType());
+            FreeMarket.LOGGER.info("Client received {} auctions from server", auctions.size());
             ClientAuctionCache.updateAuctions(auctions);
         });
     }

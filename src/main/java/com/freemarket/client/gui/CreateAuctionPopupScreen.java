@@ -577,9 +577,9 @@ public class CreateAuctionPopupScreen extends BasePopupScreen {
             .replace("\r", "\\r")   // Escape carriage returns
             .replace("\t", "\\t");  // Escape tabs
         
-        // Send auction create packet to server
-        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"quantity\":%d,\"startingPrice\":%d,\"durationMinutes\":%d}", 
-            itemId, escapedComponentData, quantity, startingPrice, durationMinutes);
+        // Send auction create packet to server with slot index for server-side validation
+        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"quantity\":%d,\"startingPrice\":%d,\"durationMinutes\":%d,\"slotIndex\":%d}", 
+            itemId, escapedComponentData, quantity, startingPrice, durationMinutes, selectedSlotIndex);
         FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CREATE, jsonData);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
         

@@ -2,7 +2,6 @@ package com.freemarket.common.attachments;
 
 import com.freemarket.FreeMarket;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
@@ -22,13 +21,20 @@ public class ItemComponentHandler {
      * @param componentDataString The component data as JSON string
      */
     public static void applyComponentData(ItemStack itemStack, String componentDataString) {
-        if (componentDataString != null && !componentDataString.trim().isEmpty()) {
+        if (componentDataString != null && !componentDataString.trim().isEmpty() && !componentDataString.equals("{}")) {
             try {
                 CompoundTag componentTag = TagParser.parseTag(componentDataString);
                 
-                // Handle each component type separately
-                applyEnchantments(itemStack, componentTag);
-                applyArmorTrim(itemStack, componentTag);
+                // Get registry access (try client)
+                net.minecraft.core.RegistryAccess registryAccess = getRegistryAccess();
+                if (registryAccess == null) {
+                    FreeMarket.LOGGER.warn("No registry access available, skipping component data application");
+                    return;
+                }
+                
+                // Handle each component type separately with proper registry access
+                applyEnchantments(itemStack, componentTag, registryAccess);
+                applyArmorTrim(itemStack, componentTag, registryAccess);
                 applyCustomData(itemStack, componentTag);
                 applyOtherComponents(itemStack, componentTag);
             } catch (Exception e) {
@@ -36,6 +42,19 @@ public class ItemComponentHandler {
                 e.printStackTrace();
             }
         }
+    }
+    
+    /**
+     * Gets registry access from server or client context.
+     */
+    private static net.minecraft.core.RegistryAccess getRegistryAccess() {
+        // Try client-side (always works in both contexts)
+        var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
+        if (clientLevel != null) {
+            return clientLevel.registryAccess();
+        }
+        
+        return null;
     }
     
     /**
@@ -59,9 +78,7 @@ public class ItemComponentHandler {
             serializeCustomData(itemStack, resultTag);
             serializeOtherComponents(itemStack, resultTag);
             
-            String result = resultTag.toString();
-            FreeMarket.LOGGER.info("Serialized {} components to JSON: {}", resultTag.size(), result);
-            return result;
+            return resultTag.toString();
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to serialize component data: {}", e.getMessage());
             return "{}";
@@ -69,9 +86,9 @@ public class ItemComponentHandler {
     }
     
     /**
-     * Applies enchantments to the ItemStack.
+     * Applies enchantments to the ItemStack using proper registry access.
      */
-    private static void applyEnchantments(ItemStack itemStack, CompoundTag componentTag) {
+    private static void applyEnchantments(ItemStack itemStack, CompoundTag componentTag, net.minecraft.core.RegistryAccess registryAccess) {
         if (componentTag.contains("minecraft:enchantments")) {
             try {
                 CompoundTag enchantmentsTag = componentTag.getCompound("minecraft:enchantments");
@@ -88,15 +105,13 @@ public class ItemComponentHandler {
                             String enchantmentId = enchantmentTag.getString("id");
                             int level = enchantmentTag.getInt("lvl");
                             
-                            // Get enchantment from registry using client's registry access
-                            var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
-                            if (clientLevel != null) {
-                                var registryAccess = clientLevel.registryAccess();
-                                var enchantmentRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
-                                var enchantmentHolder = enchantmentRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(enchantmentId));
-                                if (enchantmentHolder.isPresent()) {
-                                    mutableEnchantments.set(enchantmentHolder.get(), level);
-                                }
+                            // Get enchantment from registry using provided registry access
+                            var enchantmentRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT);
+                            var enchantmentHolder = enchantmentRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(enchantmentId));
+                            if (enchantmentHolder.isPresent()) {
+                                mutableEnchantments.set(enchantmentHolder.get(), level);
+                            } else {
+                                FreeMarket.LOGGER.warn("Enchantment not found in registry: {}", enchantmentId);
                             }
                         } catch (Exception e) {
                             FreeMarket.LOGGER.warn("Failed to parse enchantment {}: {}", key, e.getMessage());
@@ -114,9 +129,9 @@ public class ItemComponentHandler {
     }
     
     /**
-     * Applies armor trim to the ItemStack.
+     * Applies armor trim to the ItemStack using proper registry access.
      */
-    private static void applyArmorTrim(ItemStack itemStack, CompoundTag componentTag) {
+    private static void applyArmorTrim(ItemStack itemStack, CompoundTag componentTag, net.minecraft.core.RegistryAccess registryAccess) {
         if (componentTag.contains("minecraft:trim")) {
             try {
                 CompoundTag trimTag = componentTag.getCompound("minecraft:trim");
@@ -126,21 +141,19 @@ public class ItemComponentHandler {
                     String patternId = trimTag.getString("pattern");
                     String materialId = trimTag.getString("material");
                     
-                    // Get pattern and material from registries using client's registry access
-                    var clientLevel = net.minecraft.client.Minecraft.getInstance().level;
-                    if (clientLevel != null) {
-                        var registryAccess = clientLevel.registryAccess();
-                        var patternRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_PATTERN);
-                        var materialRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_MATERIAL);
-                        
-                        var patternHolder = patternRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(patternId));
-                        var materialHolder = materialRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(materialId));
-                        
-                        if (patternHolder.isPresent() && materialHolder.isPresent()) {
-                            // Create armor trim component (material first, then pattern)
-                            var armorTrim = new net.minecraft.world.item.armortrim.ArmorTrim(materialHolder.get(), patternHolder.get());
-                            itemStack.set(DataComponents.TRIM, armorTrim);
-                        }
+                    // Get pattern and material from registries using provided registry access
+                    var patternRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_PATTERN);
+                    var materialRegistry = registryAccess.registryOrThrow(net.minecraft.core.registries.Registries.TRIM_MATERIAL);
+                    
+                    var patternHolder = patternRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(patternId));
+                    var materialHolder = materialRegistry.getHolder(net.minecraft.resources.ResourceLocation.parse(materialId));
+                    
+                    if (patternHolder.isPresent() && materialHolder.isPresent()) {
+                        // Create armor trim component (material first, then pattern)
+                        var armorTrim = new net.minecraft.world.item.armortrim.ArmorTrim(materialHolder.get(), patternHolder.get());
+                        itemStack.set(DataComponents.TRIM, armorTrim);
+                    } else {
+                        FreeMarket.LOGGER.warn("Trim pattern or material not found in registry: pattern={}, material={}", patternId, materialId);
                     }
                 }
                 
@@ -159,7 +172,6 @@ public class ItemComponentHandler {
                 CompoundTag customDataTag = componentTag.getCompound("minecraft:custom_data");
                 CustomData customData = CustomData.of(customDataTag);
                 itemStack.set(DataComponents.CUSTOM_DATA, customData);
-                FreeMarket.LOGGER.info("Successfully applied custom data: {}", customDataTag);
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply custom data: {}", e.getMessage());
             }
@@ -167,15 +179,60 @@ public class ItemComponentHandler {
     }
     
     /**
-     * Applies other relevant components (damage, repair cost, lore, etc.).
+     * Applies other relevant components (damage, repair cost, lore, custom name, etc.).
      */
     private static void applyOtherComponents(ItemStack itemStack, CompoundTag componentTag) {
+        // Apply custom name
+        if (componentTag.contains("minecraft:custom_name")) {
+            try {
+                String customNameJson = componentTag.getString("minecraft:custom_name");
+                if (customNameJson != null && !customNameJson.trim().isEmpty()) {
+                    var registryAccess = getRegistryAccess();
+                    if (registryAccess != null) {
+                        net.minecraft.network.chat.Component customName = net.minecraft.network.chat.Component.Serializer.fromJson(customNameJson, registryAccess);
+                        if (customName != null) {
+                            itemStack.set(DataComponents.CUSTOM_NAME, customName);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply custom name: {}", e.getMessage());
+            }
+        }
+        
+        // Apply item name (for renamed items in anvil)
+        if (componentTag.contains("minecraft:item_name")) {
+            try {
+                String itemNameJson = componentTag.getString("minecraft:item_name");
+                if (itemNameJson != null && !itemNameJson.trim().isEmpty()) {
+                    var registryAccess = getRegistryAccess();
+                    if (registryAccess != null) {
+                        net.minecraft.network.chat.Component itemName = net.minecraft.network.chat.Component.Serializer.fromJson(itemNameJson, registryAccess);
+                        if (itemName != null) {
+                            itemStack.set(DataComponents.ITEM_NAME, itemName);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply item name: {}", e.getMessage());
+            }
+        }
+        
+        // Apply unbreakable flag
+        if (componentTag.contains("minecraft:unbreakable")) {
+            try {
+                boolean showInTooltip = componentTag.getCompound("minecraft:unbreakable").getBoolean("show_in_tooltip");
+                itemStack.set(DataComponents.UNBREAKABLE, new net.minecraft.world.item.component.Unbreakable(showInTooltip));
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply unbreakable: {}", e.getMessage());
+            }
+        }
+        
         // Apply damage
         if (componentTag.contains("minecraft:damage")) {
             try {
                 int damage = componentTag.getInt("minecraft:damage");
                 itemStack.set(DataComponents.DAMAGE, damage);
-                FreeMarket.LOGGER.info("Successfully applied damage: {}", damage);
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply damage: {}", e.getMessage());
             }
@@ -186,9 +243,25 @@ public class ItemComponentHandler {
             try {
                 int repairCost = componentTag.getInt("minecraft:repair_cost");
                 itemStack.set(DataComponents.REPAIR_COST, repairCost);
-                FreeMarket.LOGGER.info("Successfully applied repair cost: {}", repairCost);
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to apply repair cost: {}", e.getMessage());
+            }
+        }
+        
+        // Apply written book content (for signed books) using codec
+        if (componentTag.contains("minecraft:written_book_content")) {
+            try {
+                CompoundTag bookTag = componentTag.getCompound("minecraft:written_book_content");
+                var registryAccess = getRegistryAccess();
+                if (registryAccess != null) {
+                    // Use the codec to decode the book content
+                    var codec = net.minecraft.world.item.component.WrittenBookContent.CODEC;
+                    var result = codec.parse(net.minecraft.nbt.NbtOps.INSTANCE, bookTag);
+                    result.resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to parse written book content: {}", error))
+                          .ifPresent(content -> itemStack.set(DataComponents.WRITTEN_BOOK_CONTENT, content));
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to apply written book content: {}", e.getMessage());
             }
         }
         
@@ -230,7 +303,6 @@ public class ItemComponentHandler {
                     // Apply lore to the item stack if we have any lines
                     if (!loreLines.isEmpty()) {
                         itemStack.set(DataComponents.LORE, new net.minecraft.world.item.component.ItemLore(loreLines));
-                        FreeMarket.LOGGER.info("Successfully applied {} lore lines", loreLines.size());
                     }
                 }
             } catch (Exception e) {
@@ -272,8 +344,6 @@ public class ItemComponentHandler {
                     
                     enchantmentsTag.put("enchantments", enchantmentsList);
                     resultTag.put("minecraft:enchantments", enchantmentsTag);
-                    
-                    FreeMarket.LOGGER.info("Successfully serialized enchantments: {}", enchantmentsTag);
                 }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize enchantments: {}", e.getMessage());
@@ -309,8 +379,6 @@ public class ItemComponentHandler {
                 }
                 
                 resultTag.put("minecraft:trim", trimTag);
-                
-                FreeMarket.LOGGER.info("Successfully serialized armor trim: {}", trimTag);
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize armor trim: {}", e.getMessage());
             }
@@ -330,8 +398,6 @@ public class ItemComponentHandler {
                     // Custom data is already a CompoundTag, so we can use it directly
                     CompoundTag customDataTag = customData.copyTag();
                     resultTag.put("minecraft:custom_data", customDataTag);
-                    
-                    FreeMarket.LOGGER.info("Successfully serialized custom data: {}", customDataTag);
                 }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize custom data: {}", e.getMessage());
@@ -343,13 +409,58 @@ public class ItemComponentHandler {
      * Serializes other relevant components from the ItemStack.
      */
     private static void serializeOtherComponents(ItemStack itemStack, CompoundTag resultTag) {
+        // Serialize custom name
+        if (itemStack.has(DataComponents.CUSTOM_NAME)) {
+            try {
+                net.minecraft.network.chat.Component customName = itemStack.get(DataComponents.CUSTOM_NAME);
+                if (customName != null) {
+                    var registryAccess = getRegistryAccess();
+                    if (registryAccess != null) {
+                        String customNameJson = net.minecraft.network.chat.Component.Serializer.toJson(customName, registryAccess);
+                        resultTag.putString("minecraft:custom_name", customNameJson);
+                    }
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize custom name: {}", e.getMessage());
+            }
+        }
+        
+        // Serialize item name
+        if (itemStack.has(DataComponents.ITEM_NAME)) {
+            try {
+                net.minecraft.network.chat.Component itemName = itemStack.get(DataComponents.ITEM_NAME);
+                if (itemName != null) {
+                    var registryAccess = getRegistryAccess();
+                    if (registryAccess != null) {
+                        String itemNameJson = net.minecraft.network.chat.Component.Serializer.toJson(itemName, registryAccess);
+                        resultTag.putString("minecraft:item_name", itemNameJson);
+                    }
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize item name: {}", e.getMessage());
+            }
+        }
+        
+        // Serialize unbreakable flag
+        if (itemStack.has(DataComponents.UNBREAKABLE)) {
+            try {
+                var unbreakable = itemStack.get(DataComponents.UNBREAKABLE);
+                if (unbreakable != null) {
+                    CompoundTag unbreakableTag = new CompoundTag();
+                    unbreakableTag.putBoolean("show_in_tooltip", unbreakable.showInTooltip());
+                    resultTag.put("minecraft:unbreakable", unbreakableTag);
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize unbreakable: {}", e.getMessage());
+            }
+        }
+        
         // Serialize damage (only if > 0)
         if (itemStack.has(DataComponents.DAMAGE)) {
             try {
                 Integer damage = itemStack.get(DataComponents.DAMAGE);
                 if (damage != null && damage > 0) {
                     resultTag.putInt("minecraft:damage", damage);
-                    FreeMarket.LOGGER.info("Successfully serialized damage: {}", damage);
                 }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize damage: {}", e.getMessage());
@@ -362,10 +473,29 @@ public class ItemComponentHandler {
                 Integer repairCost = itemStack.get(DataComponents.REPAIR_COST);
                 if (repairCost != null && repairCost > 0) {
                     resultTag.putInt("minecraft:repair_cost", repairCost);
-                    FreeMarket.LOGGER.info("Successfully serialized repair cost: {}", repairCost);
                 }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize repair cost: {}", e.getMessage());
+            }
+        }
+        
+        // Serialize written book content (for signed books) using codec
+        if (itemStack.has(DataComponents.WRITTEN_BOOK_CONTENT)) {
+            try {
+                var bookContent = itemStack.get(DataComponents.WRITTEN_BOOK_CONTENT);
+                if (bookContent != null) {
+                    // Use the codec to encode the book content
+                    var codec = net.minecraft.world.item.component.WrittenBookContent.CODEC;
+                    var result = codec.encodeStart(net.minecraft.nbt.NbtOps.INSTANCE, bookContent);
+                    result.resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to encode written book content: {}", error))
+                          .ifPresent(tag -> {
+                              if (tag instanceof CompoundTag bookTag) {
+                                  resultTag.put("minecraft:written_book_content", bookTag);
+                              }
+                          });
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to serialize written book content: {}", e.getMessage());
             }
         }
         
@@ -388,8 +518,6 @@ public class ItemComponentHandler {
                     
                     loreTag.put("lines", linesTag);
                     resultTag.put("minecraft:lore", loreTag);
-                    
-                    FreeMarket.LOGGER.info("Successfully serialized lore: {}", loreTag);
                 }
             } catch (Exception e) {
                 FreeMarket.LOGGER.warn("Failed to serialize lore: {}", e.getMessage());
@@ -416,8 +544,12 @@ public class ItemComponentHandler {
         return itemStack.has(DataComponents.ENCHANTMENTS) ||
                itemStack.has(DataComponents.TRIM) ||
                itemStack.has(DataComponents.CUSTOM_DATA) ||
+               itemStack.has(DataComponents.CUSTOM_NAME) ||
+               itemStack.has(DataComponents.ITEM_NAME) ||
+               itemStack.has(DataComponents.UNBREAKABLE) ||
                itemStack.has(DataComponents.DAMAGE) ||
                itemStack.has(DataComponents.REPAIR_COST) ||
-               itemStack.has(DataComponents.LORE);
+               itemStack.has(DataComponents.LORE) ||
+               itemStack.has(DataComponents.WRITTEN_BOOK_CONTENT);
     }
 }

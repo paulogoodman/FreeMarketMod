@@ -204,15 +204,14 @@ public class FreeMarketPacketHandler {
             if (!(context.player() instanceof ServerPlayer player)) return;
             
             JsonObject json = JsonParser.parseString(packet.data()).getAsJsonObject();
-            String itemId = json.get("itemId").getAsString();
-            String componentData = json.get("componentData").getAsString();
+            int slotIndex = json.get("slotIndex").getAsInt();
             int quantity = json.get("quantity").getAsInt();
             long startingPrice = json.get("startingPrice").getAsLong();
             long durationMinutes = json.get("durationMinutes").getAsLong();
             
             ServerLevel level = player.serverLevel();
-            boolean success = ServerAuctionHandler.createAuction(level, player, itemId, 
-                componentData, quantity, startingPrice, durationMinutes);
+            boolean success = ServerAuctionHandler.createAuctionFromSlot(level, player, slotIndex, 
+                quantity, startingPrice, durationMinutes);
             
             if (success) {
                 var auctions = AuctionDataManager.loadAuctions(level);

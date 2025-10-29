@@ -29,9 +29,92 @@ public class ServerAuctionHandler {
     private static boolean DEBUG_MODE = false; // Debug mode to allow bidding on own auctions
     
     /**
-     * Creates a new auction.
+     * Creates a new auction from an inventory slot.
+     * This method gets the actual item from the player's inventory to avoid component mismatch issues.
      * @return true if successful
      */
+    public static boolean createAuctionFromSlot(ServerLevel level, ServerPlayer player, int slotIndex, 
+                                                int quantity, long startingPrice, long durationMinutes) {
+        try {
+            // Validate inputs
+            if (startingPrice < 0) {
+                player.sendSystemMessage(Component.literal("Starting price must be positive!"));
+                return false;
+            }
+            
+            if (durationMinutes < 1 || durationMinutes > 10080) { // Max 1 week
+                player.sendSystemMessage(Component.literal("Duration must be between 1 minute and 1 week!"));
+                return false;
+            }
+            
+            // Get the actual item from the player's inventory at the specified slot
+            Inventory inventory = player.getInventory();
+            if (slotIndex < 0 || slotIndex >= inventory.getContainerSize()) {
+                player.sendSystemMessage(Component.literal("Invalid inventory slot!"));
+                return false;
+            }
+            
+            ItemStack itemInSlot = inventory.getItem(slotIndex);
+            if (itemInSlot.isEmpty()) {
+                player.sendSystemMessage(Component.literal("No item in that slot!"));
+                return false;
+            }
+            
+            // Validate quantity
+            if (quantity < 1 || quantity > itemInSlot.getCount()) {
+                player.sendSystemMessage(Component.literal("Invalid quantity! You only have " + itemInSlot.getCount() + " of that item."));
+                return false;
+            }
+            
+            // Extract item ID and component data server-side from the ACTUAL item
+            String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(itemInSlot.getItem()).toString();
+            String componentData = com.freemarket.common.attachments.ItemComponentHandler.getComponentData(itemInSlot);
+            
+            // Remove the item from inventory
+            ItemStack toRemove = itemInSlot.copy();
+            toRemove.setCount(quantity);
+            itemInSlot.shrink(quantity);
+            inventory.setItem(slotIndex, itemInSlot.isEmpty() ? ItemStack.EMPTY : itemInSlot);
+            
+            // Create auction object
+            String auctionId = AuctionDataManager.generateAuctionId();
+            long expiryTime = System.currentTimeMillis() + (durationMinutes * 60 * 1000);
+            
+            PlayerAuction auction = new PlayerAuction(
+                auctionId,
+                itemId,
+                componentData,
+                quantity,
+                startingPrice,
+                startingPrice, // Current bid starts at starting price
+                player.getUUID().toString(),
+                player.getName().getString(),
+                expiryTime,
+                null, // No bidder yet
+                null,
+                System.currentTimeMillis()
+            );
+            
+            // Save auction to NBT storage
+            AuctionDataManager.addAuction(level, auction);
+            
+            player.sendSystemMessage(Component.literal("Auction created successfully!"));
+            FreeMarket.LOGGER.info("{} created auction {} for {}", player.getName().getString(), auctionId, itemId);
+            
+            return true;
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to create auction: {}", e.getMessage(), e);
+            player.sendSystemMessage(Component.literal("Failed to create auction!"));
+            return false;
+        }
+    }
+    
+    /**
+     * Creates a new auction (legacy method for backwards compatibility).
+     * @deprecated Use {@link #createAuctionFromSlot} instead to avoid component mismatch issues.
+     * @return true if successful
+     */
+    @Deprecated
     public static boolean createAuction(ServerLevel level, ServerPlayer player, String itemId, 
                                        String componentData, int quantity, long startingPrice, long durationMinutes) {
         try {
@@ -47,7 +130,7 @@ public class ServerAuctionHandler {
             }
             
             // Create ItemStack to validate and remove from inventory
-            ItemStack itemStack = createItemStackFromId(itemId, componentData, quantity);
+            ItemStack itemStack = createItemStackFromId(itemId, componentData, quantity, level.getServer());
             if (itemStack == null) {
                 player.sendSystemMessage(Component.literal("Invalid item!"));
                 return false;
@@ -239,7 +322,7 @@ public class ServerAuctionHandler {
             }
             
             // Create ItemStack from auction data
-            ItemStack itemStack = createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity());
+            ItemStack itemStack = createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity(), level.getServer());
             if (itemStack == null) {
                 player.sendSystemMessage(Component.literal("Failed to restore item!"));
                 return false;
@@ -389,7 +472,7 @@ public class ServerAuctionHandler {
                     }
                     
                     // Give item to winner
-                    ItemStack itemStack = createItemFromAuction(auction);
+                    ItemStack itemStack = createItemFromAuction(auction, level.getServer());
                     if (winner != null) {
                         boolean added = addItemToInventory(winner, itemStack);
                         if (added) {
@@ -427,7 +510,7 @@ public class ServerAuctionHandler {
                     );
                     
                     // Return item to seller
-                    ItemStack itemStack = createItemFromAuction(auction);
+                    ItemStack itemStack = createItemFromAuction(auction, level.getServer());
                     if (seller != null) {
                         boolean added = addItemToInventory(seller, itemStack);
                         if (added) {
@@ -472,8 +555,8 @@ public class ServerAuctionHandler {
     /**
      * Creates an ItemStack from auction data.
      */
-    private static ItemStack createItemFromAuction(PlayerAuction auction) {
-        return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity());
+    private static ItemStack createItemFromAuction(PlayerAuction auction, net.minecraft.server.MinecraftServer server) {
+        return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity(), server);
     }
     
     /**
@@ -487,9 +570,9 @@ public class ServerAuctionHandler {
     }
     
     /**
-     * Creates an ItemStack from item ID and component data.
+     * Creates an ItemStack from item ID and component data using server-side registry access.
      */
-    private static ItemStack createItemStackFromId(String itemId, String componentData, int quantity) {
+    private static ItemStack createItemStackFromId(String itemId, String componentData, int quantity, net.minecraft.server.MinecraftServer server) {
         try {
             ResourceLocation itemLocation = ResourceLocation.parse(itemId);
             Item item = BuiltInRegistries.ITEM.get(itemLocation);
@@ -500,9 +583,9 @@ public class ServerAuctionHandler {
             
             ItemStack itemStack = new ItemStack(item, quantity);
             
-            // Apply component data if present
+            // Apply component data using ServerItemHandler for proper server-side registry access
             if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
-                ItemComponentHandler.applyComponentData(itemStack, componentData);
+                itemStack = ServerItemHandler.createItemWithComponentData(itemStack, componentData, server);
             }
             
             return itemStack;

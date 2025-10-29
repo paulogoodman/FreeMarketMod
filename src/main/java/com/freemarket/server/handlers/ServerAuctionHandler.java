@@ -1,7 +1,6 @@
 package com.freemarket.server.handlers;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.data.PlayerAuction;
 import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.server.data.PendingReward;

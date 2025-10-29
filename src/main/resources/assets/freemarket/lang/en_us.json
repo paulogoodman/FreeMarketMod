@@ -1,15 +1,4 @@
 {
-  "itemGroup.freemarket": "FreeMarket",
-  "block.freemarket.example_block": "Market Block",
-  "item.freemarket.example_item": "Coin",
-
-  "freemarket.configuration.title": "FreeMarket Configs",
-  "freemarket.configuration.section.freemarket.common.toml": "FreeMarket Configs",
-  "freemarket.configuration.section.freemarket.common.toml.title": "FreeMarket Configs",
-  "freemarket.configuration.items": "Item List",
-  "freemarket.configuration.logDirtBlock": "Log Dirt Block",
-  "freemarket.configuration.magicNumberIntroduction": "Magic Number Text",
-  "freemarket.configuration.magicNumber": "Magic Number",
 
   "gui.FreeMarket.shop.title": "Free Market",
   "gui.FreeMarket.shop.instruction": "Press ESC to close",
@@ -19,6 +8,7 @@
   "gui.FreeMarket.marketplace.search": "Search items...",
   "gui.FreeMarket.marketplace.search_placeholder": "Type to search...",
   "gui.FreeMarket.marketplace.count": "Showing %d of %d items",
+  "gui.FreeMarket.auction.count": "Showing %d of %d auctions",
   
   "gui.FreeMarket.add_item.title": "Add Item to Free Market",
   "gui.FreeMarket.add_item.item_id": "Item ID",
@@ -29,6 +19,12 @@
   "gui.FreeMarket.add_item.component_data": "Component Data (Optional)",
   "gui.FreeMarket.add_item.add": "Add Item",
   "gui.FreeMarket.add_item.cancel": "Cancel",
+
+  "gui.FreeMarket.auction.create.select_item": "Select an item from your inventory to auction",
+  "gui.FreeMarket.auction.create.confirm": "Confirm Auction Item",
+  "gui.FreeMarket.auction.create.continue": "Continue",
+  "gui.FreeMarket.auction.create.back": "Back",
+  "gui.FreeMarket.auction.create.empty_slot": "This slot is empty",
 
   "key.freemarket.open_shop": "Open Free Market",
   "key.categories.freemarket": "FreeMarket",
@@ -43,7 +39,7 @@
   "command.FreeMarket.economy.remove.notify": "%d coins were removed from your account. New balance: %d",
   "command.FreeMarket.economy.remove.insufficient": "Cannot remove %d coins from %s. Current balance: %d",
   "command.FreeMarket.economy.set.success": "Set %s's balance from %d to %d coins",
-  "command.FreeMarket.economy.set.notify": "Your balance has been set to %d coins",
+  "command.FreeMarket.economy.set.notify": "Your balance has been set to $%d",
   "command.FreeMarket.economy.player_not_found": "Player %s not found or not online.",
   "command.FreeMarket.economy.not_player": "This command can only be executed by a player.",
   

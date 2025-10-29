@@ -5,6 +5,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.client.Minecraft;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
 
 import javax.annotation.Nonnull;
 import java.util.ArrayList;
@@ -15,6 +16,8 @@ import com.freemarket.FreeMarket;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.client.data.ClientMarketplaceCache;
 import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 
@@ -24,8 +27,24 @@ import com.freemarket.server.data.FreeMarketDataManager;
  */
 public class FreeMarketGuiScreen extends Screen {
     
+    /**
+     * Enum for different screen types in the GUI
+     */
+    public enum ScreenType {
+        MARKETPLACE,
+        AUCTIONS,
+        LEADERBOARD
+    }
+    
+    private ScreenType currentScreen = ScreenType.MARKETPLACE;
+    
     private List<FreeMarketItem> freeMarketItems;
-    private FreeMarketContainer freeMarketContainer;
+    FreeMarketContainer freeMarketContainer;
+    LeaderboardContainer leaderboardContainer;
+    PlayerAuctionContainer auctionContainer;
+    
+    private PlaceBidPopupOverlay placeBidPopup;
+    private CancelAuctionConfirmationPopup cancelAuctionPopup;
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
@@ -65,6 +84,63 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Shows the create auction popup overlay.
+     */
+    public void showCreateAuctionPopup() {
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new CreateAuctionPopupScreen(this));
+        }
+    }
+    
+    /**
+     * Shows the place bid popup overlay for the given auction.
+     */
+    public void showPlaceBidPopup(com.freemarket.common.data.PlayerAuction auction) {
+        if (placeBidPopup == null) {
+            placeBidPopup = new PlaceBidPopupOverlay(auction);
+        } else {
+            // Update the auction data if popup already exists
+            placeBidPopup = new PlaceBidPopupOverlay(auction);
+        }
+        placeBidPopup.show();
+    }
+    
+    /**
+     * Shows the cancel auction confirmation popup overlay for the given auction.
+     */
+    public void showCancelAuctionPopup(com.freemarket.common.data.PlayerAuction auction) {
+        if (cancelAuctionPopup == null) {
+            cancelAuctionPopup = new CancelAuctionConfirmationPopup(auction);
+        } else {
+            // Update the auction data if popup already exists
+            cancelAuctionPopup = new CancelAuctionConfirmationPopup(auction);
+        }
+        cancelAuctionPopup.show();
+    }
+    
+    /**
+     * Hides all popup overlays.
+     */
+    public void hideAllPopups() {
+        if (placeBidPopup != null) {
+            placeBidPopup.hide();
+        }
+        if (cancelAuctionPopup != null) {
+            cancelAuctionPopup.hide();
+        }
+    }
+    
+    
+    /**
+     * Checks if any popup overlay is currently visible.
+     * @return true if any popup is visible, false otherwise
+     */
+    public boolean isAnyPopupVisible() {
+        return (placeBidPopup != null && placeBidPopup.isVisible()) ||
+               (cancelAuctionPopup != null && cancelAuctionPopup.isVisible());
+    }
+    
+    /**
      * Gets the cached wallet balance for external access.
      * @return the cached balance
      */
@@ -95,7 +171,7 @@ public class FreeMarketGuiScreen extends Screen {
                 }
                 
                 // In multiplayer, request balance from server
-                com.freemarket.common.network.WalletRequestPacket packet = new com.freemarket.common.network.WalletRequestPacket();
+                FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.WALLET_REQUEST);
                 net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
             }
         } catch (Exception e) {
@@ -207,6 +283,31 @@ public class FreeMarketGuiScreen extends Screen {
         refreshMarketplace(false);
     }
     
+    /**
+     * Switches to a different screen type.
+     * @param newScreen The screen type to switch to
+     */
+    public void switchScreen(ScreenType newScreen) {
+        if (this.currentScreen != newScreen) {
+            this.currentScreen = newScreen;
+            // Recreate the appropriate container for the new screen
+            createContainerForCurrentScreen();
+            
+            // Check for data refresh when switching to leaderboard
+            if (newScreen == ScreenType.LEADERBOARD && leaderboardContainer != null) {
+                leaderboardContainer.checkAndRefreshIfNeeded();
+            }
+        }
+    }
+    
+    /**
+     * Gets the current screen type.
+     * @return The current screen type
+     */
+    public ScreenType getCurrentScreen() {
+        return this.currentScreen;
+    }
+    
     @Override
     protected void init() {
         super.init();
@@ -217,13 +318,70 @@ public class FreeMarketGuiScreen extends Screen {
         // Request wallet balance from server (for multiplayer)
         requestWalletBalance();
         
-        // Plus button is now handled inside the marketplace container
+        // Pre-fetch auction data when opening the shop
+        requestAuctionData();
         
-        // Create the marketplace container with responsive positioning (limited height)
-        createMarketplaceContainer();
+        // Initialize popup overlays
+        this.placeBidPopup = null; // Will be created when needed
         
-        // Update button states when GUI opens
-        this.freeMarketContainer.updateButtonStates();
+        // Create the appropriate container based on current screen
+        createContainerForCurrentScreen();
+    }
+    
+    /**
+     * Pre-fetches auction data from the server when opening the shop.
+     */
+    private void requestAuctionData() {
+        FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.AUCTION_REQUEST);
+        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+    }
+    
+    /**
+     * Creates the appropriate container based on the current screen type.
+     */
+    private void createContainerForCurrentScreen() {
+        switch (currentScreen) {
+            case MARKETPLACE:
+                createMarketplaceContainer();
+                if (freeMarketContainer != null) {
+                    freeMarketContainer.updateButtonStates();
+                }
+                break;
+            case AUCTIONS:
+                createAuctionContainer();
+                break;
+            case LEADERBOARD:
+                createLeaderboardContainer();
+                break;
+        }
+    }
+    
+    /**
+     * Creates or recreates the auction container with current screen dimensions.
+     */
+    private void createAuctionContainer() {
+        // Use percentage-based sizing that scales automatically with Minecraft's width/height
+        int containerWidth = (int)(width * 0.8); // 80% of screen width
+        int containerHeight = (int)(height * 0.7); // 70% of screen height
+        int containerX = (width - containerWidth) / 2; // Center horizontally
+        int containerY = (height - containerHeight) / 2; // Center vertically
+        
+        this.auctionContainer = new PlayerAuctionContainer(containerX, containerY, containerWidth, containerHeight, this);
+        this.auctionContainer.init();
+    }
+    
+    /**
+     * Creates or recreates the leaderboard container with current screen dimensions.
+     */
+    private void createLeaderboardContainer() {
+        // Use percentage-based sizing that scales automatically with Minecraft's width/height
+        int containerWidth = (int)(width * 0.8); // 80% of screen width
+        int containerHeight = (int)(height * 0.7); // 70% of screen height
+        int containerX = (width - containerWidth) / 2; // Center horizontally
+        int containerY = (height - containerHeight) / 2; // Center vertically
+        
+        this.leaderboardContainer = new LeaderboardContainer(containerX, containerY, containerWidth, containerHeight, this);
+        this.leaderboardContainer.init();
     }
     
     /**
@@ -244,8 +402,8 @@ public class FreeMarketGuiScreen extends Screen {
     @Override
     public void resize(@Nonnull net.minecraft.client.Minecraft minecraft, int width, int height) {
         super.resize(minecraft, width, height);
-        // Recreate container with new dimensions
-        createMarketplaceContainer();
+        // Recreate the appropriate container with new dimensions
+        createContainerForCurrentScreen();
     }
     
     @Override
@@ -259,14 +417,103 @@ public class FreeMarketGuiScreen extends Screen {
         // Draw wallet display in top right of screen
         renderWalletDisplay(guiGraphics);
         
-        // Render marketplace container (it will draw its own background)
-        if (freeMarketContainer != null) {
-            freeMarketContainer.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Render tab navigation buttons
+        renderTabButtons(guiGraphics, mouseX, mouseY);
+        
+        // Render the appropriate container based on current screen
+        switch (currentScreen) {
+            case MARKETPLACE:
+                if (freeMarketContainer != null) {
+                    freeMarketContainer.render(guiGraphics, mouseX, mouseY, partialTick);
+                }
+                break;
+            case AUCTIONS:
+                if (auctionContainer != null) {
+                    auctionContainer.render(guiGraphics, mouseX, mouseY, partialTick);
+                }
+                break;
+            case LEADERBOARD:
+                if (leaderboardContainer != null) {
+                    leaderboardContainer.render(guiGraphics, mouseX, mouseY, partialTick);
+                }
+                break;
+        }
+        
+        // Render popup overlays on top of everything
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            placeBidPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            cancelAuctionPopup.render(guiGraphics, mouseX, mouseY, partialTick);
         }
     }
     
-    private void renderWalletDisplay(GuiGraphics guiGraphics) {
-        // Draw wallet display in top right of screen with background
+    /**
+     * Renders the tab navigation buttons at the top of the container.
+     */
+    void renderTabButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        // Calculate container dimensions (same as createMarketplaceContainer)
+        int containerWidth = (int)(width * 0.8);
+        int containerHeight = (int)(height * 0.7);
+        int containerX = (width - containerWidth) / 2;
+        int containerY = (height - containerHeight) / 2;
+        
+        // Tab button dimensions - match container width exactly
+        ScreenType[] screens = ScreenType.values();
+        int numTabs = screens.length;
+        int tabMargin = 4; // Spacing between tabs
+        int totalTabArea = containerWidth; // Total width to use for tabs
+        int tabWidth = (totalTabArea - (tabMargin * (numTabs - 1))) / numTabs;
+        int tabHeight = 24;
+        int tabY = containerY - tabHeight - 4; // Position above container
+        
+        // Render each tab button
+        String[] tabLabels = {"Marketplace", "Auctions", "Leaderboard"};
+        
+        for (int i = 0; i < screens.length; i++) {
+            int tabX = containerX + (i * (tabWidth + tabMargin));
+            boolean isActive = currentScreen == screens[i];
+            boolean isHovered = mouseX >= tabX && mouseX <= tabX + tabWidth && 
+                               mouseY >= tabY && mouseY <= tabY + tabHeight;
+            
+            // Determine colors based on state
+            int backgroundColor;
+            int textColor;
+            
+            if (isActive) {
+                // Active tab - bright color
+                backgroundColor = 0xCC4CAF50; // Green
+                textColor = 0xFFFFFFFF; // White
+            } else if (isHovered) {
+                // Hovered tab - lighter gray
+                backgroundColor = 0xCC505050;
+                textColor = 0xFFE0E0E0;
+            } else {
+                // Inactive tab - dark gray
+                backgroundColor = 0xCC2A2A2A;
+                textColor = 0xFF999999;
+            }
+            
+            // Draw tab background
+            guiGraphics.fill(tabX, tabY, tabX + tabWidth, tabY + tabHeight, backgroundColor);
+            
+            // Draw tab border
+            guiGraphics.fill(tabX, tabY, tabX + tabWidth, tabY + 1, 0x80404040); // Top
+            guiGraphics.fill(tabX, tabY + 1, tabX + 1, tabY + tabHeight - 1, 0x80404040); // Left
+            guiGraphics.fill(tabX + tabWidth - 1, tabY + 1, tabX + tabWidth, tabY + tabHeight - 1, 0x80404040); // Right
+            guiGraphics.fill(tabX, tabY + tabHeight - 1, tabX + tabWidth, tabY + tabHeight, 0x80404040); // Bottom
+            
+            // Draw tab label (centered)
+            Component label = Component.literal(tabLabels[i]);
+            int labelWidth = this.font.width(label);
+            int labelX = tabX + (tabWidth - labelWidth) / 2;
+            int labelY = tabY + (tabHeight - this.font.lineHeight) / 2;
+            guiGraphics.drawString(this.font, label, labelX, labelY, textColor);
+        }
+    }
+    
+    void renderWalletDisplay(GuiGraphics guiGraphics) {
+        // Draw wallet display in top right corner with percentage-based positioning
         long money = cachedBalance; // Use only cached balance - no polling
         String formattedMoney = "$" + formatPrice(money);
         
@@ -279,27 +526,40 @@ public class FreeMarketGuiScreen extends Screen {
         int moneyWidth = this.font.width(walletText);
         int maxTextWidth = Math.max(titleWidth, moneyWidth);
         
-        // Calculate background box dimensions first
-        int marginX = GuiScalingHelper.responsiveWidth(15, 10, 20);
-        int marginY = GuiScalingHelper.responsiveHeight(8, 6, 12);
-        int backgroundWidth = maxTextWidth + (marginX * 2);
-        int backgroundHeight = GuiScalingHelper.responsiveHeight(40, 30, 50); // Fixed height for better centering
+        // Calculate background box dimensions using percentage-based scaling
+        int paddingX = (int)(width * 0.01); // 1% of screen width for horizontal padding
+        int paddingY = (int)(height * 0.008); // 0.8% of screen height for vertical padding
         
-        // Position background box in top right
-        int backgroundX = GuiScalingHelper.percentageX(0.85f) - backgroundWidth; // 85% from left, minus width
-        int backgroundY = GuiScalingHelper.responsiveHeight(15, 10, 25);
+        // Width: text width plus horizontal padding (stretches to fit text)
+        int backgroundWidth = maxTextWidth + (paddingX * 2);
+        
+        // Height: percentage-based, but ensure it fits both text lines with padding
+        int minHeightForText = (paddingY * 2) + (this.font.lineHeight * 2) + 4; // 4px spacing between lines
+        int backgroundHeight = Math.max((int)(height * 0.035), minHeightForText); // 3.5% of screen height or min required
+        
+        // Position in top-right corner using percentage-based positioning
+        int widgetMarginX = (int)(width * 0.03); // 3% margin from edges
+        int widgetMarginY = (int)(height * 0.03); // 3% margin from edges
+        int backgroundX = width - backgroundWidth - widgetMarginX; // Right edge
+        int backgroundY = widgetMarginY; // Top edge
         
         // Draw background box with semi-transparent colors (matching container)
         guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0x801E1E1E); // 50% opacity
         guiGraphics.fill(backgroundX + 1, backgroundY + 1, backgroundX + backgroundWidth - 1, backgroundY + backgroundHeight - 1, 0x802A2A2A); // 50% opacity
+        
+        // Draw border
+        guiGraphics.fill(backgroundX, backgroundY, backgroundX + backgroundWidth, backgroundY + 2, 0x80404040);
+        guiGraphics.fill(backgroundX, backgroundY + 2, backgroundX + 2, backgroundY + backgroundHeight - 2, 0x80404040);
+        guiGraphics.fill(backgroundX + backgroundWidth - 2, backgroundY + 2, backgroundX + backgroundWidth, backgroundY + backgroundHeight - 2, 0x80404040);
+        guiGraphics.fill(backgroundX, backgroundY + backgroundHeight - 2, backgroundX + backgroundWidth, backgroundY + backgroundHeight, 0x80404040);
         
         // Calculate text positions (centered within background box)
         int titleX = backgroundX + (backgroundWidth - titleWidth) / 2;
         int moneyX = backgroundX + (backgroundWidth - moneyWidth) / 2;
         
         // Calculate vertical centering
-        int titleY = backgroundY + marginY;
-        int moneyY = backgroundY + backgroundHeight - marginY - GuiScalingHelper.responsiveHeight(8, 6, 12);
+        int titleY = backgroundY + paddingY;
+        int moneyY = backgroundY + backgroundHeight - paddingY - this.font.lineHeight;
         
         // Draw title (centered horizontally and vertically)
         guiGraphics.drawString(this.font, titleText, titleX, titleY, 0xFFFFFFFF);
@@ -400,35 +660,190 @@ public class FreeMarketGuiScreen extends Screen {
     
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (freeMarketContainer != null && freeMarketContainer.mouseClicked(mouseX, mouseY, button)) {
+        // Handle popup overlay clicks first (highest priority)
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
+        // Don't process tab clicks or container clicks if popup is visible
+        if (isAnyPopupVisible()) {
+            return false; // Let popup handle all clicks
+        }
+        
+        // Check if tab button was clicked
+        if (handleTabClick(mouseX, mouseY)) {
             return true;
         }
+        
+        // Route to appropriate container
+        switch (currentScreen) {
+            case MARKETPLACE:
+                if (freeMarketContainer != null && freeMarketContainer.mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+                break;
+            case AUCTIONS:
+                if (auctionContainer != null && auctionContainer.mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+                break;
+            case LEADERBOARD:
+                if (leaderboardContainer != null && leaderboardContainer.mouseClicked(mouseX, mouseY, button)) {
+                    return true;
+                }
+                break;
+        }
+        
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+    
+    /**
+     * Handles clicks on tab buttons.
+     * @return true if a tab was clicked
+     */
+    private boolean handleTabClick(double mouseX, double mouseY) {
+        // Calculate container dimensions (same as createMarketplaceContainer)
+        int containerWidth = (int)(width * 0.8);
+        int containerHeight = (int)(height * 0.7);
+        int containerX = (width - containerWidth) / 2;
+        int containerY = (height - containerHeight) / 2;
+        
+        // Tab button dimensions - match container width exactly
+        ScreenType[] screens = ScreenType.values();
+        int numTabs = screens.length;
+        int tabMargin = 4;
+        int totalTabArea = containerWidth; // Total width to use for tabs
+        int tabWidth = (totalTabArea - (tabMargin * (numTabs - 1))) / numTabs;
+        int tabHeight = 24;
+        int tabY = containerY - tabHeight - 4;
+        
+        // Check each tab button
+        for (int i = 0; i < screens.length; i++) {
+            int tabX = containerX + (i * (tabWidth + tabMargin));
+            
+            if (mouseX >= tabX && mouseX <= tabX + tabWidth && 
+                mouseY >= tabY && mouseY <= tabY + tabHeight) {
+                // Tab clicked - switch screen
+                switchScreen(screens[i]);
+                // Play click sound
+                var player = Minecraft.getInstance().player;
+                if (player != null) {
+                    player.playSound(SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                return true;
+            }
+        }
+        
+        return false;
     }
     
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (freeMarketContainer != null && freeMarketContainer.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
+        // Handle popup overlay key presses first (highest priority)
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
+        // Route to appropriate container
+        switch (currentScreen) {
+            case MARKETPLACE:
+                if (freeMarketContainer != null && freeMarketContainer.keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+                break;
+            case AUCTIONS:
+                if (auctionContainer != null && auctionContainer.keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+                break;
+            case LEADERBOARD:
+                if (leaderboardContainer != null && leaderboardContainer.keyPressed(keyCode, scanCode, modifiers)) {
+                    return true;
+                }
+                break;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
     }
     
     @Override
     public boolean charTyped(char codePoint, int modifiers) {
-        if (freeMarketContainer != null && freeMarketContainer.charTyped(codePoint, modifiers)) {
-            return true;
+        // Handle popup overlay character typing first (highest priority)
+        if (placeBidPopup != null && placeBidPopup.isVisible()) {
+            if (placeBidPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
+            if (cancelAuctionPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        // Route to appropriate container
+        switch (currentScreen) {
+            case MARKETPLACE:
+                if (freeMarketContainer != null && freeMarketContainer.charTyped(codePoint, modifiers)) {
+                    return true;
+                }
+                break;
+            case AUCTIONS:
+                if (auctionContainer != null && auctionContainer.charTyped(codePoint, modifiers)) {
+                    return true;
+                }
+                break;
+            case LEADERBOARD:
+                if (leaderboardContainer != null && leaderboardContainer.charTyped(codePoint, modifiers)) {
+                    return true;
+                }
+                break;
         }
         return super.charTyped(codePoint, modifiers);
     }
     
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaX, double deltaY) {
-        if (freeMarketContainer != null) {
-            // Use smoother scrolling with smaller increments
-            int scrollAmount = (int) (-deltaY * 2); // Multiply by 2 for smoother scrolling
-            freeMarketContainer.scroll(scrollAmount);
-            return true;
+        // Route to appropriate container
+        switch (currentScreen) {
+            case MARKETPLACE:
+                if (freeMarketContainer != null) {
+                    // Scroll by single row (same as auction container)
+                    int scrollAmount = (int) -deltaY;
+                    freeMarketContainer.scroll(scrollAmount);
+                    return true;
+                }
+                break;
+            case AUCTIONS:
+                if (auctionContainer != null) {
+                    // Scroll by single row (same as marketplace container)
+                    int scrollAmount = (int) -deltaY;
+                    auctionContainer.scroll(scrollAmount);
+                    return true;
+                }
+                break;
+            case LEADERBOARD:
+                if (leaderboardContainer != null) {
+                    int scrollAmount = (int) (-deltaY * 1); // Single row scrolling for leaderboard
+                    leaderboardContainer.scroll(scrollAmount);
+                    return true;
+                }
+                break;
         }
         return super.mouseScrolled(mouseX, mouseY, deltaX, deltaY);
     }

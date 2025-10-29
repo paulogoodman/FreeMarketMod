@@ -1,11 +1,13 @@
 package com.freemarket.server.network;
 
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.network.MarketplaceSyncPacket;
+import com.freemarket.common.data.FreeMarketItemDTO;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
 
+import com.google.gson.GsonBuilder;
 import java.util.List;
 
 /**
@@ -19,7 +21,12 @@ public class ServerMarketplaceSync {
      * @param items the marketplace items to sync
      */
     public static void syncToAllPlayers(ServerLevel level, List<FreeMarketItem> items) {
-        MarketplaceSyncPacket packet = MarketplaceSyncPacket.fromItems(items);
+        // Convert FreeMarketItem objects to DTOs for serialization
+        List<FreeMarketItemDTO> dtos = items.stream()
+            .map(FreeMarketItemDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_SYNC, new GsonBuilder().create().toJson(dtos));
         net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(packet);
     }
     
@@ -29,7 +36,12 @@ public class ServerMarketplaceSync {
      * @param items the marketplace items to sync
      */
     public static void syncToPlayer(ServerPlayer player, List<FreeMarketItem> items) {
-        MarketplaceSyncPacket packet = MarketplaceSyncPacket.fromItems(items);
+        // Convert FreeMarketItem objects to DTOs for serialization
+        List<FreeMarketItemDTO> dtos = items.stream()
+            .map(FreeMarketItemDTO::new)
+            .collect(java.util.stream.Collectors.toList());
+        
+        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_SYNC, new GsonBuilder().create().toJson(dtos));
         net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, packet);
     }
     

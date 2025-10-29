@@ -1,7 +1,8 @@
 package com.freemarket.client.handlers;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.common.network.WalletRequestPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 
 /**
  * Client-side wallet handler for the FreeMarket mod.
@@ -33,7 +34,7 @@ public class ClientWalletHandler {
                 }
                 
                 // In multiplayer, request balance from server
-                WalletRequestPacket packet = new WalletRequestPacket();
+                FreeMarketPacket packet = FreeMarketPacket.emptyRequest(PacketType.WALLET_REQUEST);
                 net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                 
                 // Return cached balance while waiting for server response

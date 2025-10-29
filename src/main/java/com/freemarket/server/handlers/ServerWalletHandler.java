@@ -2,6 +2,9 @@ package com.freemarket.server.handlers;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.PlayerWalletAttachment;
+import com.freemarket.server.data.LeaderboardDataManager;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -41,6 +44,9 @@ public class ServerWalletHandler {
         wallet.setBalance(amount);
         
         FreeMarket.LOGGER.debug("Set {} money to: {}", player.getName().getString(), amount);
+        
+        // Update leaderboard data
+        updateLeaderboard(player);
     }
     
     /**
@@ -56,6 +62,9 @@ public class ServerWalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         wallet.addBalance(amount);
+        
+        // Update leaderboard data
+        updateLeaderboard(player);
     }
     
     /**
@@ -72,6 +81,8 @@ public class ServerWalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         if (wallet.removeBalance(amount)) {
+            // Update leaderboard data
+            updateLeaderboard(player);
             return true;
         }
         
@@ -92,5 +103,20 @@ public class ServerWalletHandler {
         
         PlayerWalletAttachment wallet = player.getData(PlayerWalletAttachment.WALLET);
         return wallet.hasEnoughBalance(amount);
+    }
+    
+    /**
+     * Updates the leaderboard with the player's current balance.
+     * @param player the player whose balance to update
+     */
+    private static void updateLeaderboard(Player player) {
+        if (player instanceof ServerPlayer serverPlayer) {
+            ServerLevel level = serverPlayer.serverLevel();
+            String uuid = serverPlayer.getUUID().toString();
+            String playerName = serverPlayer.getName().getString();
+            long balance = getPlayerMoney(player);
+            
+            LeaderboardDataManager.updatePlayerBalance(level, uuid, playerName, balance);
+        }
     }
 }

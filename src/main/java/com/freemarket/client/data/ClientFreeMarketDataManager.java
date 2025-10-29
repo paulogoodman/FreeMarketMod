@@ -17,7 +17,6 @@ import java.util.List;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.attachments.ItemComponentHandler;
 
 /**
  * Client-side marketplace data manager for reading marketplace data from world files.

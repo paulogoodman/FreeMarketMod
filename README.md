@@ -1,25 +1,51 @@
+## 🏛️ Free Market
 
-Installation information
-=======
+A **performant, GUI-driven economy mod** designed for modded Minecraft servers.  
 
-This template repository can be directly cloned to get you started with a new
-mod. Simply create a new repository cloned from this one, by following the
-instructions provided by [GitHub](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-repository-from-a-template).
+---
 
-Once you have your clone, simply open the repository in the IDE of your choice. The usual recommendation for an IDE is either IntelliJ IDEA or Eclipse.
+### Current Features
 
-If at any point you are missing libraries in your IDE, or you've run into problems you can
-run `gradlew --refresh-dependencies` to refresh the local cache. `gradlew clean` to reset everything 
-{this does not affect your code} and then start the process again.
+- **GUI-Driven Marketplace** — No chat clutter; trade entirely through a responsive UI.  
+- **Component-Driven** — Supports all modded content via Minecraft’s data component system.  
+- **Admin Mode** — Add or remove marketplace listings directly from the UI.  
+- **Quick Access** — Default keybind to open the market: **`O`**.  
+- **Optimized for Performance** — Built to scale smoothly on both small and large servers.  
 
-Mapping Names:
-============
-By default, the MDK is configured to use the official mapping names from Mojang for methods and fields 
-in the Minecraft codebase. These names are covered by a specific license. All modders should be aware of this
-license. For the latest license text, refer to the mapping file itself, or the reference copy here:
-https://github.com/NeoForged/NeoForm/blob/main/Mojang.md
+---
 
-Additional Resources: 
-==========
-Community Documentation: https://docs.neoforged.net/  
-NeoForged Discord: https://discord.neoforged.net/
+### Planned Features
+
+-  Multiple market instances (e.g. per town, faction, or world).  
+- Tie markets to NPCs or named mobs.  
+- Integration with permission mods (FTB Ranks, LuckPerms, etc).  
+- Player-driven auctions and listings with limited stock.  
+- Command execution sales.  
+- Custom item categories for better organization.  
+- Balance leaderboard.  
+
+---
+
+### Gallery
+
+![5x5 layout](https://cdn.modrinth.com/data/cached_images/27fd2ee5f8d6a28e6ace4a9906f1e661956c123d_0.webp)  
+![3x3 layout](https://cdn.modrinth.com/data/cached_images/70f02d605c700a0bbb1539d290b26a69365a9462_0.webp)  
+![3x4 layout with admin mode enabled](https://cdn.modrinth.com/data/cached_images/0ec12c28a4bd2857de2482a7930eb169efb948b6_0.webp)  
+
+---
+
+### Commands
+
+```
+/freemarket help Show help menu
+/freemarket pay <player> <amount> Pay another player
+/freemarket balance Show your balance
+/freemarket balance <player> Show a player's balance (OP)
+/freemarket balance <player> add <amount> Add money (OP)
+/freemarket balance <player> remove <amount> Remove money (OP)
+/freemarket balance <player> set <amount> Set balance (OP)
+/freemarket adminmode [true/false] Toggle admin GUI mode (OP)
+/freemarket itemdata Show held item NBT/Component data (OP)
+/freemarket list hand <buy> <sell> List held item on market (OP)
+/freemarket list item <item> <buy> <sell> <qty> List specific item on market (OP)
+```

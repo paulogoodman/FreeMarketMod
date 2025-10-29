@@ -1,8 +1,6 @@
 package com.freemarket.client.gui;
 
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.components.Renderable;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
@@ -15,9 +13,9 @@ import java.util.List;
 import java.util.Map;
 
 
-import com.freemarket.Config;
 import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.network.MarketplaceItemOperationPacket;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.common.managers.ItemCategoryManager;
@@ -29,12 +27,9 @@ import net.minecraft.world.item.ItemStack;
 /**
  * A scrollable container for displaying free market items with search functionality.
  */
-public class FreeMarketContainer implements Renderable {
+public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     
-    private final int x, y, width, height;
     private List<FreeMarketItem> allItems;
-    private final FreeMarketGuiScreen parentScreen;
-    private EditBox searchBox;
     
     // Caching for processed items with component data
     private final Map<String, ItemStack> processedItemCache = new HashMap<>();
@@ -43,32 +38,8 @@ public class FreeMarketContainer implements Renderable {
     private final Map<String, Boolean> cachedCanBuyStates = new HashMap<>();
     private final Map<String, Boolean> cachedCanSellStates = new HashMap<>();
     
-    // Caching for category filtering to prevent recalculation on every render
-    private List<ItemCategoryManager.Category> cachedCategories;
-    private Map<ItemCategoryManager.Category, Integer> cachedCategoryCounts;
-    private long lastCategoryCacheUpdate = 0;
-    private static final long CATEGORY_CACHE_DURATION = 1000; // 1 second cache
-    
-    // Caching for item filtering to prevent recalculation on every render
-    private List<FreeMarketItem> cachedItemsToRender;
-    private ItemCategoryManager.Category lastFilteredCategory;
-    private String lastSearchText;
-    private long lastItemCacheUpdate = 0;
-    private static final long ITEM_CACHE_DURATION = 500; // 500ms cache for more responsive search
-    // Item card renderer for proper GUI scaling
-    private final ItemCardRenderer itemCardRenderer = new ItemCardRenderer();
-    
-    // GUI Scale to Grid Layout Mapping
-    // Scale 1 = 5x5, Scale 2 = 4x4, Scale 3 = 3x3, Scale 4 = 2x2, Scale 5 = 1x1
-    // This provides predictable layouts for each GUI scale setting
-    
-    private int scrollOffset = 0;
-    private int maxVisibleItems; // Calculated dynamically based on available space
-    private int itemHeight; // Calculated responsively based on card content
-    private int itemsPerRow; // Calculated dynamically based on available width
-    private int rowsOfItems; // Calculated dynamically based on available height
-    private int itemSpacing; // Will be calculated responsively
-    private ItemCategoryManager.Category selectedCategory = ItemCategoryManager.Category.ALL;
+    // Unified card renderer for proper GUI scaling
+    private final UnifiedItemCardRenderer unifiedRenderer = new UnifiedItemCardRenderer();
     
     // Buy button state tracking - per item
     private final java.util.Map<String, Long> buyButtonCooldowns = new java.util.HashMap<>();
@@ -79,15 +50,8 @@ public class FreeMarketContainer implements Renderable {
     private static final long SELL_COOLDOWN_MS = 250; // 250ms cooldown
     
     public FreeMarketContainer(int x, int y, int width, int height, List<FreeMarketItem> items, FreeMarketGuiScreen parentScreen) {
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
+        super(x, y, width, height, parentScreen);
         this.allItems = new ArrayList<>(items);
-        this.parentScreen = parentScreen;
-        
-        // Calculate responsive dimensions that fit within the container
-        calculateResponsiveDimensions();
     }
     
     /**
@@ -116,117 +80,17 @@ public class FreeMarketContainer implements Renderable {
         updateFreeMarketItems(newItems, false);
     }
     
-    private void calculateResponsiveDimensions() {
-        // Calculate grid layout based on GUI scale mapping
-        calculateOptimalGridLayout();
-        
-        // Calculate available space for items
-        int sidebarWidth = (int)(width * 0.2); // 20% of container width
-        int sidebarMargin = (int)(width * 0.02); // 2% margin
-        int rightMargin = (int)(width * 0.02); // 2% margin
-        int availableWidth = width - sidebarWidth - sidebarMargin - rightMargin;
-        
-        // Calculate card spacing based on grid size
-        int cardMargin = Math.max(2, (int)(width * 0.005)); // Minimum 2px margin between cards
-        int shadowOffset = Math.max(1, (int)(width * 0.002)); // Minimum 1px shadow offset
-        
-        // Calculate card width to fit the grid perfectly
-        int totalSpacing = (itemsPerRow - 1) * (cardMargin + shadowOffset);
-        int cardWidth = (availableWidth - totalSpacing) / itemsPerRow;
-        
-        // Ensure minimum card size for usability
-        int minCardWidth = Math.max(40, (int)(width * 0.05)); // Minimum 5% of container width
-        cardWidth = Math.max(cardWidth, minCardWidth);
-        
-        // Calculate card height based on available vertical space
-        int availableHeight = height - (int)(height * 0.2); // Leave space for search box and margins
-        int verticalMargin = Math.max(2, (int)(height * 0.005)); // Minimum 2px vertical margin
-        int totalVerticalSpacing = (rowsOfItems - 1) * verticalMargin;
-        int cardHeight = (availableHeight - totalVerticalSpacing) / rowsOfItems;
-        
-        // Ensure minimum card height for usability
-        int minCardHeight = Math.max(30, (int)(height * 0.05)); // Minimum 5% of container height
-        cardHeight = Math.max(cardHeight, minCardHeight);
-        
-        // Calculate item spacing
-        this.itemSpacing = cardWidth + cardMargin + shadowOffset;
-        this.itemHeight = cardHeight + verticalMargin;
-        
-        // Store the calculated dimensions for use in rendering
-        this.calculatedItemWidth = cardWidth;
-    }
-    
-    /**
-     * Maps GUI scale to grid layout
-     * Scale 1 = 5x5, Scale 2 = 4x4, Scale 3 = 3x3, Scale 4 = 2x2, Scale 5 = 1x1
-     */
-    private void calculateOptimalGridLayout() {
-        Minecraft client = Minecraft.getInstance();
-        float guiScale = (float) client.getWindow().getGuiScale();
-        
-        // Map GUI scale to grid size (inverse relationship)
-        int gridSize;
-        if (guiScale <= 1.0f) {
-            gridSize = 5; // Scale 1 = 5x5 (most items)
-        } else if (guiScale <= 2.0f) {
-            gridSize = 4; // Scale 2 = 4x4
-        } else if (guiScale <= 3.0f) {
-            gridSize = 3; // Scale 3 = 3x3
-        } else if (guiScale <= 4.0f) {
-            gridSize = 2; // Scale 4 = 2x2
-        } else {
-            gridSize = 1; // Scale 5+ = 1x1 (largest cards)
-        }
-        
-        // Set grid layout based on GUI scale
-        this.itemsPerRow = gridSize;
-        this.rowsOfItems = gridSize;
-        this.maxVisibleItems = gridSize * gridSize;
-        
-        // Ensure we always show at least 1 item
-        this.itemsPerRow = Math.max(1, this.itemsPerRow);
-        this.rowsOfItems = Math.max(1, this.rowsOfItems);
-        this.maxVisibleItems = Math.max(1, this.maxVisibleItems);
-    }
     
     
-    // Add a field to store the calculated item width
-    private int calculatedItemWidth = 130;
-    
-    public void init() {
-        // Recalculate responsive dimensions for current screen size
-        calculateResponsiveDimensions();
-        
-        // Create search box with proper spacing from title
-        int searchWidth = (int)(width * 0.5); // 50% of container width
-        int searchHeight = (int)(height * 0.05); // 5% of container height
-        int searchX = x + (width - searchWidth) / 2; // Center horizontally
-        int searchY = y + (int)(height * 0.08); // 8% from top (below title with space)
-        
-        this.searchBox = new EditBox(
-            net.minecraft.client.Minecraft.getInstance().font,
-            searchX, searchY, searchWidth, searchHeight,
-            Component.translatable("gui.FreeMarket.marketplace.search_placeholder")
-        );
-        this.searchBox.setResponder(this::onSearchChanged);
-        this.searchBox.setMaxLength(50); // Set max length for search
-        this.searchBox.setValue(""); // Clear any initial value
-    }
-    
-    // calculateMaxVisibleItems is no longer needed - it's calculated in calculateResponsiveDimensions()
-    
-    private void onSearchChanged(String searchText) {
-        scrollOffset = 0; // Reset scroll when searching
-    }
     
     public void addItem(FreeMarketItem item) {
         allItems.add(item);
-        onSearchChanged(searchBox != null ? searchBox.getValue() : "");
+        invalidateDataCache();
     }
     
     public void removeItem(FreeMarketItem item) {
         allItems.remove(item);
-        onSearchChanged(searchBox != null ? searchBox.getValue() : "");
+        invalidateDataCache();
     }
     
     public void updateItems(List<FreeMarketItem> newItems) {
@@ -235,11 +99,7 @@ public class FreeMarketContainer implements Renderable {
         // Clear cache when items are updated
         clearProcessedItemCache();
         updateButtonStates(); // Update button states when items change
-        onSearchChanged(searchBox != null ? searchBox.getValue() : "");
-    }
-    
-    public void scroll(int delta) {
-        scrollOffset = Math.max(0, Math.min(getMaxScroll(), scrollOffset + delta));
+        invalidateDataCache();
     }
     
     public void scrollToTop() {
@@ -257,25 +117,19 @@ public class FreeMarketContainer implements Renderable {
         
         // Draw subtle border with rounded corners effect (semi-transparent)
         guiGraphics.fill(x, y, x + width, y + 2, 0x80404040); // 50% opacity
-        guiGraphics.fill(x, y, x + 2, y + height, 0x80404040); // 50% opacity
-        guiGraphics.fill(x + width - 2, y, x + width, y + height, 0x80404040); // 50% opacity
+        guiGraphics.fill(x, y + 2, x + 2, y + height - 2, 0x80404040); // 50% opacity
+        guiGraphics.fill(x + width - 2, y + 2, x + width, y + height - 2, 0x80404040); // 50% opacity
         guiGraphics.fill(x, y + height - 2, x + width, y + height, 0x80404040); // 50% opacity
-        
-        // Draw title (simple rendering with proper spacing from search bar)
-        Component title = Component.literal(Config.MARKETPLACE_NAME.get());
-        int titleWidth = net.minecraft.client.Minecraft.getInstance().font.width(title);
-        int titleX = x + (width - titleWidth) / 2;
-        int titleY = y + (int)(height * 0.02); // 2% from top (reduced to avoid search bar)
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, title, titleX, titleY, 0xFFE0E0E0);
         
         // Render search box
         if (searchBox != null) {
             searchBox.render(guiGraphics, mouseX, mouseY, partialTick);
         }
         
-        // Wallet display is now handled in the main screen
-        
-        // Add button is now handled as a special marketplace item
+        // Draw Add Item button (top-right) - only visible in admin mode
+        if (com.freemarket.common.handlers.AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            renderAddItemButton(guiGraphics, mouseX, mouseY);
+        }
         
         // Draw category sidebar
         renderCategorySidebar(guiGraphics, mouseX, mouseY);
@@ -283,6 +137,60 @@ public class FreeMarketContainer implements Renderable {
         // Get items to render based on selected category and search
         List<FreeMarketItem> itemsToRender = getItemsToRender();
         
+        // Render the data grid
+        renderDataGrid(guiGraphics, itemsToRender, mouseX, mouseY, partialTick);
+        
+        // Draw scroll bar
+        drawScrollBar(guiGraphics);
+        
+        // Draw item count
+        int actualItemCount = itemsToRender.size();
+        Component countText = Component.translatable("gui.FreeMarket.marketplace.count", actualItemCount, allItems.size());
+        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + GuiScalingHelper.responsiveWidth(10, 8, 15), y + height - GuiScalingHelper.responsiveHeight(15, 12, 20), 0xCCCCCC);
+    }
+    
+    // Abstract method implementations
+    
+    @Override
+    protected Component getSearchPlaceholder() {
+        return Component.translatable("gui.FreeMarket.marketplace.search_placeholder");
+    }
+    
+    @Override
+    protected List<FreeMarketItem> getAllData() {
+        return allItems;
+    }
+    
+    @Override
+    protected List<FreeMarketItem> filterByCategory(List<FreeMarketItem> data, ItemCategoryManager.Category category) {
+        return ItemCategoryManager.filterItemsByCategory(data, category);
+    }
+    
+    @Override
+    protected List<FreeMarketItem> filterBySearch(List<FreeMarketItem> data, String searchText) {
+        if (searchText.isEmpty()) {
+            return data;
+        }
+        String searchLower = searchText.toLowerCase();
+        return data.stream()
+            .filter(item -> item.getItemName().toLowerCase().contains(searchLower))
+            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+    }
+    
+    @Override
+    protected Map<ItemCategoryManager.Category, Integer> getCategoryCounts() {
+        return ItemCategoryManager.getCategoryCounts(allItems);
+    }
+    
+    @Override
+    protected ItemCategoryManager.Category getItemCategory(FreeMarketItem item) {
+        return ItemCategoryManager.getCategoryForItem(item.getItemStack());
+    }
+    
+    @Override
+    protected void renderDataGrid(GuiGraphics guiGraphics, List<FreeMarketItem> itemsToRender, int mouseX, int mouseY, float partialTick) {
+        // Use getItemsToRender to include admin add item
+        itemsToRender = getItemsToRender();
         // Draw items with percentage-based positioning (aligned with sidebar)
         int sidebarWidth = (int)(width * 0.2); // Match calculateResponsiveDimensions
         int sidebarMargin = (int)(width * 0.02); // Match calculateResponsiveDimensions
@@ -290,6 +198,9 @@ public class FreeMarketContainer implements Renderable {
         int startX = x + sidebarWidth + sidebarMargin; // Start after sidebar with consistent margin
         int itemsRendered = 0;
         int maxItemsToRender = maxVisibleItems;
+        
+        // Track tooltip to render last (after all cards)
+        ItemStack tooltipStack = null;
         
         for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
             for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
@@ -299,154 +210,157 @@ public class FreeMarketContainer implements Renderable {
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
                 
-                // Check if this is the special "add item" entry
-                if (isAddItemEntry(item)) {
-                    // Render special add item card with plus icon (no buy/sell buttons)
-                    renderAddItemCard(guiGraphics, itemX, itemY, calculatedItemWidth, cardHeight, mouseX, mouseY);
-                } else {
-                    // Create item stack with the marketplace quantity for display
-                    net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
-                    displayStack.setCount(item.getQuantity());
-                    
-                    // Render the modern item card using the new renderer with GUI scale and cooldown states
-                    Minecraft client = Minecraft.getInstance();
-                    float guiScale = (float) client.getWindow().getGuiScale();
-                    
-                    // Get button states
-                    boolean canBuy = getCachedCanBuyState(item);
-                    boolean canSell = getCachedCanSellState(item);
-                    boolean isBuyCooldown = isBuyButtonInCooldown(item);
-                    boolean isSellCooldown = isSellButtonInCooldown(item);
-                    
-                    itemCardRenderer.renderItemCard(guiGraphics, displayStack, itemX, itemY, 
-                                                 calculatedItemWidth, cardHeight, 
-                                                 mouseX, mouseY, guiScale,
-                                                 canBuy, canSell, isBuyCooldown, isSellCooldown,
-                                                 item.getBuyPrice(), item.getSellPrice());
+                // Create item stack with the marketplace quantity for display
+                net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
+                displayStack.setCount(item.getQuantity());
+                
+                // Render using unified renderer with GUI scale and cooldown states
+                Minecraft client = Minecraft.getInstance();
+                float guiScale = (float) client.getWindow().getGuiScale();
+                
+                // Create button config for marketplace
+                CardButtonConfig config = CardButtonConfig.forMarketplace(
+                    item.getBuyPrice(), item.getSellPrice(),
+                    getCachedCanBuyState(item), getCachedCanSellState(item),
+                    isBuyButtonInCooldown(item), isSellButtonInCooldown(item)
+                );
+                
+                ItemStack cardTooltip = unifiedRenderer.renderCard(guiGraphics, displayStack, config, null,
+                                          itemX, itemY, calculatedItemWidth, cardHeight, 
+                                          mouseX, mouseY, guiScale, 
+                                          parentScreen != null && parentScreen.isAnyPopupVisible());
+                
+                // Collect tooltip for deferred rendering
+                if (cardTooltip != null) {
+                    tooltipStack = cardTooltip;
                 }
+                
                 itemsRendered++;
             }
         }
         
-        // Draw scroll bar
-        drawScrollBar(guiGraphics);
-        
-        // Draw item count (exclude add item from count)
-        int actualItemCount = itemsToRender.size();
-        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
-            actualItemCount--; // Subtract 1 for the add item
+        // Render tooltip AFTER all cards (so it appears on top)
+        if (tooltipStack != null) {
+            UnifiedItemCardRenderer.renderItemTooltip(guiGraphics, tooltipStack, mouseX, mouseY);
         }
-        Component countText = Component.translatable("gui.FreeMarket.marketplace.count", actualItemCount, allItems.size());
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, countText, x + GuiScalingHelper.responsiveWidth(10, 8, 15), y + height - GuiScalingHelper.responsiveHeight(15, 12, 20), 0xCCCCCC);
     }
     
-    
-    
-    private void renderCategorySidebar(GuiGraphics guiGraphics, int mouseX, int mouseY) {
-        // Use percentage-based sizing for sidebar with matching margins
+    @Override
+    protected boolean handleDataClick(FreeMarketItem item, double mouseX, double mouseY, int button) {
+        // Handle edit button clicks on items
+        // Use SAME calculations as rendering (lines 324-325) for consistency
+        int sidebarMargin = (int)(width * 0.02); // Match calculateResponsiveDimensions
         int sidebarWidth = (int)(width * 0.2); // 20% of container width
-        int sidebarX = x + (int)(width * 0.02); // 2% margin from left (matches right margin)
-        int sidebarY = y + (int)(height * 0.15); // 15% from top (below search box)
-        int sidebarHeight = height - (int)(height * 0.2); // 80% of container height
+        int startY = y + (int)(height * 0.15); // 15% from top (matches sidebar start)
+        int startX = x + sidebarWidth + sidebarMargin; // Start after sidebar with consistent margin
+        int itemsRendered = 0;
+        int maxItemsToRender = maxVisibleItems;
+        List<FreeMarketItem> itemsToRender = getItemsToRender();
         
-        // Draw sidebar background (semi-transparent)
-        guiGraphics.fill(sidebarX, sidebarY, sidebarX + sidebarWidth, sidebarY + sidebarHeight, 0x801A1A1A); // 50% opacity
-        guiGraphics.fill(sidebarX + 1, sidebarY + 1, sidebarX + sidebarWidth - 1, sidebarY + sidebarHeight - 1, 0x802D2D2D); // 50% opacity
-        
-        // Draw sidebar title
-        Component sidebarTitle = Component.literal("Categories");
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, sidebarTitle, sidebarX + GuiScalingHelper.responsiveWidth(5, 4, 8), sidebarY + GuiScalingHelper.responsiveHeight(5, 4, 8), 0xFFE0E0E0);
-        
-        // Get cached categories (filter out categories with zero items)
-        List<ItemCategoryManager.Category> categories = getCachedCategories();
-        
-        int categoryY = sidebarY + GuiScalingHelper.responsiveHeight(20, 16, 28);
-        int categoryHeight = GuiScalingHelper.responsiveHeight(16, 12, 22);
-        
-        for (int i = 0; i < categories.size(); i++) {
-            ItemCategoryManager.Category category = categories.get(i);
-            int currentCategoryY = categoryY + i * categoryHeight;
-            
-            boolean isSelected = category == selectedCategory;
-            boolean isHovered = mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
-                               mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight;
-            
-            // Update hover state
-            
-            // Draw category background (semi-transparent)
-            if (isSelected) {
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY + categoryHeight, 0x804CAF50); // 50% opacity
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + 1, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + categoryHeight - 1, 0x8066BB6A); // 50% opacity
-            } else if (isHovered) {
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(2, 1, 3), currentCategoryY + categoryHeight, 0x803A3A3A); // 50% opacity
-                guiGraphics.fill(sidebarX + GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + 1, sidebarX + sidebarWidth - GuiScalingHelper.responsiveWidth(3, 2, 4), currentCategoryY + categoryHeight - 1, 0x804A4A4A); // 50% opacity
+        for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
+            for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
+                FreeMarketItem currentItem = itemsToRender.get(i + j);
+                int itemX = startX + j * itemSpacing;
+                int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
+                int cardWidth = calculatedItemWidth;
+                int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
+                
+                // Regular item card - check delete button and buy/sell buttons
+                {
+                    // Check delete button click (only if admin mode) - match ItemCardRenderer dimensions
+                    if (AdminModeHandler.isAdminMode()) {
+                        int deleteButtonSize = (int)(cardWidth * 0.12); // 12% of card width (match ItemCardRenderer)
+                        int margin = 0; // No margin - match ItemCardRenderer
+                        int deleteButtonX = itemX + cardWidth - deleteButtonSize - margin; // Right at the edge
+                        int deleteButtonY = itemY + margin; // Top at the edge
+                        
+                        if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
+                            mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
+                            // Play note block sound for delete action
+                            var player = Minecraft.getInstance().player;
+                            if (player != null) {
+                                player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.5f);
+                            }
+                            
+                            // Send delete request to server via network packet
+                            FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.MARKETPLACE_REMOVE_ITEM, currentItem.getGuid());
+                            net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                            
+                            return true;
+                        }
+                    }
+                }
+                
+
+                // Use unified renderer for button click detection
+                Minecraft client = Minecraft.getInstance();
+                float guiScale = (float) client.getWindow().getGuiScale();
+                
+                // Create button config for click detection
+                CardButtonConfig config = CardButtonConfig.forMarketplace(
+                    currentItem.getBuyPrice(), currentItem.getSellPrice(),
+                    getCachedCanBuyState(currentItem), getCachedCanSellState(currentItem),
+                    isBuyButtonInCooldown(currentItem), isSellButtonInCooldown(currentItem)
+                );
+                
+                ButtonType buttonClicked = UnifiedItemCardRenderer.checkButtonClick(
+                    itemX, itemY, cardWidth, cardHeight, 
+                    (int)mouseX, (int)mouseY, guiScale, config
+                );
+                
+                if (buttonClicked == ButtonType.BUY) {
+                    // Check if button is enabled before processing
+                    if (!getCachedCanBuyState(currentItem)) {
+                        return true; // Consume click but don't process - button is disabled
+                    }
+                    
+                    // Check cooldown before processing
+                    if (isBuyButtonInCooldown(currentItem)) {
+                        return true; // Consume click but don't process
+                    }
+                    
+                    // Set cooldown immediately to prevent spam clicking
+                    long currentTime = System.currentTimeMillis();
+                    buyButtonCooldowns.put(currentItem.getGuid(), currentTime + BUY_COOLDOWN_MS);
+                    
+                    // Send buy request to server via network packet
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, currentItem.getGuid());
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    // Don't update button states here - wait for server response
+                    // Button states will be updated when server responds
+                    
+                    return true; // Consume the click
+                } else if (buttonClicked == ButtonType.SELL) {
+                    // Check if button is enabled before processing
+                    if (!getCachedCanSellState(currentItem)) {
+                        return true; // Consume click but don't process - button is disabled
+                    }
+                    
+                    // Check cooldown before processing
+                    if (isSellButtonInCooldown(currentItem)) {
+                        return true; // Consume click but don't process
+                    }
+                    
+                    // Set cooldown immediately to prevent spam clicking
+                    long currentTime = System.currentTimeMillis();
+                    sellButtonCooldowns.put(currentItem.getGuid(), currentTime + SELL_COOLDOWN_MS);
+                    
+                    // Send sell request to server via network packet
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, currentItem.getGuid());
+                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+                    
+                    // Don't update button states here - wait for server response
+                    // Button states will be updated when server responds
+                    
+                    return true; // Consume the click
+                }
+                
+                itemsRendered++;
             }
-            
-            // Draw category text (simple rendering)
-            int textColor = isSelected ? 0xFFFFFFFF : 0xFFE0E0E0;
-            String categoryText = category.getDisplayName();
-            int count = cachedCategoryCounts.getOrDefault(category, 0);
-            String displayText = categoryText + " (" + count + ")";
-            
-            // Truncate text if it's too long for the container
-            int availableWidth = sidebarWidth - (int)(sidebarWidth * 0.1); // 10% total padding (5% each side)
-            String truncatedText = truncateTextToWidth(displayText, availableWidth);
-            
-            guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, truncatedText, 
-                sidebarX + (int)(sidebarWidth * 0.05), // 5% padding from sidebar edge
-                currentCategoryY + (int)(categoryHeight * 0.2), textColor); // 20% from top of category
-        }
-    }
-    
-    /**
-     * Truncates text to fit within the specified width, adding ellipsis if needed.
-     * Examples: "Miscellaneous" -> "Miscellan..", "Tools" -> "Tools"
-     */
-    private String truncateTextToWidth(String text, int maxWidth) {
-        Minecraft client = Minecraft.getInstance();
-        int textWidth = client.font.width(text);
-        
-        // If text fits, return as-is
-        if (textWidth <= maxWidth) {
-            return text;
         }
         
-        // Binary search to find the maximum characters that fit
-        int left = 0;
-        int right = text.length();
-        String bestFit = "";
-        
-        while (left <= right) {
-            int mid = (left + right) / 2;
-            String candidate = text.substring(0, mid) + "..";
-            int candidateWidth = client.font.width(candidate);
-            
-            if (candidateWidth <= maxWidth) {
-                bestFit = candidate;
-                left = mid + 1;
-            } else {
-                right = mid - 1;
-            }
-        }
-        
-        return bestFit.isEmpty() ? ".." : bestFit;
-    }
-    
-    /**
-     * Creates a special marketplace item entry for adding new items.
-     * This item has a special GUID that identifies it as the add button.
-     */
-    private FreeMarketItem createAddItemEntry() {
-        // Create a dummy item stack (we won't actually use it for rendering)
-        net.minecraft.world.item.ItemStack dummyStack = net.minecraft.world.item.Items.AIR.getDefaultInstance();
-        return new FreeMarketItem(dummyStack, 0, 0, 0, "admin", "ADD_ITEM_SPECIAL");
-    }
-    
-    /**
-     * Checks if a marketplace item is the special "add item" entry.
-     */
-    private boolean isAddItemEntry(FreeMarketItem item) {
-        return "ADD_ITEM_SPECIAL".equals(item.getGuid());
+        return false;
     }
     
     private List<FreeMarketItem> getItemsToRender() {
@@ -454,10 +368,10 @@ public class FreeMarketContainer implements Renderable {
         String currentSearchText = (searchBox != null) ? searchBox.getValue() : "";
         
         // Check if cache is valid
-        if (cachedItemsToRender == null || 
+        if (cachedFilteredData == null || 
             lastFilteredCategory != selectedCategory ||
             !currentSearchText.equals(lastSearchText) ||
-            (currentTime - lastItemCacheUpdate) > ITEM_CACHE_DURATION) {
+            (currentTime - lastDataCacheUpdate) > DATA_CACHE_DURATION) {
             
             // Update cache
             // First filter by category
@@ -471,64 +385,48 @@ public class FreeMarketContainer implements Renderable {
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             }
             
-            // Add special "add item" entry if in admin mode and not searching
-            if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
-                // Create a special marketplace item for adding new items
-                FreeMarketItem addItem = createAddItemEntry();
-                categoryFiltered.add(addItem);
-            }
+            // No longer adding add item entry to the list - it's now a button in the top-right
             
-            cachedItemsToRender = categoryFiltered;
+            cachedFilteredData = categoryFiltered;
             lastFilteredCategory = selectedCategory;
             lastSearchText = currentSearchText;
-            lastItemCacheUpdate = currentTime;
+            lastDataCacheUpdate = currentTime;
         }
         
-        return cachedItemsToRender;
+        return cachedFilteredData;
     }
     
     
     
     /**
-     * Renders the special "add item" card that looks like a marketplace item but with a big plus icon.
+     * Renders the Add Item button in the top-right of the container.
      */
-    private void renderAddItemCard(GuiGraphics guiGraphics, int itemX, int itemY, int cardWidth, int cardHeight, int mouseX, int mouseY) {
-        // Modern card background with gradient effect
-        int backgroundColor = 0x801A1A1A; // 50% opacity
-        int borderColor = 0x80404040; // 50% opacity
+    private void renderAddItemButton(GuiGraphics guiGraphics, int mouseX, int mouseY) {
+        int buttonWidth = 120;
+        int buttonHeight = 20;
+        int buttonX = x + width - buttonWidth - 10;
+        int buttonY = y + 10;
         
-        // Draw card background
-        guiGraphics.fill(itemX, itemY, itemX + cardWidth, itemY + cardHeight, backgroundColor);
+        boolean isHovered = mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                           mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
         
-        // Draw card border
-        guiGraphics.fill(itemX, itemY, itemX + cardWidth, itemY + 2, borderColor); // Top
-        guiGraphics.fill(itemX, itemY, itemX + 2, itemY + cardHeight, borderColor); // Left
-        guiGraphics.fill(itemX + cardWidth - 2, itemY, itemX + cardWidth, itemY + cardHeight, borderColor); // Right
-        guiGraphics.fill(itemX, itemY + cardHeight - 2, itemX + cardWidth, itemY + cardHeight, borderColor); // Bottom
+        // Button background
+        int bgColor = isHovered ? 0xCC4CAF50 : 0x994CAF50; // Green
+        guiGraphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + buttonHeight, bgColor);
         
-        // Check if mouse is hovering over the add item card
-        boolean isHovered = mouseX >= itemX && mouseX <= itemX + cardWidth &&
-                           mouseY >= itemY && mouseY <= itemY + cardHeight;
+        // Button border
+        guiGraphics.fill(buttonX, buttonY, buttonX + buttonWidth, buttonY + 1, 0xFF404040);
+        guiGraphics.fill(buttonX, buttonY + 1, buttonX + 1, buttonY + buttonHeight - 1, 0xFF404040);
+        guiGraphics.fill(buttonX + buttonWidth - 1, buttonY + 1, buttonX + buttonWidth, buttonY + buttonHeight - 1, 0xFF404040);
+        guiGraphics.fill(buttonX, buttonY + buttonHeight - 1, buttonX + buttonWidth, buttonY + buttonHeight, 0xFF404040);
         
-        // Draw a big plus icon in the upper-center of the card
-        int centerX = itemX + cardWidth / 2; // Center horizontally
-        int centerY = itemY + cardHeight / 3; // Upper third of card (raised from center)
-        int plusSize = Math.min(cardWidth, cardHeight) / 3; // Scale with card size
-        int plusThickness = Math.max(2, plusSize / 10); // Thickness scales with size
-        int plusColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A; // Green color, brighter on hover
-        
-        // Draw + lines (horizontal and vertical)
-        guiGraphics.fill(centerX - plusSize/2, centerY - plusThickness, centerX + plusSize/2, centerY + plusThickness, plusColor);
-        guiGraphics.fill(centerX - plusThickness, centerY - plusSize/2, centerX + plusThickness, centerY + plusSize/2, plusColor);
-        
-        // Draw "Add Item" text below the plus
-        String addText = "Add Item";
-        int textWidth = net.minecraft.client.Minecraft.getInstance().font.width(addText);
-        int textX = itemX + (cardWidth - textWidth) / 2; // Center the text
-        int textY = centerY + plusSize/2 + 10; // Below the plus
-        int textColor = isHovered ? 0xFF4CAF50 : 0xFF66BB6A;
-        
-        guiGraphics.drawString(net.minecraft.client.Minecraft.getInstance().font, addText, textX, textY, textColor);
+        // Button text
+        Minecraft minecraft = Minecraft.getInstance();
+        String buttonText = "+ Add Item";
+        int textWidth = minecraft.font.width(buttonText);
+        int textX = buttonX + (buttonWidth - textWidth) / 2;
+        int textY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
+        guiGraphics.drawString(minecraft.font, buttonText, textX, textY, 0xFFFFFFFF);
     }
     
     
@@ -568,176 +466,57 @@ public class FreeMarketContainer implements Renderable {
         return getMaxScroll();
     }
     
-    private int getMaxScroll() {
+    protected int getMaxScroll() {
         List<FreeMarketItem> itemsToRender = getItemsToRender();
         return Math.max(0, (itemsToRender.size() + itemsPerRow - 1) / itemsPerRow - maxVisibleItems / itemsPerRow);
     }
     
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // Handle search box clicks first
-        if (searchBox != null) {
-            if (searchBox.mouseClicked(mouseX, mouseY, button)) {
-                searchBox.setFocused(true);
+        // Block all clicks if a popup is visible (except search box to allow unfocusing)
+        boolean popupVisible = parentScreen != null && parentScreen.isAnyPopupVisible();
+        
+        // Handle search box clicks first (always allow to enable unfocusing)
+        if (handleSearchBoxClick(mouseX, mouseY, button)) {
                 return true;
-            }
-            // If click is within search box bounds, focus it
-            if (mouseX >= searchBox.getX() && mouseX <= searchBox.getX() + searchBox.getWidth() &&
-                mouseY >= searchBox.getY() && mouseY <= searchBox.getY() + searchBox.getHeight()) {
-                searchBox.setFocused(true);
+        }
+        
+        // Block remaining clicks if popup is visible
+        if (popupVisible) {
+            return false; // Don't consume - let popup handle it
+        }
+        
+        // Handle Add Item button clicks (top-right) - only in admin mode
+        if (AdminModeHandler.isAdminMode() && (searchBox == null || searchBox.getValue().isEmpty())) {
+            int buttonWidth = 120;
+            int buttonHeight = 20;
+            int buttonX = x + width - buttonWidth - 10;
+            int buttonY = y + 10;
+            
+            if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+                // Play click sound
+                var player = Minecraft.getInstance().player;
+                if (player != null) {
+                    player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+                }
+                // Open add item popup
+                if (parentScreen != null) {
+                    net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
+                }
                 return true;
             }
         }
         
         // Handle category sidebar clicks
-        // Use percentage-based sidebar dimensions for click detection (aligned with items)
-        int sidebarWidth = (int)(width * 0.2); // 20% of container width
-        int sidebarX = x + (int)(width * 0.02); // 2% margin from left (matches right margin)
-        int sidebarY = y + (int)(height * 0.15); // 15% from top (matches items start)
-        int sidebarHeight = height - (int)(height * 0.2); // 80% of container height
-        
-        if (mouseX >= sidebarX && mouseX <= sidebarX + sidebarWidth &&
-            mouseY >= sidebarY && mouseY <= sidebarY + sidebarHeight) {
-            
-            // Use the same filtered categories as rendering
-            List<ItemCategoryManager.Category> allCategories = ItemCategoryManager.getAllCategories();
-            Map<ItemCategoryManager.Category, Integer> categoryCounts = ItemCategoryManager.getCategoryCounts(allItems);
-            
-            // Filter out categories with zero items
-            List<ItemCategoryManager.Category> categories = allCategories.stream()
-                .filter(category -> categoryCounts.getOrDefault(category, 0) > 0)
-                .collect(java.util.stream.Collectors.toList());
-            
-            int categoryY = sidebarY + GuiScalingHelper.responsiveHeight(20, 16, 28);
-            int categoryHeight = GuiScalingHelper.responsiveHeight(16, 12, 22);
-            
-            for (int i = 0; i < categories.size(); i++) {
-                int currentCategoryY = categoryY + i * categoryHeight;
-                
-                if (mouseY >= currentCategoryY && mouseY <= currentCategoryY + categoryHeight) {
-                    selectedCategory = categories.get(i);
-                    scrollOffset = 0; // Reset scroll when changing category
+        if (handleCategoryClick(mouseX, mouseY)) {
                     return true;
-                }
-            }
         }
         
-        // Handle edit button clicks on items
-        // Use SAME calculations as rendering (lines 324-325) for consistency
-        int sidebarMargin = (int)(width * 0.02); // Match calculateResponsiveDimensions
-        int startY = y + (int)(height * 0.15); // 15% from top (matches sidebar start)
-        int startX = x + sidebarWidth + sidebarMargin; // Start after sidebar with consistent margin
-        int itemsRendered = 0;
-        int maxItemsToRender = maxVisibleItems;
+        // Handle data clicks
         List<FreeMarketItem> itemsToRender = getItemsToRender();
-        
-        for (int i = scrollOffset * itemsPerRow; i < itemsToRender.size() && itemsRendered < maxItemsToRender; i += itemsPerRow) {
-            for (int j = 0; j < itemsPerRow && i + j < itemsToRender.size() && itemsRendered < maxItemsToRender; j++) {
-                FreeMarketItem item = itemsToRender.get(i + j);
-                int itemX = startX + j * itemSpacing;
-                int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
-                int cardWidth = calculatedItemWidth;
-                int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
-                
-                // Check if this is the add item entry
-                if (isAddItemEntry(item)) {
-                    // Handle click on add item card (use same dimensions as rendering)
-                    if (mouseX >= itemX && mouseX <= itemX + cardWidth &&
-                        mouseY >= itemY && mouseY <= itemY + cardHeight) {
-                        // Open add item popup
-                        if (parentScreen != null) {
-                            net.minecraft.client.Minecraft.getInstance().setScreen(new AddItemPopupScreen(parentScreen));
-                        }
-                        return true;
-                    }
-                    // Skip buy/sell button checks for add item entry - continue to next item
-                    itemsRendered++;
-                    continue;
-                }
-                
-                // Regular item card - check delete button and buy/sell buttons
-                {
-                    // Check delete button click (only if admin mode) - match ItemCardRenderer dimensions
-                    if (AdminModeHandler.isAdminMode()) {
-                        int deleteButtonSize = (int)(cardWidth * 0.12); // 12% of card width (match ItemCardRenderer)
-                        int margin = 0; // No margin - match ItemCardRenderer
-                        int deleteButtonX = itemX + cardWidth - deleteButtonSize - margin; // Right at the edge
-                        int deleteButtonY = itemY + margin; // Top at the edge
-                        
-                        if (mouseX >= deleteButtonX && mouseX <= deleteButtonX + deleteButtonSize &&
-                            mouseY >= deleteButtonY && mouseY <= deleteButtonY + deleteButtonSize) {
-                            // Play note block sound for delete action
-                            var player = Minecraft.getInstance().player;
-                            if (player != null) {
-                                player.playSound(SoundEvents.NOTE_BLOCK_PLING.value(), 1.0f, 1.5f);
-                            }
-                            
-                            // Send delete request to server via network packet
-                            MarketplaceItemOperationPacket packet = MarketplaceItemOperationPacket.removeItem(item);
-                            net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-                            
-                            return true;
-                        }
-                    }
-                }
-                
-
-                // Use the new ItemCardRenderer for buy button click detection
-                // Use raw mouse coordinates like the highlighting does (which works correctly)
-                Minecraft client = Minecraft.getInstance();
-                float guiScale = (float) client.getWindow().getGuiScale();
-                
-                if (ItemCardRenderer.isBuyButtonClicked(itemX, itemY, cardWidth, cardHeight, (int)mouseX, (int)mouseY, guiScale, item.getBuyPrice())) {
-                    // Check if button is enabled before processing
-                    if (!getCachedCanBuyState(item)) {
-                        return true; // Consume click but don't process - button is disabled
-                    }
-                    
-                    // Check cooldown before processing
-                    if (isBuyButtonInCooldown(item)) {
-                        return true; // Consume click but don't process
-                    }
-                    
-                    // Set cooldown immediately to prevent spam clicking
-                    long currentTime = System.currentTimeMillis();
-                    buyButtonCooldowns.put(item.getGuid(), currentTime + BUY_COOLDOWN_MS);
-                    
-                    // Send buy request to server via network packet
-                    com.freemarket.common.network.BuyItemRequestPacket packet = new com.freemarket.common.network.BuyItemRequestPacket(item.getGuid());
-                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-                    
-                    // Update button states after buy operation
-                    updateButtonStates();
-                    
-                    return true; // Consume the click
-                }
-                
-                // Use the new ItemCardRenderer for sell button click detection
-                if (ItemCardRenderer.isSellButtonClicked(itemX, itemY, cardWidth, cardHeight, (int)mouseX, (int)mouseY, guiScale, item.getSellPrice())) {
-                    // Check if button is enabled before processing
-                    if (!getCachedCanSellState(item)) {
-                        return true; // Consume click but don't process - button is disabled
-                    }
-                    
-                    // Check cooldown before processing
-                    if (isSellButtonInCooldown(item)) {
-                        return true; // Consume click but don't process
-                    }
-                    
-                    // Set cooldown immediately to prevent spam clicking
-                    long currentTime = System.currentTimeMillis();
-                    sellButtonCooldowns.put(item.getGuid(), currentTime + SELL_COOLDOWN_MS);
-                    
-                    // Send sell request to server via network packet
-                    com.freemarket.common.network.SellItemRequestPacket packet = new com.freemarket.common.network.SellItemRequestPacket(item.getGuid());
-                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-                    
-                    // Update button states after sell operation
-                    updateButtonStates();
-                    
-                    return true; // Consume the click
-                }
-                
-                itemsRendered++;
+        for (FreeMarketItem item : itemsToRender) {
+            if (handleDataClick(item, mouseX, mouseY, button)) {
+                return true;
             }
         }
         
@@ -770,13 +549,6 @@ public class FreeMarketContainer implements Renderable {
             return true;
         }
         
-        return false;
-    }
-    
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (searchBox != null && searchBox.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
         return false;
     }
     
@@ -951,50 +723,14 @@ public class FreeMarketContainer implements Renderable {
     }
     
     
-    public boolean charTyped(char codePoint, int modifiers) {
-        if (searchBox != null && searchBox.charTyped(codePoint, modifiers)) {
-            return true;
-        }
-        return false;
-    }
-    
     public void setFocused(boolean focused) {
         if (searchBox != null) {
             searchBox.setFocused(focused);
         }
     }
     
-    public boolean isFocused() {
-        return searchBox != null && searchBox.isFocused();
-    }
-    
     public void updateWidgetNarration(NarrationElementOutput narrationElementOutput) {
         // Narration support
-    }
-    
-    /**
-     * Gets cached categories, updating cache if needed
-     */
-    private List<ItemCategoryManager.Category> getCachedCategories() {
-        long currentTime = System.currentTimeMillis();
-        
-        // Check if cache is valid
-        if (cachedCategories == null || cachedCategoryCounts == null || 
-            (currentTime - lastCategoryCacheUpdate) > CATEGORY_CACHE_DURATION) {
-            
-            // Update cache
-            List<ItemCategoryManager.Category> allCategories = ItemCategoryManager.getAllCategories();
-            cachedCategoryCounts = ItemCategoryManager.getCategoryCounts(allItems);
-            
-            // Filter out categories with zero items
-            cachedCategories = allCategories.stream()
-                .filter(category -> cachedCategoryCounts.getOrDefault(category, 0) > 0)
-                .collect(java.util.stream.Collectors.toList());
-            
-            lastCategoryCacheUpdate = currentTime;
-        }
-        
-        return cachedCategories;
     }
 }
 

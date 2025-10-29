@@ -9,6 +9,7 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.freemarket.server.handlers.ServerWalletHandler;
 import com.freemarket.common.handlers.AdminModeHandler;
+import com.freemarket.server.events.PendingRewardsHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 import com.freemarket.common.data.FreeMarketItem;
 import net.minecraft.commands.CommandSourceStack;
@@ -88,6 +89,7 @@ public class FreeMarketCommands {
             .then(buildHelpCommand())
             .then(buildBalanceCommands())
             .then(buildPayCommand())
+            .then(buildMailCommand())
             .then(buildAdminModeCommand())
             .then(buildItemDataCommand())
             .then(buildListCommand()));
@@ -101,6 +103,17 @@ public class FreeMarketCommands {
     private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildHelpCommand() {
         return Commands.literal("help")
             .executes(FreeMarketCommands::showHelp);
+    }
+    
+    /**
+     * Builds mail-related commands.
+     * 
+     * @return Command builder for mail commands
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildMailCommand() {
+        return Commands.literal("mail")
+            .then(Commands.literal("claim")
+                .executes(FreeMarketCommands::claimMail));
     }
     
     /**
@@ -709,6 +722,7 @@ public class FreeMarketCommands {
         source.sendSuccess(() -> Component.literal("§ePlayer Commands:§r"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket help§r - Shows this help message"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket balance§r - Shows your balance"), false);
+        source.sendSuccess(() -> Component.literal("§7/freemarket mail claim§r - Claim items from your mailbox"), false);
         source.sendSuccess(() -> Component.literal("§7/freemarket pay <player> <amount>§r - Pay money to another player"), false);
         
         // Admin commands (OP only)
@@ -820,5 +834,14 @@ public class FreeMarketCommands {
         }
         
         return 1;
+    }
+    
+    private static int claimMail(CommandContext<CommandSourceStack> context) {
+        if (!(context.getSource().getEntity() instanceof ServerPlayer player)) {
+            context.getSource().sendFailure(Component.literal("§cThis command can only be used by players!"));
+            return 0;
+        }
+        
+        return PendingRewardsHandler.claimMail(player) ? 1 : 0;
     }
 }

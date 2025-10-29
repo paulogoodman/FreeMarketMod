@@ -1,7 +1,6 @@
 package com.freemarket.client.gui;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
@@ -13,17 +12,17 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * Popup screen for adding items to the marketplace with visual inventory selector.
- * Three-phase UI: Inventory Selection → Price Configuration → Confirmation
+ * Popup screen for creating auctions with visual inventory selector.
+ * Three-phase UI: Inventory Selection → Price/Duration Form → Confirmation
  */
-public class AddItemPopupScreen extends BasePopupScreen {
+public class CreateAuctionPopupScreen extends BasePopupScreen {
     
     /**
      * Enum for tracking the current UI phase
      */
     private enum PopupState {
         INVENTORY_SELECTION,  // Phase 1: showing inventory grid
-        FORM_INPUT,          // Phase 2: enter buy/sell prices
+        FORM_INPUT,          // Phase 2: enter price/duration
         CONFIRMATION         // Phase 3: confirm selected item
     }
     
@@ -34,11 +33,11 @@ public class AddItemPopupScreen extends BasePopupScreen {
     private int selectedSlotIndex = -1;
     
     // Form input fields (Phase 2)
-    private EditBox buyPriceBox;
-    private EditBox sellPriceBox;
+    private EditBox startingPriceBox;
+    private EditBox durationBox;
     
-    public AddItemPopupScreen(FreeMarketGuiScreen parent) {
-        super(Component.literal("Add Item to Marketplace"), parent);
+    public CreateAuctionPopupScreen(FreeMarketGuiScreen parent) {
+        super(Component.literal("Create Auction"), parent);
     }
     
     @Override
@@ -50,29 +49,29 @@ public class AddItemPopupScreen extends BasePopupScreen {
     }
     
     private void initializeFormFields() {
-        // Buy price input
-        this.buyPriceBox = new EditBox(
+        // Starting price input
+        this.startingPriceBox = new EditBox(
             this.font,
             popupX + 20,
             popupY + 125,
             200,
             20,
-            Component.literal("Buy Price")
+            Component.literal("Starting Price")
         );
-        this.buyPriceBox.setValue("100");
-        this.buyPriceBox.setMaxLength(10);
+        this.startingPriceBox.setValue("100");
+        this.startingPriceBox.setMaxLength(10);
         
-        // Sell price input
-        this.sellPriceBox = new EditBox(
+        // Duration input (in minutes)
+        this.durationBox = new EditBox(
             this.font,
             popupX + 20,
             popupY + 175,
             200,
             20,
-            Component.literal("Sell Price")
+            Component.literal("Duration (minutes)")
         );
-        this.sellPriceBox.setValue("80");
-        this.sellPriceBox.setMaxLength(10);
+        this.durationBox.setValue("1440"); // Default 24 hours
+        this.durationBox.setMaxLength(6);
     }
     
     @Override
@@ -96,14 +95,14 @@ public class AddItemPopupScreen extends BasePopupScreen {
      */
     private void renderInventorySelection(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw title
-        Component title = Component.literal("Add Item to Marketplace");
+        Component title = Component.literal("Create Auction");
         int titleWidth = this.font.width(title);
         int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
         int titleY = popupY + 15;
         guiGraphics.drawString(this.font, title, titleX, titleY, 0xFFFFFFFF);
         
         // Draw instructions
-        String instruction = "Select an item from your inventory:";
+        String instruction = "Select an item from your inventory to auction:";
         int instWidth = this.font.width(instruction);
         int instX = popupX + (POPUP_WIDTH - instWidth) / 2;
         int instY = popupY + 40;
@@ -121,7 +120,7 @@ public class AddItemPopupScreen extends BasePopupScreen {
      */
     private void renderConfirmation(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw title
-        Component title = Component.literal("Confirm Marketplace Item");
+        Component title = Component.literal("Confirm Auction Item");
         int titleWidth = this.font.width(title);
         int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
         int titleY = popupY + 15;
@@ -156,21 +155,18 @@ public class AddItemPopupScreen extends BasePopupScreen {
         int nameY = iconY + iconSize + 20;
         guiGraphics.drawString(this.font, itemName, nameX, nameY, 0xFFFFFFFF);
         
-        // Draw item details
+        // Draw auction details
         int detailsY = nameY + 25;
         int detailsX = popupX + 20;
         
-        // Buy price
-        String buyPriceText = "Buy Price: $" + buyPriceBox.getValue();
-        guiGraphics.drawString(this.font, buyPriceText, detailsX, detailsY, 0xFFAAAAAA);
+        // Starting price
+        String priceText = "Starting Price: $" + startingPriceBox.getValue();
+        guiGraphics.drawString(this.font, priceText, detailsX, detailsY, 0xFFAAAAAA);
         
-        // Sell price
-        String sellPriceText = "Sell Price: $" + sellPriceBox.getValue();
-        guiGraphics.drawString(this.font, sellPriceText, detailsX, detailsY + 15, 0xFFAAAAAA);
-        
-        // Quantity
-        String quantityText = "Quantity: " + selectedItem.getCount();
-        guiGraphics.drawString(this.font, quantityText, detailsX, detailsY + 30, 0xFFAAAAAA);
+        // Duration (formatted as days, hours, minutes)
+        String durationFormatted = formatDuration(durationBox.getValue());
+        String durationText = "Duration: " + durationFormatted;
+        guiGraphics.drawString(this.font, durationText, detailsX, detailsY + 15, 0xFFAAAAAA);
         
         // Render buttons
         int buttonY = popupY + POPUP_HEIGHT - 50;
@@ -180,16 +176,16 @@ public class AddItemPopupScreen extends BasePopupScreen {
         // Back button (gray)
         renderButton(guiGraphics, "Back", popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x99666666, 0xCC666666);
         
-        // Add to Marketplace button (green)
-        renderButton(guiGraphics, "Add to Marketplace", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
+        // Create Auction button (green)
+        renderButton(guiGraphics, "Create Auction", popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2), buttonY, buttonWidth, 20, mouseX, mouseY, 0x994CAF50, 0xCC4CAF50);
     }
     
     /**
-     * Phase 2: Render price configuration form
+     * Phase 2: Render price/duration form
      */
     private void renderFormInput(GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTick) {
         // Draw title
-        Component title = Component.literal("Add Item to Marketplace");
+        Component title = Component.literal("Create Auction");
         int titleWidth = this.font.width(title);
         int titleX = popupX + (POPUP_WIDTH - titleWidth) / 2;
         int titleY = popupY + 15;
@@ -228,15 +224,16 @@ public class AddItemPopupScreen extends BasePopupScreen {
         // Draw form labels and fields
         int formStartY = popupY + 110;
         
-        // Buy Price
-        guiGraphics.drawString(this.font, "Buy Price ($):", popupX + 20, formStartY, 0xFFAAAAAA);
-        buyPriceBox.setPosition(popupX + 20, formStartY + 15);
-        buyPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Starting Price
+        guiGraphics.drawString(this.font, "Starting Price ($):", popupX + 20, formStartY, 0xFFAAAAAA);
+        startingPriceBox.setPosition(popupX + 20, formStartY + 15);
+        startingPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
         
-        // Sell Price
-        guiGraphics.drawString(this.font, "Sell Price ($):", popupX + 20, formStartY + 50, 0xFFAAAAAA);
-        sellPriceBox.setPosition(popupX + 20, formStartY + 65);
-        sellPriceBox.render(guiGraphics, mouseX, mouseY, partialTick);
+        // Duration
+        guiGraphics.drawString(this.font, "Duration (minutes):", popupX + 20, formStartY + 50, 0xFFAAAAAA);
+        guiGraphics.drawString(this.font, "Default: 1440 (24 hours)", popupX + 180, formStartY + 50, 0xFF808080);
+        durationBox.setPosition(popupX + 20, formStartY + 65);
+        durationBox.render(guiGraphics, mouseX, mouseY, partialTick);
         
         // Render buttons
         int buttonY = popupY + POPUP_HEIGHT - 50;
@@ -270,6 +267,40 @@ public class AddItemPopupScreen extends BasePopupScreen {
         int gridStartY = popupY + 80;
         
         return InventoryGridHelper.getClickedSlot(mouseX, mouseY, gridStartX, gridStartY);
+    }
+    
+    
+    /**
+     * Formats duration in minutes to a readable string (days, hours, minutes)
+     */
+    private String formatDuration(String minutesStr) {
+        try {
+            long totalMinutes = Long.parseLong(minutesStr);
+            
+            long days = totalMinutes / 1440;
+            long hours = (totalMinutes % 1440) / 60;
+            long minutes = totalMinutes % 60;
+            
+            StringBuilder sb = new StringBuilder();
+            
+            if (days > 0) {
+                sb.append(days).append(days == 1 ? " day" : " days");
+            }
+            
+            if (hours > 0) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(hours).append(hours == 1 ? " hour" : " hours");
+            }
+            
+            if (minutes > 0 || sb.length() == 0) {
+                if (sb.length() > 0) sb.append(", ");
+                sb.append(minutes).append(minutes == 1 ? " minute" : " minutes");
+            }
+            
+            return sb.toString();
+        } catch (NumberFormatException e) {
+            return minutesStr + " minutes";
+        }
     }
     
     @Override
@@ -318,6 +349,11 @@ public class AddItemPopupScreen extends BasePopupScreen {
         int cancelX = popupX + (POPUP_WIDTH - 180) / 2;
         int cancelY = popupY + POPUP_HEIGHT - 50;
         if (isButtonClicked(mouseX, mouseY, cancelX, cancelY, 180, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             onClose();
             return true;
         }
@@ -336,19 +372,24 @@ public class AddItemPopupScreen extends BasePopupScreen {
         // Back button
         int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
         if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             // Return to form input
             currentState = PopupState.FORM_INPUT;
             return true;
         }
         
-        // Add to Marketplace button
-        int addX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
-        if (isButtonClicked(mouseX, mouseY, addX, buttonY, buttonWidth, 20)) {
+        // Create Auction button
+        int createX = popupX + (POPUP_WIDTH / 2) + (buttonSpacing / 2);
+        if (isButtonClicked(mouseX, mouseY, createX, buttonY, buttonWidth, 20)) {
             var player = Minecraft.getInstance().player;
             if (player != null) {
                 player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
             }
-            addItemToMarketplace();
+            createAuction();
             return true;
         }
         
@@ -360,14 +401,14 @@ public class AddItemPopupScreen extends BasePopupScreen {
      */
     private boolean handleFormInputClick(double mouseX, double mouseY) {
         // Handle text field clicks
-        if (buyPriceBox.mouseClicked(mouseX, mouseY, 0)) {
-            buyPriceBox.setFocused(true);
-            sellPriceBox.setFocused(false);
+        if (startingPriceBox.mouseClicked(mouseX, mouseY, 0)) {
+            startingPriceBox.setFocused(true);
+            durationBox.setFocused(false);
             return true;
         }
-        if (sellPriceBox.mouseClicked(mouseX, mouseY, 0)) {
-            sellPriceBox.setFocused(true);
-            buyPriceBox.setFocused(false);
+        if (durationBox.mouseClicked(mouseX, mouseY, 0)) {
+            durationBox.setFocused(true);
+            startingPriceBox.setFocused(false);
             return true;
         }
         
@@ -379,6 +420,11 @@ public class AddItemPopupScreen extends BasePopupScreen {
         // Back button
         int backX = popupX + (POPUP_WIDTH / 2) - buttonWidth - (buttonSpacing / 2);
         if (isButtonClicked(mouseX, mouseY, backX, buttonY, buttonWidth, 20)) {
+            // Play click sound
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.player != null) {
+                minecraft.player.playSound(net.minecraft.sounds.SoundEvents.UI_BUTTON_CLICK.value(), 0.5f, 1.0f);
+            }
             currentState = PopupState.INVENTORY_SELECTION;
             selectedItem = ItemStack.EMPTY;
             selectedSlotIndex = -1;
@@ -419,10 +465,10 @@ public class AddItemPopupScreen extends BasePopupScreen {
         
         // Handle text field key presses in form input phase
         if (currentState == PopupState.FORM_INPUT) {
-            if (buyPriceBox.keyPressed(keyCode, scanCode, modifiers)) {
+            if (startingPriceBox.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
-            if (sellPriceBox.keyPressed(keyCode, scanCode, modifiers)) {
+            if (durationBox.keyPressed(keyCode, scanCode, modifiers)) {
                 return true;
             }
         }
@@ -434,10 +480,10 @@ public class AddItemPopupScreen extends BasePopupScreen {
     public boolean charTyped(char codePoint, int modifiers) {
         // Handle text field character typing in form input phase
         if (currentState == PopupState.FORM_INPUT) {
-            if (buyPriceBox.charTyped(codePoint, modifiers)) {
+            if (startingPriceBox.charTyped(codePoint, modifiers)) {
                 return true;
             }
-            if (sellPriceBox.charTyped(codePoint, modifiers)) {
+            if (durationBox.charTyped(codePoint, modifiers)) {
                 return true;
             }
         }
@@ -446,9 +492,9 @@ public class AddItemPopupScreen extends BasePopupScreen {
     }
     
     /**
-     * Adds the item to the marketplace with validation
+     * Creates the auction with validation
      */
-    private void addItemToMarketplace() {
+    private void createAuction() {
         errorMessage = null;
         
         if (selectedItem.isEmpty()) {
@@ -469,11 +515,15 @@ public class AddItemPopupScreen extends BasePopupScreen {
             }
             
             // Check if item type and components match exactly
+            // This prevents exploits like auctioning a Sharpness 5 sword but only having Sharpness 1
             if (!ItemStack.isSameItemSameComponents(currentStack, selectedItem)) {
                 errorMessage = "Item has been modified or moved!";
+                FreeMarket.LOGGER.warn("Validation failed - items don't match");
                 return;
             }
             
+            // This check is redundant since isSameItemSameComponents includes count,
+            // but we keep it for clarity and better error messages
             if (currentStack.getCount() < selectedItem.getCount()) {
                 errorMessage = "Not enough items in inventory!";
                 return;
@@ -487,35 +537,29 @@ public class AddItemPopupScreen extends BasePopupScreen {
             return;
         }
         
-        // Parse and validate buy price
-        long buyPrice;
+        // Parse and validate starting price
+        long startingPrice;
         try {
-            buyPrice = Long.parseLong(buyPriceBox.getValue());
-            if (buyPrice < 0) {
-                errorMessage = "Buy price cannot be negative";
+            startingPrice = Long.parseLong(startingPriceBox.getValue());
+            if (startingPrice < 1) {
+                errorMessage = "Starting price must be at least $1";
                 return;
             }
         } catch (NumberFormatException e) {
-            errorMessage = "Invalid buy price";
+            errorMessage = "Invalid starting price";
             return;
         }
         
-        // Parse and validate sell price
-        long sellPrice;
+        // Parse and validate duration
+        long durationMinutes;
         try {
-            sellPrice = Long.parseLong(sellPriceBox.getValue());
-            if (sellPrice < 0) {
-                errorMessage = "Sell price cannot be negative";
+            durationMinutes = Long.parseLong(durationBox.getValue());
+            if (durationMinutes < 1 || durationMinutes > 10080) {
+                errorMessage = "Duration must be between 1 minute and 1 week (10080 minutes)";
                 return;
             }
         } catch (NumberFormatException e) {
-            errorMessage = "Invalid sell price";
-            return;
-        }
-        
-        // Validate that at least one price is greater than zero
-        if (buyPrice <= 0 && sellPrice <= 0) {
-            errorMessage = "At least one price must be greater than zero";
+            errorMessage = "Invalid duration";
             return;
         }
         
@@ -523,7 +567,7 @@ public class AddItemPopupScreen extends BasePopupScreen {
         String itemId = BuiltInRegistries.ITEM.getKey(selectedItem.getItem()).toString();
         
         // Serialize component data from actual item using ItemComponentHandler
-        String componentData = ItemComponentHandler.getComponentData(selectedItem);
+        String componentData = com.freemarket.common.attachments.ItemComponentHandler.getComponentData(selectedItem);
         
         // Escape the component data string for JSON
         String escapedComponentData = componentData
@@ -533,26 +577,17 @@ public class AddItemPopupScreen extends BasePopupScreen {
             .replace("\r", "\\r")   // Escape carriage returns
             .replace("\t", "\\t");  // Escape tabs
         
-        // Send add item packet to server
-        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"quantity\":%d}", 
-            itemId, escapedComponentData, buyPrice, sellPrice, quantity);
-        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
+        // Send auction create packet to server with slot index for server-side validation
+        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"quantity\":%d,\"startingPrice\":%d,\"durationMinutes\":%d,\"slotIndex\":%d}", 
+            itemId, escapedComponentData, quantity, startingPrice, durationMinutes, selectedSlotIndex);
+        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CREATE, jsonData);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
         
-        FreeMarket.LOGGER.info("Added item to marketplace: {} x{} - Buy: ${}, Sell: ${}", 
-            itemId, quantity, buyPrice, sellPrice);
+        FreeMarket.LOGGER.info("Created auction for {} x{} starting at ${} for {} minutes", 
+            itemId, quantity, startingPrice, durationMinutes);
         
-        // Close popup and return to marketplace screen
+        // Close popup and return to auction screen
         onClose();
     }
     
-    @Override
-    public void onClose() {
-        // Refresh the marketplace before returning to parent screen
-        if (parentScreen != null) {
-            parentScreen.refreshMarketplace();
-        }
-        
-        super.onClose();
-    }
 }

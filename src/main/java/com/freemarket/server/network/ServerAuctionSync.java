@@ -32,7 +32,6 @@ public class ServerAuctionSync {
             
             // Get server and iterate through all players for reliable delivery
             List<ServerPlayer> players = level.getServer().getPlayerList().getPlayers();
-            FreeMarket.LOGGER.info("Syncing {} auctions to {} players", auctions.size(), players.size());
             
             for (ServerPlayer player : players) {
                 PacketDistributor.sendToPlayer(player, packet);

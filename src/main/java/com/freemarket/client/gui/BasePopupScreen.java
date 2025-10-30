@@ -132,7 +132,7 @@ public abstract class BasePopupScreen extends Screen {
         
         // Push pose to render popup at a higher z-level (in front of everything)
         guiGraphics.pose().pushPose();
-        guiGraphics.pose().translate(0, 0, 400); // Push popup forward in z-space
+        guiGraphics.pose().translate(0, 0, 5000); // Push popup forward in z-space (much higher than item decorations)
         
         // Apply semi-transparent overlay
         guiGraphics.fill(0, 0, this.width, this.height, 0xA0000000);

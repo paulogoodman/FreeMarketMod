@@ -57,11 +57,15 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         
         // Bid amount input - positioned in the bid input section
         int inputY = y + POPUP_HEIGHT - 120;
+        int inputX = x + 30; // Start at section edge
+        int inputWidth = POPUP_WIDTH - 60; // Full section width
+        int dollarSignWidth = 10; // Space for dollar sign outside the input box
+        
         this.bidAmountBox = new EditBox(
             minecraft.font,
-            x + 45,  // Offset for dollar sign
+            inputX + dollarSignWidth,  // Offset to make room for dollar sign
             inputY + 5,
-            POPUP_WIDTH - 90,
+            inputWidth - dollarSignWidth, // Reduce width to account for dollar sign
             20,
             Component.literal("Enter bid amount")
         );
@@ -69,7 +73,8 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         this.bidAmountBox.setFilter(text -> text.matches("\\d*")); // Only allow digits
         this.bidAmountBox.setMaxLength(10); // Limit to reasonable bid amounts
         this.bidAmountBox.setHint(Component.literal("Minimum: $" + minimumBid));
-        this.bidAmountBox.setBordered(false); // Remove border
+        this.bidAmountBox.setBordered(true); // Enable border to show input box background
+        this.bidAmountBox.setTextColor(0xFFFFFFFF); // White text
     }
     
     @Override
@@ -149,22 +154,26 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         Minecraft minecraft = Minecraft.getInstance();
         int inputY = y + POPUP_HEIGHT - 120;
         int sectionX = x + 30;
-        int sectionWidth = POPUP_WIDTH - 60;
         
         // Section title
         Component inputTitle = Component.literal("Enter Your Bid");
         guiGraphics.drawString(minecraft.font, inputTitle, sectionX, inputY - 22, TEXT_PRIMARY);
         
-        // Input field background
-        guiGraphics.fill(sectionX, inputY, sectionX + sectionWidth, inputY + 30, BORDER_COLOR);
-        guiGraphics.fill(sectionX + 1, inputY + 1, sectionX + sectionWidth - 1, inputY + 29, SURFACE_COLOR);
-        
-        // Dollar sign prefix
-        guiGraphics.drawString(minecraft.font, "$", sectionX + 8, inputY + 8, TEXT_SECONDARY);
-        
-        // Render the EditBox widget
+        // Render EditBox with its own border/background at higher z-level
         if (bidAmountBox != null) {
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0, 0, 100); // Push EditBox forward in z-space above background
+            
+            // Render the EditBox widget (with border enabled, it will render its own background)
             bidAmountBox.render(guiGraphics, (int)Minecraft.getInstance().mouseHandler.xpos(), (int)Minecraft.getInstance().mouseHandler.ypos(), 0);
+            
+            // Dollar sign prefix (render at same z-level as EditBox, positioned outside the input box)
+            // Position dollar sign to the left of the EditBox, outside its border
+            int dollarX = bidAmountBox.getX() - 8; // Position to the left of EditBox
+            int dollarY = bidAmountBox.getY() + (bidAmountBox.getHeight() - minecraft.font.lineHeight) / 2;
+            guiGraphics.drawString(minecraft.font, "$", dollarX, dollarY, TEXT_SECONDARY);
+            
+            guiGraphics.pose().popPose();
         }
     }
     

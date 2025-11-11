@@ -1,317 +1,131 @@
 package com.freemarket.server.data;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.freemarket.FreeMarket;
+import com.freemarket.common.data.FreeMarketItem;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.storage.LevelResource;
-import com.freemarket.FreeMarket;
+import net.minecraft.world.level.saveddata.SavedData;
+import javax.annotation.Nonnull;
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.freemarket.common.data.FreeMarketItem;
-
 /**
- * Manages marketplace data persistence using JSON files in world data directory.
- * Creates empty marketplace.json file on world creation and handles reading/writing marketplace items.
+ * Manages marketplace data persistence using world NBT data.
+ * Data is stored in world save data using SavedData system.
  */
 public class FreeMarketDataManager {
     
-    private static final String MARKETPLACE_FILE_NAME = "marketplace.json";
-    private static final String INITIALIZATION_FLAG_FILE_NAME = "FreeMarket_initialized.json";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final String MARKETPLACE_DATA_KEY = "freemarket_marketplace";
+    private static final String ITEMS_LIST_KEY = "items";
+    private static final String VERSION_KEY = "version";
+    private static final String LAST_UPDATED_KEY = "lastUpdated";
+    private static final String INITIALIZED_KEY = "initialized";
     
     /**
-     * Gets the marketplace data file path for a given world.
-     */
-    public static Path getMarketplaceFilePath(ServerLevel level) {
-        return level.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve(MARKETPLACE_FILE_NAME);
-    }
-    
-    /**
-     * Creates an empty marketplace.json file in the world data directory.
-     * Called when a new world is created.
-     */
-    public static void createEmptyMarketplaceFile(ServerLevel level) {
-        try {
-            Path marketplaceFile = getMarketplaceFilePath(level);
-            File file = marketplaceFile.toFile();
-            
-            // Create parent directories if they don't exist
-            file.getParentFile().mkdirs();
-            
-            // Create empty marketplace structure
-            JsonObject marketplaceData = new JsonObject();
-            marketplaceData.add("items", new JsonArray());
-            marketplaceData.addProperty("version", "1.0");
-            marketplaceData.addProperty("description", "FreeMarket Marketplace Data");
-            
-            // Write to file
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(marketplaceData, writer);
-            }
-            
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to create marketplace.json file for world: {}", level.dimension().location(), e);
-        }
-    }
-    
-    /**
-     * Loads marketplace items from the JSON file.
-     * Returns empty list if file doesn't exist or is invalid.
+     * Gets the marketplace data from world save data.
+     * Always uses the Overworld dimension to ensure global marketplace storage.
      */
     public static List<FreeMarketItem> loadFreeMarketItems(ServerLevel level) {
-        List<FreeMarketItem> items = new ArrayList<>();
-        
-        try {
-            Path marketplaceFile = getMarketplaceFilePath(level);
-            File file = marketplaceFile.toFile();
-            
-            if (!file.exists()) {
-                return items;
-            }
-            
-            JsonElement jsonElement = JsonParser.parseString(new String(java.nio.file.Files.readAllBytes(marketplaceFile)));
-            
-            if (!jsonElement.isJsonObject()) {
-                FreeMarket.LOGGER.error("Invalid marketplace file format: {}", marketplaceFile);
-                return items;
-            }
-            
-            JsonObject marketplaceData = jsonElement.getAsJsonObject();
-            JsonArray itemsArray = marketplaceData.getAsJsonArray("items");
-            
-            if (itemsArray != null) {
-                for (JsonElement itemElement : itemsArray) {
-                    if (itemElement.isJsonObject()) {
-                        FreeMarketItem item = deserializeFreeMarketItem(itemElement.getAsJsonObject());
-                        if (item != null) {
-                            items.add(item);
-                        }
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to load marketplace items from world: {}", level.dimension().location(), e);
+        // CRITICAL: Always use Overworld for global marketplace storage
+        ServerLevel overworldLevel = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        if (overworldLevel == null) {
+            FreeMarket.LOGGER.error("[FreeMarketDataManager] ERROR: Overworld level is null! Using provided level as fallback.");
+            overworldLevel = level;
         }
         
-        // Auto-generate test data if marketplace is empty
-        if (items.isEmpty()) {
-            generateInitialTestData(level);
+        MarketplaceSavedData savedData = overworldLevel.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+            MARKETPLACE_DATA_KEY
+        );
+        
+        List<FreeMarketItem> items = savedData.getItems();
+        
+        // Auto-generate test data if marketplace is empty and not initialized
+        if (items.isEmpty() && !savedData.isInitialized()) {
+            generateInitialTestData(overworldLevel);
             // Reload after generating test data
-            try {
-                items = loadFreeMarketItemsFromFile(level);
-            } catch (Exception e) {
-                FreeMarket.LOGGER.error("Failed to reload marketplace items after generating test data: {}", e.getMessage());
-            }
+            savedData = overworldLevel.getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+                MARKETPLACE_DATA_KEY
+            );
+            items = savedData.getItems();
         }
         
         return items;
     }
     
     /**
-     * Internal method to load marketplace items from file without auto-generation.
-     * Used to reload after generating test data to avoid infinite recursion.
-     */
-    private static List<FreeMarketItem> loadFreeMarketItemsFromFile(ServerLevel level) {
-        List<FreeMarketItem> items = new ArrayList<>();
-        
-        try {
-            Path marketplaceFile = getMarketplaceFilePath(level);
-            File file = marketplaceFile.toFile();
-            
-            if (!file.exists()) {
-                return items;
-            }
-            
-            JsonElement jsonElement = JsonParser.parseString(new String(java.nio.file.Files.readAllBytes(marketplaceFile)));
-            
-            if (!jsonElement.isJsonObject()) {
-                return items;
-            }
-            
-            JsonObject marketplaceData = jsonElement.getAsJsonObject();
-            JsonArray itemsArray = marketplaceData.getAsJsonArray("items");
-            
-            if (itemsArray != null) {
-                for (JsonElement itemElement : itemsArray) {
-                    if (itemElement.isJsonObject()) {
-                        FreeMarketItem item = deserializeFreeMarketItem(itemElement.getAsJsonObject());
-                        if (item != null) {
-                            items.add(item);
-                        }
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to load marketplace items from file: {}", e.getMessage());
-        }
-        
-        return items;
-    }
-    
-    /**
-     * Saves marketplace items to the JSON file.
+     * Saves marketplace items to world save data.
+     * Always uses the Overworld dimension to ensure global marketplace storage.
      */
     public static void saveFreeMarketItems(ServerLevel level, List<FreeMarketItem> items) {
-        try {
-            Path marketplaceFile = getMarketplaceFilePath(level);
-            File file = marketplaceFile.toFile();
-            
-            // Create parent directories if they don't exist
-            file.getParentFile().mkdirs();
-            
-            JsonObject marketplaceData = new JsonObject();
-            JsonArray itemsArray = new JsonArray();
-            
-            for (FreeMarketItem item : items) {
-                JsonObject itemJson = serializeFreeMarketItem(item);
-                itemsArray.add(itemJson);
-            }
-            
-            marketplaceData.add("items", itemsArray);
-            marketplaceData.addProperty("version", "1.0");
-            marketplaceData.addProperty("description", "FreeMarket Marketplace Data");
-            marketplaceData.addProperty("lastUpdated", System.currentTimeMillis());
-            
-            // Write to file
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(marketplaceData, writer);
-            }
-            
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to save marketplace items to world: {}", level.dimension().location(), e);
+        // CRITICAL: Always use Overworld for global marketplace storage
+        ServerLevel overworldLevel = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        if (overworldLevel == null) {
+            FreeMarket.LOGGER.error("[FreeMarketDataManager] ERROR: Overworld level is null! Using provided level as fallback.");
+            overworldLevel = level;
         }
+        
+        MarketplaceSavedData savedData = overworldLevel.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+            MARKETPLACE_DATA_KEY
+        );
+        
+        savedData.setItems(items);
+        savedData.setDirty();
     }
     
     /**
-     * Serializes a FreeMarketItem to JSON.
-     */
-    private static JsonObject serializeFreeMarketItem(FreeMarketItem item) {
-        JsonObject itemJson = new JsonObject();
-        
-        // Serialize ItemStack
-        ItemStack itemStack = item.getItemStack();
-        ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
-        itemJson.addProperty("itemId", itemId.toString());
-        itemJson.addProperty("count", itemStack.getCount());
-        
-        // Serialize marketplace data
-        itemJson.addProperty("buyPrice", item.getBuyPrice());
-        itemJson.addProperty("sellPrice", item.getSellPrice());
-        itemJson.addProperty("quantity", item.getQuantity());
-        itemJson.addProperty("seller", item.getSeller());
-        itemJson.addProperty("guid", item.getGuid());
-        itemJson.addProperty("componentData", item.getComponentData());
-        
-        return itemJson;
-    }
-    
-    /**
-     * Deserializes a FreeMarketItem from JSON.
-     */
-    private static FreeMarketItem deserializeFreeMarketItem(JsonObject itemJson) {
-        try {
-            // Deserialize ItemStack
-            String itemIdStr = itemJson.get("itemId").getAsString();
-            int count = itemJson.has("count") ? itemJson.get("count").getAsInt() : 1;
-            
-            ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
-            Item item = BuiltInRegistries.ITEM.get(itemId);
-            
-            if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
-                return null;
-            }
-            
-            ItemStack itemStack = new ItemStack(item, count);
-            
-            // Deserialize marketplace data
-            int buyPrice = itemJson.get("buyPrice").getAsInt();
-            int sellPrice = itemJson.get("sellPrice").getAsInt();
-            int quantity = itemJson.get("quantity").getAsInt();
-            String seller = itemJson.get("seller").getAsString();
-            String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
-            String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
-            
-            // If GUID is missing or empty, generate a random one
-            if (guid == null || guid.isEmpty()) {
-                guid = java.util.UUID.randomUUID().toString();
-            }
-            
-            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Checks if the marketplace file exists for a given world.
+     * Checks if the marketplace data exists for a given world.
+     * Always uses the Overworld dimension to ensure global marketplace storage.
      */
     public static boolean marketplaceFileExists(ServerLevel level) {
-        Path marketplaceFile = getMarketplaceFilePath(level);
-        return marketplaceFile.toFile().exists();
-    }
-    
-    /**
-     * Checks if FreeMarket has been initialized for this world (test data generated).
-     */
-    private static boolean isModInitialized(ServerLevel level) {
-        try {
-            Path initFlagFile = getInitializationFlagPath(level);
-            return initFlagFile.toFile().exists();
-        } catch (Exception e) {
-            return false;
+        // CRITICAL: Always use Overworld for global marketplace storage
+        ServerLevel overworldLevel = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        if (overworldLevel == null) {
+            overworldLevel = level;
         }
+        
+        MarketplaceSavedData savedData = overworldLevel.getDataStorage().get(
+            new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+            MARKETPLACE_DATA_KEY
+        );
+        
+        return savedData != null && !savedData.getItems().isEmpty();
     }
     
     /**
-     * Marks FreeMarket as initialized for this world.
+     * Creates an empty marketplace data structure.
+     * Called when a new world is created.
+     * Always uses the Overworld dimension to ensure global marketplace storage.
      */
-    private static void markModAsInitialized(ServerLevel level) {
-        try {
-            Path initFlagFile = getInitializationFlagPath(level);
-            File file = initFlagFile.toFile();
-            
-            // Create parent directories if they don't exist
-            file.getParentFile().mkdirs();
-            
-            // Create a simple JSON file to mark initialization
-            JsonObject initData = new JsonObject();
-            initData.addProperty("initialized", true);
-            initData.addProperty("timestamp", System.currentTimeMillis());
-            initData.addProperty("version", "1.0.2");
-            
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(initData, writer);
-            }
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to mark mod as initialized: {}", e.getMessage());
+    public static void createEmptyMarketplaceFile(ServerLevel level) {
+        // CRITICAL: Always use Overworld for global marketplace storage
+        ServerLevel overworldLevel = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+        if (overworldLevel == null) {
+            FreeMarket.LOGGER.error("[FreeMarketDataManager] ERROR: Overworld level is null! Using provided level as fallback.");
+            overworldLevel = level;
         }
-    }
-    
-    /**
-     * Gets the initialization flag file path for a given world.
-     */
-    private static Path getInitializationFlagPath(ServerLevel level) {
-        return level.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve(INITIALIZATION_FLAG_FILE_NAME);
+        
+        MarketplaceSavedData savedData = overworldLevel.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+            MARKETPLACE_DATA_KEY
+        );
+        
+        // Initialize with empty list if not already initialized
+        if (savedData.getItems().isEmpty() && !savedData.isInitialized()) {
+            savedData.setItems(new ArrayList<>());
+            savedData.setDirty();
+        }
     }
     
     /**
@@ -320,15 +134,19 @@ public class FreeMarketDataManager {
      */
     public static void generateInitialTestData(ServerLevel level) {
         try {
-            // Only generate test data if mod hasn't been initialized yet
-            if (isModInitialized(level)) {
-                return;
+            // CRITICAL: Always use Overworld for global marketplace storage
+            ServerLevel overworldLevel = level.getServer().getLevel(net.minecraft.world.level.Level.OVERWORLD);
+            if (overworldLevel == null) {
+                overworldLevel = level;
             }
             
-            List<FreeMarketItem> existingItems = loadFreeMarketItemsFromFile(level);
+            MarketplaceSavedData savedData = overworldLevel.getDataStorage().computeIfAbsent(
+                new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
+                MARKETPLACE_DATA_KEY
+            );
             
             // Only generate test data if marketplace is empty AND mod hasn't been initialized
-            if (existingItems.isEmpty()) {
+            if (savedData.getItems().isEmpty() && !savedData.isInitialized()) {
                 List<FreeMarketItem> testItems = new ArrayList<>();
                 String seller = "FreeMarket";
                 
@@ -366,18 +184,182 @@ public class FreeMarketDataManager {
                     java.util.UUID.randomUUID().toString(), "{}"));
                 
                 // Save test data
-                saveFreeMarketItems(level, testItems);
+                savedData.setItems(testItems);
+                savedData.setInitialized(true);
+                savedData.setDirty();
                 
-                // Mark mod as initialized to prevent future auto-generation
-                markModAsInitialized(level);
-                
-            } else {
+                FreeMarket.LOGGER.info("Generated initial test data for FreeMarket marketplace");
+            } else if (!savedData.getItems().isEmpty() && !savedData.isInitialized()) {
                 // Marketplace has items but mod not initialized - mark as initialized anyway
-                markModAsInitialized(level);
+                savedData.setInitialized(true);
+                savedData.setDirty();
             }
             
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to generate initial test data: {}", e.getMessage());
+        }
+    }
+    
+    /**
+     * SavedData implementation for storing marketplace data in world NBT.
+     */
+    public static class MarketplaceSavedData extends SavedData {
+        private List<FreeMarketItem> items = new ArrayList<>();
+        private String version = "1.0";
+        private long lastUpdated = System.currentTimeMillis();
+        private boolean initialized = false;
+        
+        public MarketplaceSavedData() {
+            // Default constructor
+        }
+        
+        public MarketplaceSavedData(List<FreeMarketItem> items) {
+            this.items = new ArrayList<>(items);
+        }
+        
+        @Override
+        public CompoundTag save(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
+            ListTag itemsList = new ListTag();
+            
+            for (FreeMarketItem item : items) {
+                CompoundTag itemTag = new CompoundTag();
+                
+                // Serialize ItemStack
+                ItemStack itemStack = item.getItemStack();
+                ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
+                itemTag.putString("itemId", itemId.toString());
+                itemTag.putInt("count", itemStack.getCount());
+                
+                // Save ItemStack with component data to NBT
+                CompoundTag itemStackTag = new CompoundTag();
+                itemStack.save(registries, itemStackTag);
+                itemTag.put("itemStack", itemStackTag);
+                
+                // Serialize marketplace data
+                itemTag.putLong("buyPrice", item.getBuyPrice());
+                itemTag.putLong("sellPrice", item.getSellPrice());
+                itemTag.putInt("quantity", item.getQuantity());
+                itemTag.putString("seller", item.getSeller());
+                itemTag.putString("guid", item.getGuid());
+                itemTag.putString("componentData", item.getComponentData());
+                
+                itemsList.add(itemTag);
+            }
+            
+            tag.put(ITEMS_LIST_KEY, itemsList);
+            tag.putString(VERSION_KEY, version);
+            tag.putLong(LAST_UPDATED_KEY, System.currentTimeMillis());
+            tag.putBoolean(INITIALIZED_KEY, initialized);
+            
+            return tag;
+        }
+        
+        public static MarketplaceSavedData load(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
+            MarketplaceSavedData data = new MarketplaceSavedData();
+            
+            if (tag.contains(ITEMS_LIST_KEY, Tag.TAG_LIST)) {
+                ListTag itemsList = tag.getList(ITEMS_LIST_KEY, Tag.TAG_COMPOUND);
+                
+                for (int i = 0; i < itemsList.size(); i++) {
+                    CompoundTag itemTag = itemsList.getCompound(i);
+                    
+                    try {
+                        // Try to load ItemStack from NBT first (preferred method)
+                        ItemStack itemStack = null;
+                        if (itemTag.contains("itemStack", Tag.TAG_COMPOUND)) {
+                            CompoundTag itemStackTag = itemTag.getCompound("itemStack");
+                            try {
+                                // parseOptional returns ItemStack directly (may be ItemStack.EMPTY if invalid)
+                                ItemStack parsedStack = ItemStack.parseOptional(registries, itemStackTag);
+                                if (parsedStack != null && !parsedStack.isEmpty()) {
+                                    itemStack = parsedStack;
+                                }
+                            } catch (Exception e) {
+                                FreeMarket.LOGGER.warn("Failed to parse ItemStack from NBT: {}", e.getMessage());
+                            }
+                        }
+                        
+                        // Fallback to legacy format (itemId + count) if itemStack is null
+                        if (itemStack == null && itemTag.contains("itemId")) {
+                            String itemIdStr = itemTag.getString("itemId");
+                            int count = itemTag.contains("count") ? itemTag.getInt("count") : 1;
+                            
+                            ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
+                            if (BuiltInRegistries.ITEM.containsKey(itemId)) {
+                                Item item = BuiltInRegistries.ITEM.get(itemId);
+                                itemStack = new ItemStack(item, count);
+                            } else {
+                                FreeMarket.LOGGER.warn("Unknown item ID in marketplace data: {}", itemIdStr);
+                                continue;
+                            }
+                        }
+                        
+                        if (itemStack == null) {
+                            FreeMarket.LOGGER.warn("Failed to deserialize ItemStack from marketplace data");
+                            continue;
+                        }
+                        
+                        // Deserialize marketplace data
+                        long buyPrice = itemTag.contains("buyPrice") ? itemTag.getLong("buyPrice") : itemTag.getInt("buyPrice");
+                        long sellPrice = itemTag.contains("sellPrice") ? itemTag.getLong("sellPrice") : itemTag.getInt("sellPrice");
+                        int quantity = itemTag.getInt("quantity");
+                        String seller = itemTag.getString("seller");
+                        String guid = itemTag.contains("guid") ? itemTag.getString("guid") : null;
+                        String componentData = itemTag.contains("componentData") ? itemTag.getString("componentData") : "{}";
+                        
+                        // If GUID is missing or empty, generate a random one
+                        if (guid == null || guid.isEmpty()) {
+                            guid = java.util.UUID.randomUUID().toString();
+                        }
+                        
+                        // Note: Component data is already in the ItemStack when loaded from NBT,
+                        // but we keep the componentData string for reference/display purposes
+                        
+                        FreeMarketItem freeMarketItem = new FreeMarketItem(
+                            itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
+                        data.items.add(freeMarketItem);
+                        
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
+                    }
+                }
+            }
+            
+            if (tag.contains(VERSION_KEY)) {
+                data.version = tag.getString(VERSION_KEY);
+            }
+            if (tag.contains(LAST_UPDATED_KEY)) {
+                data.lastUpdated = tag.getLong(LAST_UPDATED_KEY);
+            }
+            if (tag.contains(INITIALIZED_KEY)) {
+                data.initialized = tag.getBoolean(INITIALIZED_KEY);
+            }
+            
+            return data;
+        }
+        
+        public List<FreeMarketItem> getItems() {
+            return new ArrayList<>(items);
+        }
+        
+        public void setItems(List<FreeMarketItem> items) {
+            this.items = new ArrayList<>(items);
+        }
+        
+        public String getVersion() {
+            return version;
+        }
+        
+        public long getLastUpdated() {
+            return lastUpdated;
+        }
+        
+        public boolean isInitialized() {
+            return initialized;
+        }
+        
+        public void setInitialized(boolean initialized) {
+            this.initialized = initialized;
         }
     }
 }

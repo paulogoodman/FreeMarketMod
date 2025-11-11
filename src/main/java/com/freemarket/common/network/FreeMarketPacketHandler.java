@@ -280,7 +280,6 @@ public class FreeMarketPacketHandler {
                     buyPrice,
                     sellPrice,
                     quantity,
-                    player.getName().getString(),
                     null, // GUID will be generated
                     componentData
                 );
@@ -416,7 +415,6 @@ public class FreeMarketPacketHandler {
                         dto.getBuyPrice(),
                         dto.getSellPrice(),
                         dto.getQuantity(),
-                        dto.getSeller(),
                         dto.getGuid(),
                         dto.getComponentData()
                     );

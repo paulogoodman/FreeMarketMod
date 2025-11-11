@@ -84,14 +84,14 @@ public class FreeMarket {
                 FreeMarketDataManager.createEmptyMarketplaceFile(serverLevel);
             }
             
-            // Create empty leaderboard.json file if it doesn't exist
-            if (!LeaderboardDataManager.leaderboardFileExists(serverLevel)) {
-                LeaderboardDataManager.createEmptyLeaderboardFile(serverLevel);
-            }
-            
             // Load leaderboard data into cache on world load
+            // Data is now stored in NBT, so SavedData will handle initialization automatically
             LeaderboardDataManager.loadLeaderboardData(serverLevel);
             
+            // Check config folder size on world load (only check once per server start)
+            if (serverLevel.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+                com.freemarket.server.data.ConfigFolderManager.checkConfigFolderSize(serverLevel);
+            }
         }
     }
     

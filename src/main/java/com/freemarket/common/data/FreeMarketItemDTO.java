@@ -9,7 +9,6 @@ public class FreeMarketItemDTO {
     private long buyPrice;
     private long sellPrice;
     private int quantity;
-    private String seller;
     private String guid;
     private String componentData;
     
@@ -21,7 +20,6 @@ public class FreeMarketItemDTO {
         this.buyPrice = 0;
         this.sellPrice = 0;
         this.quantity = 1;
-        this.seller = "";
         this.guid = "";
         this.componentData = "{}";
     }
@@ -34,7 +32,6 @@ public class FreeMarketItemDTO {
         this.buyPrice = item.getBuyPrice();
         this.sellPrice = item.getSellPrice();
         this.quantity = item.getQuantity();
-        this.seller = item.getSeller();
         this.guid = item.getGuid();
         this.componentData = item.getComponentData();
     }
@@ -70,14 +67,6 @@ public class FreeMarketItemDTO {
     
     public void setQuantity(int quantity) {
         this.quantity = quantity;
-    }
-    
-    public String getSeller() {
-        return seller;
-    }
-    
-    public void setSeller(String seller) {
-        this.seller = seller;
     }
     
     public String getGuid() {

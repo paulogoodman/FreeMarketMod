@@ -11,6 +11,7 @@ import com.freemarket.server.handlers.ServerWalletHandler;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.server.events.PendingRewardsHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
+import com.freemarket.server.data.AuctionDataManager;
 import com.freemarket.common.data.FreeMarketItem;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -20,6 +21,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.loading.FMLPaths;
+import java.nio.file.Path;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
@@ -92,7 +95,8 @@ public class FreeMarketCommands {
             .then(buildMailCommand())
             .then(buildAdminModeCommand())
             .then(buildItemDataCommand())
-            .then(buildListCommand()));
+            .then(buildListCommand())
+            .then(buildAdminDumpLoadCommands()));
     }
     
     /**
@@ -192,6 +196,24 @@ public class FreeMarketCommands {
                         .then(Commands.argument(ARG_SELL_PRICE, LongArgumentType.longArg(0))
                             .then(Commands.argument(ARG_QUANTITY, IntegerArgumentType.integer(1))
                                 .executes(FreeMarketCommands::addItemToMarketplace))))));
+    }
+    
+    /**
+     * Builds admin dump/load commands for marketplace and auctions.
+     * 
+     * @return Command builder for admin dump/load commands
+     */
+    private static com.mojang.brigadier.builder.LiteralArgumentBuilder<CommandSourceStack> buildAdminDumpLoadCommands() {
+        return Commands.literal("admin")
+            .requires(source -> source.hasPermission(ADMIN_PERMISSION_LEVEL))
+            .then(Commands.literal("dump_market")
+                .executes(FreeMarketCommands::executeDumpMarket))
+            .then(Commands.literal("load_market")
+                .executes(FreeMarketCommands::executeLoadMarket))
+            .then(Commands.literal("dump_auctions")
+                .executes(FreeMarketCommands::executeDumpAuctions))
+            .then(Commands.literal("load_auctions")
+                .executes(FreeMarketCommands::executeLoadAuctions));
     }
     
 
@@ -678,9 +700,8 @@ public class FreeMarketCommands {
             ItemStack itemStack = new ItemStack(BuiltInRegistries.ITEM.get(itemLocation), quantity);
             
             // Create FreeMarketItem
-            String seller = source.getTextName();
             String guid = java.util.UUID.randomUUID().toString();
-            FreeMarketItem FreeMarketItem = new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, "{}");
+            FreeMarketItem FreeMarketItem = new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, guid, "{}");
             
             // Add item using JSON system
             List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
@@ -701,6 +722,146 @@ public class FreeMarketCommands {
         }
         
         return 1;
+    }
+    
+    /**
+     * Dumps all marketplace items to JSON files in config/freemarket/market/
+     * 
+     * <p>Usage: /freemarket admin dump_market</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if error occurs
+     */
+    private static int executeDumpMarket(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        try {
+            ServerLevel level = source.getLevel();
+            Path configDir = FMLPaths.CONFIGDIR.get();
+            
+            int dumpedCount = FreeMarketDataManager.dumpMarketplaceToJson(level, configDir);
+            
+            if (dumpedCount > 0) {
+                Component message = Component.literal("§aSuccessfully dumped §e" + dumpedCount + "§a marketplace items to §e" + configDir.resolve("freemarket").resolve("market"));
+                source.sendSuccess(() -> message, true);
+            } else {
+                Component message = Component.literal("§eNo marketplace items to dump or error occurred");
+                source.sendSuccess(() -> message, true);
+            }
+            
+            return 1;
+        } catch (Exception e) {
+            Component message = Component.literal("§cFailed to dump marketplace: " + e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Failed to dump marketplace: {}", e.getMessage(), e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Loads marketplace items from JSON files in config/freemarket/market/
+     * 
+     * <p>Usage: /freemarket admin load_market</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if error occurs
+     */
+    private static int executeLoadMarket(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        try {
+            ServerLevel level = source.getLevel();
+            Path configDir = FMLPaths.CONFIGDIR.get();
+            
+            FreeMarketDataManager.LoadResult result = FreeMarketDataManager.loadMarketplaceFromJson(level, configDir);
+            
+            if (result.loaded > 0) {
+                Component message = Component.literal("§aSuccessfully loaded §e" + result.loaded + "§a marketplace items (§e" + result.updated + "§a updated, §e" + result.added + "§a added)");
+                source.sendSuccess(() -> message, true);
+            } else {
+                Component message = Component.literal("§eNo marketplace items found to load in §e" + configDir.resolve("freemarket").resolve("market"));
+                source.sendSuccess(() -> message, true);
+            }
+            
+            return 1;
+        } catch (Exception e) {
+            Component message = Component.literal("§cFailed to load marketplace: " + e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Failed to load marketplace: {}", e.getMessage(), e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Dumps all auctions to JSON files in config/freemarket/auctions/
+     * 
+     * <p>Usage: /freemarket admin dump_auctions</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if error occurs
+     */
+    private static int executeDumpAuctions(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        try {
+            ServerLevel level = source.getLevel();
+            Path configDir = FMLPaths.CONFIGDIR.get();
+            
+            int dumpedCount = AuctionDataManager.dumpAuctionsToJson(level, configDir);
+            
+            if (dumpedCount > 0) {
+                Component message = Component.literal("§aSuccessfully dumped §e" + dumpedCount + "§a auctions to §e" + configDir.resolve("freemarket").resolve("auctions"));
+                source.sendSuccess(() -> message, true);
+            } else {
+                Component message = Component.literal("§eNo auctions to dump or error occurred");
+                source.sendSuccess(() -> message, true);
+            }
+            
+            return 1;
+        } catch (Exception e) {
+            Component message = Component.literal("§cFailed to dump auctions: " + e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Failed to dump auctions: {}", e.getMessage(), e);
+            return 0;
+        }
+    }
+    
+    /**
+     * Loads auctions from JSON files in config/freemarket/auctions/
+     * 
+     * <p>Usage: /freemarket admin load_auctions</p>
+     * <p>Permission: OP Level 2 (admin only)</p>
+     * 
+     * @param context The command context containing the source and arguments
+     * @return 1 if successful, 0 if error occurs
+     */
+    private static int executeLoadAuctions(CommandContext<CommandSourceStack> context) {
+        CommandSourceStack source = context.getSource();
+        
+        try {
+            ServerLevel level = source.getLevel();
+            Path configDir = FMLPaths.CONFIGDIR.get();
+            
+            AuctionDataManager.LoadResult result = AuctionDataManager.loadAuctionsFromJson(level, configDir);
+            
+            if (result.loaded > 0) {
+                Component message = Component.literal("§aSuccessfully loaded §e" + result.loaded + "§a auctions (§e" + result.updated + "§a updated, §e" + result.added + "§a added)");
+                source.sendSuccess(() -> message, true);
+            } else {
+                Component message = Component.literal("§eNo auctions found to load in §e" + configDir.resolve("freemarket").resolve("auctions"));
+                source.sendSuccess(() -> message, true);
+            }
+            
+            return 1;
+        } catch (Exception e) {
+            Component message = Component.literal("§cFailed to load auctions: " + e.getMessage());
+            source.sendFailure(message);
+            FreeMarket.LOGGER.error("Failed to load auctions: {}", e.getMessage(), e);
+            return 0;
+        }
     }
     
     /**
@@ -734,6 +895,10 @@ public class FreeMarketCommands {
             source.sendSuccess(() -> Component.literal("§7/freemarket itemdata§r - Shows data about the item in your hand"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket list hand <buyPrice> <sellPrice>§r - Add the item in your hand to marketplace (at least one price must be > 0)"), false);
             source.sendSuccess(() -> Component.literal("§7/freemarket list item <item> <buyPrice> <sellPrice> <quantity>§r - Add item to marketplace (at least one price must be > 0)"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket admin dump_market§r - Dump all marketplace items to JSON files"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket admin load_market§r - Load marketplace items from JSON files"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket admin dump_auctions§r - Dump all auctions to JSON files"), false);
+            source.sendSuccess(() -> Component.literal("§7/freemarket admin load_auctions§r - Load auctions from JSON files"), false);
         }
         
         source.sendSuccess(() -> Component.literal("§6Use §e/fm§6 as a shortcut for §e/freemarket§r"), false);
@@ -787,7 +952,6 @@ public class FreeMarketCommands {
             ItemStack itemToSell = heldItem.copy();
             
             // Create FreeMarketItem with the exact item data (including NBT)
-            String seller = player.getName().getString();
             String guid = java.util.UUID.randomUUID().toString();
             
             // Serialize the item with all NBT data
@@ -799,7 +963,6 @@ public class FreeMarketCommands {
                 buyPrice,  // Buy price from argument
                 sellPrice, // Sell price from argument
                 itemToSell.getCount(), 
-                seller, 
                 guid, 
                 itemData
             );

@@ -2,6 +2,9 @@ package com.freemarket.server.data;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.PlayerAuction;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonObject;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -10,8 +13,15 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import javax.annotation.Nonnull;
 
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -24,6 +34,7 @@ public class AuctionDataManager {
     private static final String AUCTIONS_LIST_KEY = "auctions";
     private static final String VERSION_KEY = "version";
     private static final String LAST_UPDATED_KEY = "lastUpdated";
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
      * Gets the auction data from world save data.
@@ -119,6 +130,247 @@ public class AuctionDataManager {
      */
     public static boolean hasAuctionData(ServerLevel level) {
         return level.getDataStorage().get(new SavedData.Factory<>(AuctionSavedData::new, AuctionSavedData::load), AUCTION_DATA_KEY) != null;
+    }
+    
+    /**
+     * Dumps all auctions to JSON files in the config directory.
+     * Each auction is written to a separate file named {auctionId}.json in config/freemarket/auctions/
+     * 
+     * @param level The server level
+     * @param configDir The config directory path
+     * @return The number of auctions successfully dumped
+     */
+    public static int dumpAuctionsToJson(ServerLevel level, Path configDir) {
+        try {
+            // Get all auctions
+            List<PlayerAuction> auctions = loadAuctions(level);
+            
+            // Create auctions directory
+            Path auctionsDir = configDir.resolve("freemarket").resolve("auctions");
+            Files.createDirectories(auctionsDir);
+            
+            int dumpedCount = 0;
+            
+            // Write each auction to a separate JSON file
+            for (PlayerAuction auction : auctions) {
+                try {
+                    String auctionId = auction.getAuctionId();
+                    if (auctionId == null || auctionId.isEmpty()) {
+                        auctionId = generateAuctionId();
+                        FreeMarket.LOGGER.warn("Auction missing auctionId, generated new one: {}", auctionId);
+                    }
+                    
+                    // Create JSON object
+                    JsonObject auctionJson = new JsonObject();
+                    auctionJson.addProperty("auctionId", auctionId);
+                    auctionJson.addProperty("itemId", auction.getItemId());
+                    auctionJson.addProperty("componentData", auction.getComponentData());
+                    auctionJson.addProperty("quantity", auction.getQuantity());
+                    auctionJson.addProperty("startingPrice", auction.getStartingPrice());
+                    auctionJson.addProperty("currentBid", auction.getCurrentBid());
+                    auctionJson.addProperty("sellerUuid", auction.getSellerUuid());
+                    auctionJson.addProperty("sellerName", auction.getSellerName());
+                    auctionJson.addProperty("expiryTime", auction.getExpiryTime());
+                    auctionJson.addProperty("createdTime", auction.getCreatedTime());
+                    
+                    if (auction.getBidderUuid() != null) {
+                        auctionJson.addProperty("bidderUuid", auction.getBidderUuid());
+                    } else {
+                        auctionJson.add("bidderUuid", null);
+                    }
+                    
+                    if (auction.getBidderName() != null) {
+                        auctionJson.addProperty("bidderName", auction.getBidderName());
+                    } else {
+                        auctionJson.add("bidderName", null);
+                    }
+                    
+                    // Write to file
+                    File jsonFile = auctionsDir.resolve(auctionId + ".json").toFile();
+                    try (FileWriter writer = new FileWriter(jsonFile)) {
+                        GSON.toJson(auctionJson, writer);
+                    }
+                    
+                    dumpedCount++;
+                } catch (Exception e) {
+                    FreeMarket.LOGGER.error("Failed to dump auction with ID {}: {}", auction.getAuctionId(), e.getMessage());
+                }
+            }
+            
+            FreeMarket.LOGGER.info("Dumped {} auctions to {}", dumpedCount, auctionsDir);
+            return dumpedCount;
+            
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to dump auctions to JSON: {}", e.getMessage());
+            return 0;
+        }
+    }
+    
+    /**
+     * Loads auctions from JSON files in the config directory.
+     * Scans config/freemarket/auctions/ for all .json files and loads them.
+     * Auctions with matching auctionIds will update existing auctions, others will be added as new auctions.
+     * 
+     * @param level The server level
+     * @param configDir The config directory path
+     * @return A result object containing success count, update count, and add count
+     */
+    public static LoadResult loadAuctionsFromJson(ServerLevel level, Path configDir) {
+        try {
+            Path auctionsDir = configDir.resolve("freemarket").resolve("auctions");
+            
+            // Check if directory exists
+            if (!Files.exists(auctionsDir) || !Files.isDirectory(auctionsDir)) {
+                FreeMarket.LOGGER.warn("Auctions directory does not exist: {}", auctionsDir);
+                return new LoadResult(0, 0, 0);
+            }
+            
+            // Get current auctions
+            List<PlayerAuction> currentAuctions = loadAuctions(level);
+            Map<String, Integer> auctionIdToIndex = new HashMap<>();
+            for (int i = 0; i < currentAuctions.size(); i++) {
+                String auctionId = currentAuctions.get(i).getAuctionId();
+                if (auctionId != null && !auctionId.isEmpty()) {
+                    auctionIdToIndex.put(auctionId, i);
+                }
+            }
+            
+            int loadedCount = 0;
+            int updatedCount = 0;
+            int addedCount = 0;
+            
+            // Scan directory for JSON files
+            File[] jsonFiles = auctionsDir.toFile().listFiles((dir, name) -> name.endsWith(".json"));
+            if (jsonFiles == null) {
+                return new LoadResult(0, 0, 0);
+            }
+            
+            for (File jsonFile : jsonFiles) {
+                try (FileReader reader = new FileReader(jsonFile)) {
+                    JsonObject auctionJson = GSON.fromJson(reader, JsonObject.class);
+                    
+                    if (auctionJson == null) {
+                        FreeMarket.LOGGER.warn("Invalid JSON in file: {}", jsonFile.getName());
+                        continue;
+                    }
+                    
+                    // Validate required fields
+                    if (!auctionJson.has("itemId") || auctionJson.get("itemId").isJsonNull()) {
+                        FreeMarket.LOGGER.warn("Missing required field 'itemId' in file: {}", jsonFile.getName());
+                        continue;
+                    }
+                    if (!auctionJson.has("quantity")) {
+                        FreeMarket.LOGGER.warn("Missing required field 'quantity' in file: {}", jsonFile.getName());
+                        continue;
+                    }
+                    if (!auctionJson.has("startingPrice")) {
+                        FreeMarket.LOGGER.warn("Missing required field 'startingPrice' in file: {}", jsonFile.getName());
+                        continue;
+                    }
+                    if (!auctionJson.has("currentBid")) {
+                        FreeMarket.LOGGER.warn("Missing required field 'currentBid' in file: {}", jsonFile.getName());
+                        continue;
+                    }
+                    
+                    // Required fields
+                    String itemId = auctionJson.get("itemId").getAsString();
+                    int quantity = auctionJson.get("quantity").getAsInt();
+                    long startingPrice = auctionJson.get("startingPrice").getAsLong();
+                    long currentBid = auctionJson.get("currentBid").getAsLong();
+                    
+                    // Optional fields with defaults
+                    String auctionId = auctionJson.has("auctionId") && !auctionJson.get("auctionId").isJsonNull() 
+                        ? auctionJson.get("auctionId").getAsString() : null;
+                    String componentData = auctionJson.has("componentData") && !auctionJson.get("componentData").isJsonNull()
+                        ? auctionJson.get("componentData").getAsString() : "{}";
+                    String sellerUuid = auctionJson.has("sellerUuid") && !auctionJson.get("sellerUuid").isJsonNull()
+                        ? auctionJson.get("sellerUuid").getAsString() : "";
+                    String sellerName = auctionJson.has("sellerName") && !auctionJson.get("sellerName").isJsonNull()
+                        ? auctionJson.get("sellerName").getAsString() : "Admin";
+                    
+                    // Default expiryTime to 24 hours from now if not specified
+                    long expiryTime;
+                    if (auctionJson.has("expiryTime") && !auctionJson.get("expiryTime").isJsonNull()) {
+                        expiryTime = auctionJson.get("expiryTime").getAsLong();
+                    } else {
+                        expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L); // 24 hours
+                    }
+                    
+                    // Default createdTime to current time if not specified
+                    long createdTime = auctionJson.has("createdTime") && !auctionJson.get("createdTime").isJsonNull()
+                        ? auctionJson.get("createdTime").getAsLong() : System.currentTimeMillis();
+                    
+                    // Bidder fields default to null
+                    String bidderUuid = null;
+                    if (auctionJson.has("bidderUuid") && !auctionJson.get("bidderUuid").isJsonNull()) {
+                        bidderUuid = auctionJson.get("bidderUuid").getAsString();
+                    }
+                    
+                    String bidderName = null;
+                    if (auctionJson.has("bidderName") && !auctionJson.get("bidderName").isJsonNull()) {
+                        bidderName = auctionJson.get("bidderName").getAsString();
+                    }
+                    
+                    // Generate auctionId if missing
+                    if (auctionId == null || auctionId.isEmpty()) {
+                        auctionId = generateAuctionId();
+                        FreeMarket.LOGGER.info("Generated new auctionId for auction from file {}: {}", jsonFile.getName(), auctionId);
+                    }
+                    
+                    // Create PlayerAuction
+                    PlayerAuction playerAuction = new PlayerAuction(
+                        auctionId, itemId, componentData, quantity,
+                        startingPrice, currentBid, sellerUuid, sellerName,
+                        expiryTime, bidderUuid, bidderName, createdTime);
+                    
+                    // Check if auctionId exists in current auctions
+                    if (auctionIdToIndex.containsKey(auctionId)) {
+                        // Update existing auction
+                        int index = auctionIdToIndex.get(auctionId);
+                        currentAuctions.set(index, playerAuction);
+                        updatedCount++;
+                    } else {
+                        // Add as new auction
+                        currentAuctions.add(playerAuction);
+                        auctionIdToIndex.put(auctionId, currentAuctions.size() - 1);
+                        addedCount++;
+                    }
+                    
+                    loadedCount++;
+                    
+                } catch (Exception e) {
+                    FreeMarket.LOGGER.error("Failed to load auction from file {}: {}", jsonFile.getName(), e.getMessage());
+                }
+            }
+            
+            // Save updated auctions
+            if (loadedCount > 0) {
+                saveAuctions(level, currentAuctions);
+                FreeMarket.LOGGER.info("Loaded {} auctions ({} updated, {} added) from {}", 
+                    loadedCount, updatedCount, addedCount, auctionsDir);
+            }
+            
+            return new LoadResult(loadedCount, updatedCount, addedCount);
+            
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to load auctions from JSON: {}", e.getMessage());
+            return new LoadResult(0, 0, 0);
+        }
+    }
+    
+    /**
+     * Result object for load operations.
+     */
+    public static class LoadResult {
+        public final int loaded;
+        public final int updated;
+        public final int added;
+        
+        public LoadResult(int loaded, int updated, int added) {
+            this.loaded = loaded;
+            this.updated = updated;
+            this.added = added;
+        }
     }
     
     /**

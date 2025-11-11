@@ -235,7 +235,6 @@ public class ClientFreeMarketDataManager {
             int buyPrice = itemJson.get("buyPrice").getAsInt();
             int sellPrice = itemJson.get("sellPrice").getAsInt();
             int quantity = itemJson.get("quantity").getAsInt();
-            String seller = itemJson.get("seller").getAsString();
             String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
             String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
 
@@ -244,7 +243,7 @@ public class ClientFreeMarketDataManager {
                 guid = java.util.UUID.randomUUID().toString();
             }
 
-            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, seller, guid, componentData);
+            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, guid, componentData);
             
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
@@ -369,7 +368,6 @@ public class ClientFreeMarketDataManager {
         itemJson.addProperty("buyPrice", item.getBuyPrice());
         itemJson.addProperty("sellPrice", item.getSellPrice());
         itemJson.addProperty("quantity", item.getQuantity());
-        itemJson.addProperty("seller", item.getSeller());
         itemJson.addProperty("guid", item.getGuid());
         
         return itemJson;

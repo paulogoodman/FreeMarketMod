@@ -2,160 +2,70 @@ package com.freemarket.server.data;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.data.PlayerBalanceData;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.level.saveddata.SavedData;
 
-import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.file.Path;
+import javax.annotation.Nonnull;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Manages leaderboard data persistence using JSON files in world data directory.
- * Stores player balances for offline player access in leaderboard.
+ * Manages leaderboard data persistence using world NBT data.
+ * Data is stored in world save data using SavedData.
  */
 public class LeaderboardDataManager {
     
-    private static final String LEADERBOARD_FILE_NAME = "leaderboard.json";
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final String LEADERBOARD_DATA_KEY = "freemarket_leaderboard";
+    private static final String PLAYERS_LIST_KEY = "players";
+    private static final String VERSION_KEY = "version";
+    private static final String LAST_UPDATED_KEY = "lastUpdated";
     
     // In-memory cache of player balances
     private static final Map<String, PlayerBalanceData> balanceCache = new HashMap<>();
     
     /**
-     * Gets the leaderboard data file path for a given world.
-     */
-    public static Path getLeaderboardFilePath(ServerLevel level) {
-        return level.getServer().getWorldPath(LevelResource.ROOT).resolve("data").resolve(LEADERBOARD_FILE_NAME);
-    }
-    
-    /**
-     * Creates an empty leaderboard.json file in the world data directory.
-     * Called when a new world is created.
-     */
-    public static void createEmptyLeaderboardFile(ServerLevel level) {
-        try {
-            Path leaderboardFile = getLeaderboardFilePath(level);
-            File file = leaderboardFile.toFile();
-            
-            // Create parent directories if they don't exist
-            file.getParentFile().mkdirs();
-            
-            // Create empty leaderboard structure
-            JsonObject leaderboardData = new JsonObject();
-            leaderboardData.add("players", new JsonArray());
-            leaderboardData.addProperty("version", "1.0");
-            leaderboardData.addProperty("description", "FreeMarket Leaderboard Data");
-            
-            // Write to file
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(leaderboardData, writer);
-            }
-            
-            FreeMarket.LOGGER.info("Created empty leaderboard.json file for world: {}", level.dimension().location());
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to create leaderboard.json file for world: {}", level.dimension().location(), e);
-        }
-    }
-    
-    /**
-     * Loads player balance data from the JSON file.
-     * Returns empty list if file doesn't exist or is invalid.
+     * Gets the leaderboard data from world save data.
+     * Only loads data when explicitly requested.
      */
     public static List<PlayerBalanceData> loadLeaderboardData(ServerLevel level) {
-        List<PlayerBalanceData> players = new ArrayList<>();
+        LeaderboardSavedData savedData = level.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(LeaderboardSavedData::new, LeaderboardSavedData::load),
+            LEADERBOARD_DATA_KEY
+        );
         
-        try {
-            Path leaderboardFile = getLeaderboardFilePath(level);
-            File file = leaderboardFile.toFile();
-            
-            if (!file.exists()) {
-                FreeMarket.LOGGER.info("Leaderboard file does not exist, creating empty file: {}", leaderboardFile);
-                createEmptyLeaderboardFile(level);
-                return players;
-            }
-            
-            try (FileReader reader = new FileReader(file)) {
-                JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
-                JsonArray playersArray = root.getAsJsonArray("players");
-                
-                if (playersArray != null) {
-                    for (int i = 0; i < playersArray.size(); i++) {
-                        JsonObject playerJson = playersArray.get(i).getAsJsonObject();
-                        
-                        String uuid = playerJson.get("uuid").getAsString();
-                        String playerName = playerJson.get("playerName").getAsString();
-                        long balance = playerJson.get("balance").getAsLong();
-                        long lastUpdated = playerJson.has("lastUpdated") ? 
-                            playerJson.get("lastUpdated").getAsLong() : System.currentTimeMillis();
-                        
-                        PlayerBalanceData data = new PlayerBalanceData(uuid, playerName, balance, lastUpdated);
-                        players.add(data);
-                        
-                        // Update cache
-                        balanceCache.put(uuid, data);
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
-            FreeMarket.LOGGER.error("Failed to load leaderboard data from world: {}", level.dimension().location(), e);
+        List<PlayerBalanceData> players = savedData.getPlayers();
+        
+        // Update cache
+        balanceCache.clear();
+        for (PlayerBalanceData player : players) {
+            balanceCache.put(player.getUuid(), player);
         }
         
         return players;
     }
     
     /**
-     * Saves player balance data to the JSON file.
+     * Saves leaderboard data to world save data.
      */
     public static void saveLeaderboardData(ServerLevel level, List<PlayerBalanceData> players) {
-        try {
-            Path leaderboardFile = getLeaderboardFilePath(level);
-            File file = leaderboardFile.toFile();
-            
-            // Create parent directories if they don't exist
-            file.getParentFile().mkdirs();
-            
-            JsonObject leaderboardData = new JsonObject();
-            JsonArray playersArray = new JsonArray();
-            
-            for (PlayerBalanceData player : players) {
-                JsonObject playerJson = new JsonObject();
-                playerJson.addProperty("uuid", player.getUuid());
-                playerJson.addProperty("playerName", player.getPlayerName());
-                playerJson.addProperty("balance", player.getBalance());
-                playerJson.addProperty("lastUpdated", player.getLastUpdated());
-                playersArray.add(playerJson);
-            }
-            
-            leaderboardData.add("players", playersArray);
-            leaderboardData.addProperty("version", "1.0");
-            leaderboardData.addProperty("description", "FreeMarket Leaderboard Data");
-            leaderboardData.addProperty("lastUpdated", System.currentTimeMillis());
-            
-            // Write to file
-            try (FileWriter writer = new FileWriter(file)) {
-                GSON.toJson(leaderboardData, writer);
-            }
-            
-            // Update cache
-            balanceCache.clear();
-            for (PlayerBalanceData player : players) {
-                balanceCache.put(player.getUuid(), player);
-            }
-            
-        } catch (IOException e) {
-            FreeMarket.LOGGER.error("Failed to save leaderboard data to world: {}", level.dimension().location(), e);
+        LeaderboardSavedData savedData = level.getDataStorage().computeIfAbsent(
+            new SavedData.Factory<>(LeaderboardSavedData::new, LeaderboardSavedData::load),
+            LEADERBOARD_DATA_KEY
+        );
+        
+        savedData.setPlayers(players);
+        savedData.setDirty();
+        
+        // Update cache
+        balanceCache.clear();
+        for (PlayerBalanceData player : players) {
+            balanceCache.put(player.getUuid(), player);
         }
     }
     
@@ -204,13 +114,113 @@ public class LeaderboardDataManager {
     }
     
     /**
-     * Checks if the leaderboard.json file exists for a given world.
-     * @param level the server level
-     * @return true if the file exists
+     * Checks if leaderboard data exists for a given world.
      */
+    public static boolean hasLeaderboardData(ServerLevel level) {
+        return level.getDataStorage().get(new SavedData.Factory<>(LeaderboardSavedData::new, LeaderboardSavedData::load), LEADERBOARD_DATA_KEY) != null;
+    }
+    
+    /**
+     * @deprecated This method is no longer needed as data is stored in NBT.
+     * Kept for backwards compatibility but does nothing.
+     */
+    @Deprecated
+    public static void createEmptyLeaderboardFile(ServerLevel level) {
+        // No-op: data is now stored in NBT, not JSON files
+        FreeMarket.LOGGER.debug("createEmptyLeaderboardFile called but leaderboard now uses NBT storage");
+    }
+    
+    /**
+     * @deprecated This method is no longer needed as data is stored in NBT.
+     * Kept for backwards compatibility but returns false.
+     */
+    @Deprecated
     public static boolean leaderboardFileExists(ServerLevel level) {
-        Path leaderboardFile = getLeaderboardFilePath(level);
-        return leaderboardFile.toFile().exists();
+        // No-op: data is now stored in NBT, not JSON files
+        return hasLeaderboardData(level);
+    }
+    
+    /**
+     * SavedData implementation for storing leaderboard data in world NBT.
+     */
+    public static class LeaderboardSavedData extends SavedData {
+        private List<PlayerBalanceData> players = new ArrayList<>();
+        private String version = "1.0";
+        private long lastUpdated = System.currentTimeMillis();
+        
+        public LeaderboardSavedData() {
+            // Default constructor
+        }
+        
+        public LeaderboardSavedData(List<PlayerBalanceData> players) {
+            this.players = new ArrayList<>(players);
+        }
+        
+        @Override
+        public CompoundTag save(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
+            ListTag playersList = new ListTag();
+            
+            for (PlayerBalanceData player : players) {
+                CompoundTag playerTag = new CompoundTag();
+                playerTag.putString("uuid", player.getUuid());
+                playerTag.putString("playerName", player.getPlayerName());
+                playerTag.putLong("balance", player.getBalance());
+                playerTag.putLong("lastUpdated", player.getLastUpdated());
+                playersList.add(playerTag);
+            }
+            
+            tag.put(PLAYERS_LIST_KEY, playersList);
+            tag.putString(VERSION_KEY, version);
+            tag.putLong(LAST_UPDATED_KEY, System.currentTimeMillis());
+            
+            return tag;
+        }
+        
+        public static LeaderboardSavedData load(@Nonnull CompoundTag tag, @Nonnull HolderLookup.Provider registries) {
+            LeaderboardSavedData data = new LeaderboardSavedData();
+            
+            if (tag.contains(PLAYERS_LIST_KEY, Tag.TAG_LIST)) {
+                ListTag playersList = tag.getList(PLAYERS_LIST_KEY, Tag.TAG_COMPOUND);
+                
+                for (int i = 0; i < playersList.size(); i++) {
+                    CompoundTag playerTag = playersList.getCompound(i);
+                    
+                    String uuid = playerTag.getString("uuid");
+                    String playerName = playerTag.getString("playerName");
+                    long balance = playerTag.getLong("balance");
+                    long lastUpdated = playerTag.contains("lastUpdated") 
+                        ? playerTag.getLong("lastUpdated") 
+                        : System.currentTimeMillis();
+                    
+                    PlayerBalanceData player = new PlayerBalanceData(uuid, playerName, balance, lastUpdated);
+                    data.players.add(player);
+                }
+            }
+            
+            if (tag.contains(VERSION_KEY)) {
+                data.version = tag.getString(VERSION_KEY);
+            }
+            if (tag.contains(LAST_UPDATED_KEY)) {
+                data.lastUpdated = tag.getLong(LAST_UPDATED_KEY);
+            }
+            
+            return data;
+        }
+        
+        public List<PlayerBalanceData> getPlayers() {
+            return new ArrayList<>(players);
+        }
+        
+        public void setPlayers(List<PlayerBalanceData> players) {
+            this.players = new ArrayList<>(players);
+        }
+        
+        public String getVersion() {
+            return version;
+        }
+        
+        public long getLastUpdated() {
+            return lastUpdated;
+        }
     }
 }
-

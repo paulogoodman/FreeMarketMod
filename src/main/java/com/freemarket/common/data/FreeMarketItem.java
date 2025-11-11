@@ -10,36 +10,32 @@ public class FreeMarketItem {
     private final long buyPrice;
     private final long sellPrice;
     private final int quantity;
-    private final String seller;
     private final String guid; // Unique identifier for this free market entry
     private final String componentData; // Component data as JSON string
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
         this.quantity = quantity;
-        this.seller = seller;
         this.guid = generateRandomGuid();
         this.componentData = "{}"; // Default empty component data
     }
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String guid) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
         this.quantity = quantity;
-        this.seller = seller;
         this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
         this.componentData = "{}"; // Default empty component data
     }
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String seller, String guid, String componentData) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String guid, String componentData) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
         this.quantity = quantity;
-        this.seller = seller;
         this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
         this.componentData = componentData != null ? componentData : "{}";
     }
@@ -66,10 +62,6 @@ public class FreeMarketItem {
     
     public int getQuantity() {
         return quantity;
-    }
-    
-    public String getSeller() {
-        return seller;
     }
     
     public String getGuid() {

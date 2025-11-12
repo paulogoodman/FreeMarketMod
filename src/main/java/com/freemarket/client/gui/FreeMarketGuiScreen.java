@@ -93,6 +93,16 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Invalidates the auction container's cache to force refresh.
+     * Called when new auction data arrives from the server.
+     */
+    public void invalidateAuctionContainerCache() {
+        if (auctionContainer != null) {
+            auctionContainer.invalidateAuctionDataCache();
+        }
+    }
+    
+    /**
      * Shows the place bid popup overlay for the given auction.
      */
     public void showPlaceBidPopup(com.freemarket.common.data.PlayerAuction auction) {

@@ -1,6 +1,8 @@
 package com.freemarket.common.network;
 
 import com.freemarket.FreeMarket;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.netty.buffer.ByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -64,9 +66,31 @@ public record FreeMarketPacket(PacketType packetType, String data) implements Cu
     /**
      * Returns the appropriate packet type based on the packet direction.
      * Client-to-server packets use CLIENT_TO_SERVER_TYPE, server-to-client use SERVER_TO_CLIENT_TYPE.
+     * 
+     * For chunk packets (CHUNK_START, CHUNK_DATA, CHUNK_END), the direction is determined
+     * from the original packet type stored in the JSON data, not from the chunk type itself.
      */
     @Override
     public Type<? extends CustomPacketPayload> type() {
+        // For chunk packets, determine direction from the original packet type in the JSON data
+        if (packetType == PacketType.CHUNK_START || packetType == PacketType.CHUNK_DATA || packetType == PacketType.CHUNK_END) {
+            try {
+                if (data != null && !data.isEmpty()) {
+                    JsonObject json = JsonParser.parseString(data).getAsJsonObject();
+                    if (json.has("originalType")) {
+                        String originalTypeName = json.get("originalType").getAsString();
+                        PacketType originalType = PacketType.valueOf(originalTypeName);
+                        // Use the original packet type's direction
+                        return originalType.isClientToServer() ? CLIENT_TO_SERVER_TYPE : SERVER_TO_CLIENT_TYPE;
+                    }
+                }
+            } catch (Exception e) {
+                // If parsing fails, fall back to chunk type's direction (though this shouldn't happen)
+                FreeMarket.LOGGER.warn("Failed to parse chunk packet JSON to determine direction: {}", e.getMessage());
+            }
+        }
+        
+        // For non-chunk packets, use the packet type's direction directly
         return packetType.isClientToServer() ? CLIENT_TO_SERVER_TYPE : SERVER_TO_CLIENT_TYPE;
     }
     

@@ -75,7 +75,18 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
     
     @Override
     protected List<com.freemarket.common.data.PlayerAuction> getAllData() {
-        return getCachedAuctionData();
+        // Return only active (non-expired) auctions for display
+        List<com.freemarket.common.data.PlayerAuction> allAuctions = getCachedAuctionData();
+        if (allAuctions == null) {
+            return new ArrayList<>();
+        }
+        List<com.freemarket.common.data.PlayerAuction> activeAuctions = new ArrayList<>();
+        for (com.freemarket.common.data.PlayerAuction auction : allAuctions) {
+            if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
+                activeAuctions.add(auction);
+            }
+        }
+        return activeAuctions;
     }
     
     @Override
@@ -96,13 +107,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
     
     @Override
     protected Map<ItemCategoryManager.Category, Integer> getCategoryCounts() {
-        List<com.freemarket.common.data.PlayerAuction> allAuctions = getCachedAuctionData();
-        List<com.freemarket.common.data.PlayerAuction> activeAuctions = new ArrayList<>();
-        for (com.freemarket.common.data.PlayerAuction auction : allAuctions) {
-            if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
-                activeAuctions.add(auction);
-            }
-        }
+        // Use getAllData() which already filters to active auctions
+        List<com.freemarket.common.data.PlayerAuction> activeAuctions = getAllData();
         return ItemCategoryManager.getCategoryCountsForAuctions(activeAuctions);
     }
     
@@ -134,16 +140,9 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
     
     @Override
     protected void renderDataGrid(GuiGraphics guiGraphics, List<com.freemarket.common.data.PlayerAuction> auctions, int mouseX, int mouseY, float partialTick) {
-        // Filter to only active auctions
-        List<com.freemarket.common.data.PlayerAuction> activeAuctions = new ArrayList<>();
-        for (com.freemarket.common.data.PlayerAuction auction : auctions) {
-            if (!ClientAuctionTimingCache.isExpired(auction.getAuctionId())) {
-                activeAuctions.add(auction);
-            }
-        }
-        
-        // Render auction grid
-        renderAuctionGrid(guiGraphics, activeAuctions, mouseX, mouseY);
+        // getAllData() already filters to active auctions, so auctions parameter is already filtered
+        // Render auction grid directly
+        renderAuctionGrid(guiGraphics, auctions, mouseX, mouseY);
     }
     
     @Override
@@ -168,7 +167,7 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         
         // Check each visible auction for click
         for (int i = startIndex; i < endIndex; i++) {
-            com.freemarket.common.data.PlayerAuction currentAuction = auctions.get(i);
+            PlayerAuction currentAuction = auctions.get(i);
             
             // Calculate position
             int gridIndex = i - startIndex;
@@ -635,14 +634,8 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         float guiScale = (float) minecraft.getWindow().getGuiScale();
         String playerUuid = minecraft.player != null ? minecraft.player.getStringUUID() : null;
         
-        // Use cached auction data instead of calling ClientAuctionCache every time
-        List<PlayerAuction> auctions = getCachedAuctionData();
-        List<PlayerAuction> activeAuctions = new ArrayList<>();
-        for (PlayerAuction auction : auctions) {
-            if (!auction.isExpired()) {
-                activeAuctions.add(auction);
-            }
-        }
+        // Use getFilteredData() which already filters to active auctions and applies search/category filters
+        List<PlayerAuction> auctions = getFilteredData();
         
         // Calculate grid start position - account for sidebar like marketplace
         int startY = y + (int)(height * 0.15);
@@ -652,11 +645,11 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         
         // Calculate visible range
         int startIndex = scrollOffset * itemsPerRow;
-        int endIndex = Math.min(startIndex + maxVisibleItems, activeAuctions.size());
+        int endIndex = Math.min(startIndex + maxVisibleItems, auctions.size());
         
         // Check each visible auction for click
         for (int i = startIndex; i < endIndex; i++) {
-            PlayerAuction auction = activeAuctions.get(i);
+            PlayerAuction auction = auctions.get(i);
             
             // Calculate position
             int gridIndex = i - startIndex;
@@ -771,9 +764,12 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
      * Call this when new auction data arrives from the server.
      */
     public void invalidateAuctionDataCache() {
+        // Clear the cached data so it will be refreshed from ClientAuctionCache on next access
         cachedAllAuctions = null;
+        // Also invalidate the filtered data cache
         invalidateDataCache();
-        lastAuctionDataUpdate = 0;
+        // Don't reset lastAuctionDataUpdate to 0 - let the cache duration check handle it naturally
+        // This prevents forcing a refresh if ClientAuctionCache doesn't have data yet
     }
     
     /**
@@ -788,10 +784,13 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             (currentTime - lastAuctionDataUpdate) > AUCTION_DATA_CACHE_DURATION) {
             
             // Update cache from ClientAuctionCache
-            cachedAllAuctions = ClientAuctionCache.getCachedAuctions();
+            List<PlayerAuction> freshData = ClientAuctionCache.getCachedAuctions();
+            // Ensure we always return a non-null list
+            cachedAllAuctions = freshData != null ? freshData : new ArrayList<>();
             lastAuctionDataUpdate = currentTime;
         }
         
-        return cachedAllAuctions;
+        // Ensure we never return null
+        return cachedAllAuctions != null ? cachedAllAuctions : new ArrayList<>();
     }
 }

@@ -73,6 +73,9 @@ public class FreeMarketPacketHandler {
             case MARKETPLACE_SYNC -> handleMarketplaceSync(packet, context);
             case ADMIN_MODE_SYNC -> handleAdminModeSync(packet, context);
             case AUCTION_DEBUG_MODE_SYNC -> handleAuctionDebugModeSync(packet, context);
+            
+            // Chunk handling (client-side reassembly)
+            case CHUNK_START, CHUNK_DATA, CHUNK_END -> handleChunk(packet, context);
         }
     }
     
@@ -176,7 +179,7 @@ public class FreeMarketPacketHandler {
             var auctions = AuctionDataManager.loadAuctions(level);
             String jsonData = GSON.toJson(auctions);
             
-            PacketDistributor.sendToPlayer(player, FreeMarketPacket.withJson(PacketType.AUCTION_SYNC, jsonData));
+            PacketChunking.sendToPlayerWithChunking(player, PacketType.AUCTION_SYNC, jsonData);
         });
     }
     
@@ -247,7 +250,8 @@ public class FreeMarketPacketHandler {
             var leaderboardData = LeaderboardDataManager.loadLeaderboardData(level);
             String jsonData = GSON.toJson(leaderboardData);
             
-            PacketDistributor.sendToPlayer(player, FreeMarketPacket.withJson(PacketType.LEADERBOARD_SYNC, jsonData));
+            com.freemarket.common.network.PacketChunking.sendToPlayerWithChunking(
+                player, PacketType.LEADERBOARD_SYNC, jsonData);
         });
     }
     
@@ -370,7 +374,16 @@ public class FreeMarketPacketHandler {
             List<PlayerAuction> auctions = GSON.fromJson(packet.data(), 
                 com.google.gson.reflect.TypeToken.getParameterized(List.class, PlayerAuction.class).getType());
             FreeMarket.LOGGER.info("Client received {} auctions from server", auctions.size());
+            
+            // Update the cache first - this ensures data is available before invalidating container cache
             ClientAuctionCache.updateAuctions(auctions);
+            
+            // Invalidate the auction container's cache so it picks up the new data
+            // This will cause the container to refresh from ClientAuctionCache on next render
+            Minecraft minecraft = Minecraft.getInstance();
+            if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
+                screen.invalidateAuctionContainerCache();
+            }
         });
     }
     
@@ -442,6 +455,125 @@ public class FreeMarketPacketHandler {
             boolean auctionDebugMode = Boolean.parseBoolean(packet.data());
             com.freemarket.common.handlers.AuctionDebugModeHandler.setAuctionDebugMode(auctionDebugMode);
         });
+    }
+    
+    // ===== CHUNK HANDLING =====
+    
+    /**
+     * Per-player chunk reassembly storage.
+     * Key: player UUID, Value: ChunkReassemblyState
+     */
+    private static final java.util.Map<java.util.UUID, ChunkReassemblyState> chunkStorage = new java.util.concurrent.ConcurrentHashMap<>();
+    
+    /**
+     * Handles chunk packets and reassembles them into complete payloads.
+     */
+    private static void handleChunk(FreeMarketPacket packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            java.util.UUID playerId;
+            if (context.player() instanceof ServerPlayer player) {
+                playerId = player.getUUID();
+            } else {
+                // Client-side: use a single client ID (chunks are per-connection)
+                playerId = java.util.UUID.nameUUIDFromBytes("client".getBytes());
+            }
+            
+            processChunk(packet, playerId, context);
+        });
+    }
+    
+    /**
+     * Processes a chunk packet and reassembles the complete payload when all chunks are received.
+     */
+    private static void processChunk(FreeMarketPacket packet, java.util.UUID playerId, IPayloadContext originalContext) {
+        try {
+            JsonObject chunkJson = JsonParser.parseString(packet.data()).getAsJsonObject();
+            PacketType chunkType = packet.packetType();
+            
+            ChunkReassemblyState state = chunkStorage.computeIfAbsent(playerId, k -> new ChunkReassemblyState());
+            state.context = originalContext; // Store context for when we reassemble
+            
+            if (chunkType == PacketType.CHUNK_START) {
+                // Initialize reassembly state
+                String originalTypeName = chunkJson.get("originalType").getAsString();
+                state.originalType = PacketType.valueOf(originalTypeName);
+                state.totalChunks = chunkJson.get("totalChunks").getAsInt();
+                state.chunks = new String[state.totalChunks];
+                state.receivedChunks = 0;
+                
+                int chunkIndex = chunkJson.get("chunkIndex").getAsInt();
+                String chunkData = chunkJson.get("data").getAsString();
+                state.chunks[chunkIndex] = chunkData;
+                state.receivedChunks++;
+                
+                FreeMarket.LOGGER.debug("Started receiving chunked packet: {} chunks for type {}", 
+                    state.totalChunks, state.originalType);
+            } else if (chunkType == PacketType.CHUNK_DATA) {
+                int chunkIndex = chunkJson.get("chunkIndex").getAsInt();
+                String chunkData = chunkJson.get("data").getAsString();
+                
+                if (state.chunks == null || chunkIndex >= state.chunks.length) {
+                    FreeMarket.LOGGER.error("Received chunk {} out of order or invalid", chunkIndex);
+                    chunkStorage.remove(playerId);
+                    return;
+                }
+                
+                state.chunks[chunkIndex] = chunkData;
+                state.receivedChunks++;
+            } else if (chunkType == PacketType.CHUNK_END) {
+                int chunkIndex = chunkJson.get("chunkIndex").getAsInt();
+                String chunkData = chunkJson.get("data").getAsString();
+                
+                if (state.chunks == null || chunkIndex >= state.chunks.length) {
+                    FreeMarket.LOGGER.error("Received final chunk {} out of order or invalid", chunkIndex);
+                    chunkStorage.remove(playerId);
+                    return;
+                }
+                
+                state.chunks[chunkIndex] = chunkData;
+                state.receivedChunks++;
+                
+                // Check if all chunks received
+                if (state.receivedChunks == state.totalChunks) {
+                    // Reassemble complete payload
+                    StringBuilder completePayload = new StringBuilder();
+                    for (String chunk : state.chunks) {
+                        if (chunk != null) {
+                            completePayload.append(chunk);
+                        }
+                    }
+                    
+                    // Process the complete payload as if it were the original packet type
+                    FreeMarketPacket completePacket = FreeMarketPacket.withJson(state.originalType, completePayload.toString());
+                    
+                    // Route to appropriate handler with the stored context
+                    handle(completePacket, state.context);
+                    
+                    // Clean up
+                    chunkStorage.remove(playerId);
+                    
+                    FreeMarket.LOGGER.debug("Successfully reassembled chunked packet: {} chunks for type {}", 
+                        state.totalChunks, state.originalType);
+                } else {
+                    FreeMarket.LOGGER.warn("Received final chunk but missing {} chunks", 
+                        state.totalChunks - state.receivedChunks);
+                }
+            }
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Error processing chunk packet: {}", e.getMessage(), e);
+            chunkStorage.remove(playerId);
+        }
+    }
+    
+    /**
+     * Internal class to track chunk reassembly state per player.
+     */
+    private static class ChunkReassemblyState {
+        PacketType originalType;
+        int totalChunks;
+        String[] chunks;
+        int receivedChunks;
+        IPayloadContext context;
     }
     
     // ===== HELPER METHODS =====

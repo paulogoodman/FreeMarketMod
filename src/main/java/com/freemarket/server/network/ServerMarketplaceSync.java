@@ -2,7 +2,7 @@ package com.freemarket.server.network;
 
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.data.FreeMarketItemDTO;
-import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketChunking;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,6 +17,7 @@ public class ServerMarketplaceSync {
     
     /**
      * Sends marketplace data to all players in the specified level.
+     * Automatically handles chunking for large payloads.
      * @param level the server level
      * @param items the marketplace items to sync
      */
@@ -26,12 +27,13 @@ public class ServerMarketplaceSync {
             .map(FreeMarketItemDTO::new)
             .collect(java.util.stream.Collectors.toList());
         
-        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_SYNC, new GsonBuilder().create().toJson(dtos));
-        net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(packet);
+        String jsonData = new GsonBuilder().create().toJson(dtos);
+        PacketChunking.sendToAllPlayersWithChunking(PacketType.MARKETPLACE_SYNC, jsonData);
     }
     
     /**
      * Sends marketplace data to a specific player.
+     * Automatically handles chunking for large payloads.
      * @param player the target player
      * @param items the marketplace items to sync
      */
@@ -41,8 +43,8 @@ public class ServerMarketplaceSync {
             .map(FreeMarketItemDTO::new)
             .collect(java.util.stream.Collectors.toList());
         
-        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_SYNC, new GsonBuilder().create().toJson(dtos));
-        net.neoforged.neoforge.network.PacketDistributor.sendToPlayer(player, packet);
+        String jsonData = new GsonBuilder().create().toJson(dtos);
+        PacketChunking.sendToPlayerWithChunking(player, PacketType.MARKETPLACE_SYNC, jsonData);
     }
     
     /**

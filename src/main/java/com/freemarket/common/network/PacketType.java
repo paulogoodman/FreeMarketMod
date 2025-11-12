@@ -54,16 +54,25 @@ public enum PacketType {
     ADMIN_MODE_SYNC,
     
     // Auction debug mode
-    AUCTION_DEBUG_MODE_SYNC;
+    AUCTION_DEBUG_MODE_SYNC,
+    
+    // Chunked data (for large payloads that exceed string size limit)
+    CHUNK_START,    // First chunk with metadata
+    CHUNK_DATA,     // Middle chunks
+    CHUNK_END;      // Final chunk
     
     /**
      * Returns true if this packet type is sent from client to server.
+     * Note: Chunk packets (CHUNK_START, CHUNK_DATA, CHUNK_END) are bidirectional
+     * and their direction is determined from the original packet type they're chunking.
      */
     public boolean isClientToServer() {
         return switch (this) {
             case WALLET_REQUEST, BUY_ITEM_REQUEST, SELL_ITEM_REQUEST,
                  AUCTION_REQUEST, AUCTION_BID, AUCTION_CREATE, AUCTION_CANCEL,
                  LEADERBOARD_REQUEST, MARKETPLACE_ADD_ITEM, MARKETPLACE_REMOVE_ITEM -> true;
+            // Chunk packets are bidirectional - direction determined from original packet type
+            case CHUNK_START, CHUNK_DATA, CHUNK_END -> false; // Default to server-to-client, but overridden in FreeMarketPacket.type()
             default -> false;
         };
     }

@@ -67,7 +67,14 @@ public class ClientAuctionDataManager {
                         auction.setItemId(auctionJson.get("itemId").getAsString());
                         auction.setComponentData(auctionJson.has("componentData") ? 
                             auctionJson.get("componentData").getAsString() : "{}");
-                        auction.setQuantity(auctionJson.get("quantity").getAsInt());
+                        // Support both old "quantity" and new "stackSize" for backward compatibility
+                        if (auctionJson.has("stackSize")) {
+                            auction.setStackSize(auctionJson.get("stackSize").getAsInt());
+                        } else if (auctionJson.has("quantity")) {
+                            auction.setStackSize(auctionJson.get("quantity").getAsInt());
+                        } else {
+                            auction.setStackSize(1);
+                        }
                         auction.setStartingPrice(auctionJson.get("startingPrice").getAsLong());
                         auction.setCurrentBid(auctionJson.get("currentBid").getAsLong());
                         auction.setSellerUuid(auctionJson.get("sellerUuid").getAsString());
@@ -79,6 +86,12 @@ public class ClientAuctionDataManager {
                             auctionJson.get("bidderName").getAsString() : null);
                         auction.setCreatedTime(auctionJson.has("createdTime") ? 
                             auctionJson.get("createdTime").getAsLong() : System.currentTimeMillis());
+                        // Order is optional
+                        if (auctionJson.has("order")) {
+                            auction.setOrder(auctionJson.get("order").getAsInt());
+                        } else {
+                            auction.setOrder(Integer.MAX_VALUE);
+                        }
                         
                         auctions.add(auction);
                     }

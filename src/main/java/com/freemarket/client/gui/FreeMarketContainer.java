@@ -302,9 +302,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                 int itemY = startY + (itemsRendered / itemsPerRow) * itemHeight;
                 int cardHeight = (int)(itemHeight * 0.9); // Use 90% of item height for card (leaving margin)
                 
-                // Create item stack with the marketplace quantity for display
+                // Create item stack with the marketplace stack size for display
                 net.minecraft.world.item.ItemStack displayStack = createItemWithComponentData(item);
-                displayStack.setCount(item.getQuantity());
+                displayStack.setCount(item.getStackSize());
                 
                 // Render using unified renderer with GUI scale and cooldown states
                 Minecraft client = Minecraft.getInstance();
@@ -375,7 +375,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                             }
                             
                             // Send delete request to server via network packet
-                            FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.MARKETPLACE_REMOVE_ITEM, currentItem.getGuid());
+                            FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.MARKETPLACE_REMOVE_ITEM, currentItem.getMarketListingId());
                             net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                             
                             return true;
@@ -413,10 +413,10 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                     
                     // Set cooldown immediately to prevent spam clicking
                     long currentTime = System.currentTimeMillis();
-                    buyButtonCooldowns.put(currentItem.getGuid(), currentTime + BUY_COOLDOWN_MS);
+                    buyButtonCooldowns.put(currentItem.getMarketListingId(), currentTime + BUY_COOLDOWN_MS);
                     
                     // Send buy request to server via network packet
-                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, currentItem.getGuid());
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, currentItem.getMarketListingId());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
                     // Don't update button states here - wait for server response
@@ -436,10 +436,10 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                     
                     // Set cooldown immediately to prevent spam clicking
                     long currentTime = System.currentTimeMillis();
-                    sellButtonCooldowns.put(currentItem.getGuid(), currentTime + SELL_COOLDOWN_MS);
+                    sellButtonCooldowns.put(currentItem.getMarketListingId(), currentTime + SELL_COOLDOWN_MS);
                     
                     // Send sell request to server via network packet
-                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, currentItem.getGuid());
+                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, currentItem.getMarketListingId());
                     net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
                     
                     // Don't update button states here - wait for server response
@@ -650,8 +650,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
      * Only updates when explicitly requested via updateButtonStates().
      */
     private boolean getCachedCanBuyState(FreeMarketItem item) {
-        String itemGuid = item.getGuid();
-        return cachedCanBuyStates.computeIfAbsent(itemGuid, guid -> canBuyItem(item));
+        String itemMarketListingId = item.getMarketListingId();
+        return cachedCanBuyStates.computeIfAbsent(itemMarketListingId, marketListingId -> canBuyItem(item));
     }
     
     /**
@@ -659,8 +659,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
      * Only updates when explicitly requested via updateButtonStates().
      */
     private boolean getCachedCanSellState(FreeMarketItem item) {
-        String itemGuid = item.getGuid();
-        return cachedCanSellStates.computeIfAbsent(itemGuid, guid -> canSellItem(item));
+        String itemMarketListingId = item.getMarketListingId();
+        return cachedCanSellStates.computeIfAbsent(itemMarketListingId, marketListingId -> canSellItem(item));
     }
     
     /**
@@ -676,8 +676,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         // Pre-calculate states for all items
         if (allItems != null) {
             for (FreeMarketItem item : allItems) {
-                cachedCanBuyStates.put(item.getGuid(), canBuyItem(item));
-                cachedCanSellStates.put(item.getGuid(), canSellItem(item));
+                cachedCanBuyStates.put(item.getMarketListingId(), canBuyItem(item));
+                cachedCanSellStates.put(item.getMarketListingId(), canSellItem(item));
             }
         }
     }
@@ -694,7 +694,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
      */
     private boolean isBuyButtonInCooldown(FreeMarketItem item) {
         long currentTime = System.currentTimeMillis();
-        Long cooldownEnd = buyButtonCooldowns.get(item.getGuid());
+        Long cooldownEnd = buyButtonCooldowns.get(item.getMarketListingId());
         return cooldownEnd != null && currentTime < cooldownEnd;
     }
     
@@ -704,7 +704,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
      */
     private boolean isSellButtonInCooldown(FreeMarketItem item) {
         long currentTime = System.currentTimeMillis();
-        Long cooldownEnd = sellButtonCooldowns.get(item.getGuid());
+        Long cooldownEnd = sellButtonCooldowns.get(item.getMarketListingId());
         boolean inCooldown = cooldownEnd != null && currentTime < cooldownEnd;
         
         return inCooldown;

@@ -116,7 +116,7 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
             result.append(Character.toUpperCase(part.charAt(0)))
                   .append(part.substring(1).toLowerCase());
         }
-        return result.toString() + (auction.getQuantity() > 1 ? " x" + auction.getQuantity() : "");
+        return result.toString() + (auction.getStackSize() > 1 ? " x" + auction.getStackSize() : "");
     }
     
     private void renderButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {

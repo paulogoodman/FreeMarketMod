@@ -9,56 +9,72 @@ public class FreeMarketItem {
     private final ItemStack itemStack;
     private final long buyPrice;
     private final long sellPrice;
-    private final int quantity;
-    private final String guid; // Unique identifier for this free market entry
+    private final int stackSize;
+    private final Integer totalStockAvailable; // Optional: total stock available (not yet implemented)
+    private final String marketListingId; // Unique identifier for this free market entry
     private final String componentData; // Component data as JSON string
     private int order; // Display order for sorting (lower numbers appear first) - mutable for updates
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int stackSize) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
-        this.quantity = quantity;
-        this.guid = generateRandomGuid();
+        this.stackSize = stackSize;
+        this.totalStockAvailable = null; // Default to null (not yet implemented)
+        this.marketListingId = generateRandomMarketListingId();
         this.componentData = "{}"; // Default empty component data
         this.order = Integer.MAX_VALUE; // Default to last position
     }
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String guid) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int stackSize, String marketListingId) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
-        this.quantity = quantity;
-        this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
+        this.stackSize = stackSize;
+        this.totalStockAvailable = null; // Default to null (not yet implemented)
+        this.marketListingId = marketListingId != null && !marketListingId.isEmpty() ? marketListingId : generateRandomMarketListingId();
         this.componentData = "{}"; // Default empty component data
         this.order = Integer.MAX_VALUE; // Default to last position
     }
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String guid, String componentData) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int stackSize, String marketListingId, String componentData) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
-        this.quantity = quantity;
-        this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
+        this.stackSize = stackSize;
+        this.totalStockAvailable = null; // Default to null (not yet implemented)
+        this.marketListingId = marketListingId != null && !marketListingId.isEmpty() ? marketListingId : generateRandomMarketListingId();
         this.componentData = componentData != null ? componentData : "{}";
         this.order = Integer.MAX_VALUE; // Default to last position
     }
     
-    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int quantity, String guid, String componentData, int order) {
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int stackSize, String marketListingId, String componentData, int order) {
         this.itemStack = itemStack;
         this.buyPrice = buyPrice;
         this.sellPrice = sellPrice;
-        this.quantity = quantity;
-        this.guid = guid != null && !guid.isEmpty() ? guid : generateRandomGuid();
+        this.stackSize = stackSize;
+        this.totalStockAvailable = null; // Default to null (not yet implemented)
+        this.marketListingId = marketListingId != null && !marketListingId.isEmpty() ? marketListingId : generateRandomMarketListingId();
+        this.componentData = componentData != null ? componentData : "{}";
+        this.order = order;
+    }
+    
+    public FreeMarketItem(ItemStack itemStack, long buyPrice, long sellPrice, int stackSize, Integer totalStockAvailable, String marketListingId, String componentData, int order) {
+        this.itemStack = itemStack;
+        this.buyPrice = buyPrice;
+        this.sellPrice = sellPrice;
+        this.stackSize = stackSize;
+        this.totalStockAvailable = totalStockAvailable; // Can be null
+        this.marketListingId = marketListingId != null && !marketListingId.isEmpty() ? marketListingId : generateRandomMarketListingId();
         this.componentData = componentData != null ? componentData : "{}";
         this.order = order;
     }
     
     /**
-     * Generates a completely random GUID for new free market entries.
+     * Generates a completely random market listing ID for new free market entries.
      * This ensures each item has a unique identifier regardless of properties.
      */
-    private String generateRandomGuid() {
+    private String generateRandomMarketListingId() {
         return java.util.UUID.randomUUID().toString();
     }
     
@@ -74,12 +90,16 @@ public class FreeMarketItem {
         return sellPrice;
     }
     
-    public int getQuantity() {
-        return quantity;
+    public int getStackSize() {
+        return stackSize;
     }
     
-    public String getGuid() {
-        return guid;
+    public Integer getTotalStockAvailable() {
+        return totalStockAvailable;
+    }
+    
+    public String getMarketListingId() {
+        return marketListingId;
     }
     
     public String getComponentData() {

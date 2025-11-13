@@ -11,7 +11,7 @@ public class PlayerAuction {
     private String auctionId; // Unique identifier for the auction
     private String itemId; // Item registry ID (e.g., "minecraft:diamond_sword")
     private String componentData; // NBT/Component data as JSON string
-    private int quantity; // Number of items in the stack
+    private int stackSize; // Number of items in the stack
     private long startingPrice; // Starting bid price
     private long currentBid; // Current highest bid
     private String sellerUuid; // UUID of the seller
@@ -25,13 +25,13 @@ public class PlayerAuction {
     /**
      * Creates a new PlayerAuction instance.
      */
-    public PlayerAuction(String auctionId, String itemId, String componentData, int quantity,
+    public PlayerAuction(String auctionId, String itemId, String componentData, int stackSize,
                         long startingPrice, long currentBid, String sellerUuid, String sellerName,
                         long expiryTime, String bidderUuid, String bidderName, long createdTime) {
         this.auctionId = auctionId;
         this.itemId = itemId;
         this.componentData = componentData;
-        this.quantity = quantity;
+        this.stackSize = stackSize;
         this.startingPrice = startingPrice;
         this.currentBid = currentBid;
         this.sellerUuid = sellerUuid;
@@ -43,13 +43,13 @@ public class PlayerAuction {
         this.order = Integer.MAX_VALUE; // Default to last position
     }
     
-    public PlayerAuction(String auctionId, String itemId, String componentData, int quantity,
+    public PlayerAuction(String auctionId, String itemId, String componentData, int stackSize,
                         long startingPrice, long currentBid, String sellerUuid, String sellerName,
                         long expiryTime, String bidderUuid, String bidderName, long createdTime, int order) {
         this.auctionId = auctionId;
         this.itemId = itemId;
         this.componentData = componentData;
-        this.quantity = quantity;
+        this.stackSize = stackSize;
         this.startingPrice = startingPrice;
         this.currentBid = currentBid;
         this.sellerUuid = sellerUuid;
@@ -68,7 +68,7 @@ public class PlayerAuction {
         this.auctionId = "";
         this.itemId = "";
         this.componentData = "{}";
-        this.quantity = 1;
+        this.stackSize = 1;
         this.startingPrice = 0;
         this.currentBid = 0;
         this.sellerUuid = "";
@@ -106,12 +106,12 @@ public class PlayerAuction {
         this.componentData = componentData;
     }
     
-    public int getQuantity() {
-        return quantity;
+    public int getStackSize() {
+        return stackSize;
     }
     
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
+    public void setStackSize(int stackSize) {
+        this.stackSize = stackSize;
     }
     
     public long getStartingPrice() {
@@ -238,7 +238,7 @@ public class PlayerAuction {
         tag.putString("auctionId", auctionId);
         tag.putString("itemId", itemId);
         tag.putString("componentData", componentData);
-        tag.putInt("quantity", quantity);
+        tag.putInt("stackSize", stackSize);
         tag.putLong("startingPrice", startingPrice);
         tag.putLong("currentBid", currentBid);
         tag.putString("sellerUuid", sellerUuid);
@@ -269,7 +269,14 @@ public class PlayerAuction {
         auction.setAuctionId(tag.getString("auctionId"));
         auction.setItemId(tag.getString("itemId"));
         auction.setComponentData(tag.getString("componentData"));
-        auction.setQuantity(tag.getInt("quantity"));
+        // Support both old "quantity" and new "stackSize" for backward compatibility
+        if (tag.contains("stackSize")) {
+            auction.setStackSize(tag.getInt("stackSize"));
+        } else if (tag.contains("quantity")) {
+            auction.setStackSize(tag.getInt("quantity"));
+        } else {
+            auction.setStackSize(1);
+        }
         auction.setStartingPrice(tag.getLong("startingPrice"));
         auction.setCurrentBid(tag.getLong("currentBid"));
         auction.setSellerUuid(tag.getString("sellerUuid"));
@@ -298,7 +305,7 @@ public class PlayerAuction {
         return "PlayerAuction{" +
                 "auctionId='" + auctionId + '\'' +
                 ", itemId='" + itemId + '\'' +
-                ", quantity=" + quantity +
+                ", stackSize=" + stackSize +
                 ", startingPrice=" + startingPrice +
                 ", currentBid=" + currentBid +
                 ", sellerName='" + sellerName + '\'' +

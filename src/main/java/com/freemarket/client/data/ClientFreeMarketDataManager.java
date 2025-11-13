@@ -198,7 +198,9 @@ public class ClientFreeMarketDataManager {
         try {
             // Deserialize ItemStack
             String itemIdStr = itemJson.get("itemId").getAsString();
-            int count = itemJson.has("count") ? itemJson.get("count").getAsInt() : 1;
+            // Support both old "count" and new "stackSize" for backward compatibility
+            int stackSize = itemJson.has("stackSize") ? itemJson.get("stackSize").getAsInt() : 
+                           (itemJson.has("count") ? itemJson.get("count").getAsInt() : 1);
             
             ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
             Item item = BuiltInRegistries.ITEM.get(itemId);
@@ -207,7 +209,7 @@ public class ClientFreeMarketDataManager {
                 return null;
             }
             
-            ItemStack itemStack = new ItemStack(item, count);
+            ItemStack itemStack = new ItemStack(item, stackSize);
             
             // Deserialize component data if present
             if (itemJson.has("componentData")) {
@@ -234,16 +236,33 @@ public class ClientFreeMarketDataManager {
             // Deserialize marketplace data
             int buyPrice = itemJson.get("buyPrice").getAsInt();
             int sellPrice = itemJson.get("sellPrice").getAsInt();
-            int quantity = itemJson.get("quantity").getAsInt();
-            String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
+            // Support both old "quantity" and new "totalStockAvailable" for backward compatibility
+            Integer totalStockAvailable = null;
+            if (itemJson.has("totalStockAvailable") && !itemJson.get("totalStockAvailable").isJsonNull()) {
+                totalStockAvailable = itemJson.get("totalStockAvailable").getAsInt();
+            } else if (itemJson.has("quantity") && !itemJson.get("quantity").isJsonNull()) {
+                // Legacy support: old "quantity" field was used for stack size, so ignore it
+                // Only use it if it's not the same as stackSize (which would indicate it was actually totalStockAvailable)
+                int oldQuantity = itemJson.get("quantity").getAsInt();
+                if (oldQuantity != stackSize) {
+                    totalStockAvailable = oldQuantity;
+                }
+            }
+            // Support both old "guid" and new "marketListingId" for backward compatibility
+            String marketListingId = null;
+            if (itemJson.has("marketListingId") && !itemJson.get("marketListingId").isJsonNull()) {
+                marketListingId = itemJson.get("marketListingId").getAsString();
+            } else if (itemJson.has("guid") && !itemJson.get("guid").isJsonNull()) {
+                marketListingId = itemJson.get("guid").getAsString();
+            }
             String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
 
-            // If GUID is missing or empty, generate a random one
-            if (guid == null || guid.isEmpty()) {
-                guid = java.util.UUID.randomUUID().toString();
+            // If market listing ID is missing or empty, generate a random one
+            if (marketListingId == null || marketListingId.isEmpty()) {
+                marketListingId = java.util.UUID.randomUUID().toString();
             }
 
-            return new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, guid, componentData);
+            return new FreeMarketItem(itemStack, buyPrice, sellPrice, stackSize, totalStockAvailable, marketListingId, componentData, Integer.MAX_VALUE);
             
         } catch (Exception e) {
             FreeMarket.LOGGER.error("Failed to deserialize marketplace item: {}", e.getMessage());
@@ -358,7 +377,7 @@ public class ClientFreeMarketDataManager {
         ItemStack itemStack = item.getItemStack();
         ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
         itemJson.addProperty("itemId", itemId.toString());
-        itemJson.addProperty("count", itemStack.getCount());
+        itemJson.addProperty("stackSize", item.getStackSize());
         
         // Serialize component data (use stored component data from FreeMarketItem)
         String componentData = item.getComponentData();
@@ -367,8 +386,10 @@ public class ClientFreeMarketDataManager {
         // Serialize marketplace data
         itemJson.addProperty("buyPrice", item.getBuyPrice());
         itemJson.addProperty("sellPrice", item.getSellPrice());
-        itemJson.addProperty("quantity", item.getQuantity());
-        itemJson.addProperty("guid", item.getGuid());
+        if (item.getTotalStockAvailable() != null) {
+            itemJson.addProperty("totalStockAvailable", item.getTotalStockAvailable());
+        }
+        itemJson.addProperty("marketListingId", item.getMarketListingId());
         
         return itemJson;
     }
@@ -422,9 +443,9 @@ public class ClientFreeMarketDataManager {
                 // Load existing items
                 List<FreeMarketItem> existingItems = loadFreeMarketItems();
 
-                // Remove the item by GUID (exact match)
+                // Remove the item by market listing ID (exact match)
                 boolean removed = existingItems.removeIf(item -> 
-                    item.getGuid().equals(itemToRemove.getGuid())
+                    item.getMarketListingId().equals(itemToRemove.getMarketListingId())
                 );
 
                 if (removed) {

@@ -191,7 +191,7 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         // Create ItemStack from auction data
         ResourceLocation itemId = ResourceLocation.parse(auction.getItemId());
         Item item = BuiltInRegistries.ITEM.get(itemId);
-        ItemStack itemStack = new ItemStack(item, auction.getQuantity());
+        ItemStack itemStack = new ItemStack(item, auction.getStackSize());
         
         // Apply component data if present
         String componentData = auction.getComponentData();
@@ -538,7 +538,7 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
         // Create ItemStack from item ID
         ResourceLocation itemId = ResourceLocation.parse(auction.getItemId());
         Item item = BuiltInRegistries.ITEM.get(itemId);
-        ItemStack itemStack = new ItemStack(item, auction.getQuantity());
+        ItemStack itemStack = new ItemStack(item, auction.getStackSize());
         
         // Apply component data if present
         String componentData = auction.getComponentData();

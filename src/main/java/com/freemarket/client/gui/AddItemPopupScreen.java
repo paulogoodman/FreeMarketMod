@@ -480,10 +480,10 @@ public class AddItemPopupScreen extends BasePopupScreen {
             }
         }
         
-        // Use the quantity from the selected item stack
-        int quantity = selectedItem.getCount();
-        if (quantity < 1 || quantity > 64) {
-            errorMessage = "Invalid item quantity";
+        // Use the stack size from the selected item stack
+        int stackSize = selectedItem.getCount();
+        if (stackSize < 1 || stackSize > 64) {
+            errorMessage = "Invalid item stack size";
             return;
         }
         
@@ -534,13 +534,13 @@ public class AddItemPopupScreen extends BasePopupScreen {
             .replace("\t", "\\t");  // Escape tabs
         
         // Send add item packet to server
-        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"quantity\":%d}", 
-            itemId, escapedComponentData, buyPrice, sellPrice, quantity);
+        String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"stackSize\":%d}", 
+            itemId, escapedComponentData, buyPrice, sellPrice, stackSize);
         FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
         net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
         
         FreeMarket.LOGGER.info("Added item to marketplace: {} x{} - Buy: ${}, Sell: ${}", 
-            itemId, quantity, buyPrice, sellPrice);
+            itemId, stackSize, buyPrice, sellPrice);
         
         // Close popup and return to marketplace screen
         onClose();

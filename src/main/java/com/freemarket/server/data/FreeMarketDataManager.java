@@ -39,7 +39,7 @@ public class FreeMarketDataManager {
     private static final String VERSION_KEY = "version";
     private static final String LAST_UPDATED_KEY = "lastUpdated";
     private static final String INITIALIZED_KEY = "initialized";
-    private static final String SAMPLE_FILE_NAME = "sample.json";
+    private static final String SAMPLE_FILE_NAME = "sample.txt";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -177,38 +177,38 @@ public class FreeMarketDataManager {
             if (savedData.getItems().isEmpty() && !savedData.isInitialized()) {
                 List<FreeMarketItem> testItems = new ArrayList<>();
                 
-                // Add various test items
+                // Add various test items (totalStockAvailable is null by default, not yet implemented)
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.DIAMOND, 1), 100, 80, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.DIAMOND, 1), 100, 80, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.IRON_INGOT, 1), 10, 8, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.IRON_INGOT, 1), 10, 8, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.GOLD_INGOT, 1), 20, 16, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.GOLD_INGOT, 1), 20, 16, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.EMERALD, 1), 50, 40, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.EMERALD, 1), 50, 40, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.DIAMOND_SWORD, 1), 200, 160, 1, 
-                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}"));
+                    new ItemStack(Items.DIAMOND_SWORD, 1), 200, 160, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:sharpness\",\"lvl\":3}}}}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.DIAMOND_PICKAXE, 1), 150, 120, 1, 
-                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:efficiency\",\"lvl\":5}}}}"));
+                    new ItemStack(Items.DIAMOND_PICKAXE, 1), 150, 120, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{\"minecraft:enchantments\":{\"enchantments\":{\"0\":{\"id\":\"minecraft:efficiency\",\"lvl\":5}}}}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.APPLE, 1), 2, 1, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.APPLE, 1), 2, 1, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 testItems.add(new FreeMarketItem(
-                    new ItemStack(Items.BREAD, 1), 3, 2, 1, 
-                    java.util.UUID.randomUUID().toString(), "{}"));
+                    new ItemStack(Items.BREAD, 1), 3, 2, 1, null,
+                    java.util.UUID.randomUUID().toString(), "{}", Integer.MAX_VALUE));
                 
                 // Save test data
                 savedData.setItems(testItems);
@@ -246,20 +246,17 @@ public class FreeMarketDataManager {
                 return;
             }
             
-            // Create sample JSON object matching the format from the user's example
-            JsonObject sampleJson = new JsonObject();
-            sampleJson.addProperty("guid", ""); // optional, if not provided, a random GUID will be generated
-            sampleJson.addProperty("itemId", "minecraft:dirt");
-            sampleJson.addProperty("componentData", "{}"); // optional, if not provided, the component data will be an empty string
-            sampleJson.addProperty("count", 1); // optional, if not provided, the count will be 1
-            sampleJson.addProperty("quantity", 1); // not yet implemented
-            sampleJson.addProperty("buyPrice", 3); // optional, if not provided, the buy price will be 0
-            sampleJson.addProperty("sellPrice", 2); // optional, if not provided, the sell price will be 0
-            sampleJson.addProperty("order", 1); // optional, if not provided, the order will be 1. listings with the same order will be sorted by GUID
-            
-            // Write sample file with pretty printing
+            // Write sample file as .txt with comments - manually formatted to include comments
             try (FileWriter writer = new FileWriter(sampleFile.toFile())) {
-                GSON.toJson(sampleJson, writer);
+                writer.write("{\n");
+                writer.write("  \"marketListingId\": \"\", //optional, if not provided, a random market listing ID will be generated\n");
+                writer.write("  \"itemId\": \"minecraft:dirt\", //required\n");
+                writer.write("  \"componentData\": \"{}\", //optional, if not provided, the component data will be an empty string\n");
+                writer.write("  \"stackSize\": 1, //optional, if not provided, the stackSize will be 1. This is the number of items in the stack\n");
+                writer.write("  \"buyPrice\": 3, //optional, if not provided, the buy price will be 0\n");
+                writer.write("  \"sellPrice\": 2, //optional, if not provided, the sell price will be 0\n");
+                writer.write("  \"order\": 1 //optional, if not provided, the order will be set to the last position. listings with the same order will be sorted alphabetically by item name\n");
+                writer.write("}\n");
             }
             
             FreeMarket.LOGGER.info("Created sample marketplace file at {}", sampleFile);
@@ -271,7 +268,7 @@ public class FreeMarketDataManager {
     
     /**
      * Dumps all marketplace items to JSON files in the config directory.
-     * Each item is written to a separate file named {guid}.json in config/freemarket/market/
+     * Each item is written to a separate file named {marketListingId}.json in config/freemarket/market/
      * Sample files are excluded from dumping.
      * 
      * @param level The server level
@@ -292,10 +289,10 @@ public class FreeMarketDataManager {
             // Write each item to a separate JSON file
             for (FreeMarketItem item : items) {
                 try {
-                    String guid = item.getGuid();
-                    if (guid == null || guid.isEmpty()) {
-                        guid = java.util.UUID.randomUUID().toString();
-                        FreeMarket.LOGGER.warn("Item missing GUID, generated new one: {}", guid);
+                    String marketListingId = item.getMarketListingId();
+                    if (marketListingId == null || marketListingId.isEmpty()) {
+                        marketListingId = java.util.UUID.randomUUID().toString();
+                        FreeMarket.LOGGER.warn("Item missing market listing ID, generated new one: {}", marketListingId);
                     }
                     
                     // Create JSON object
@@ -303,25 +300,27 @@ public class FreeMarketDataManager {
                     ItemStack itemStack = item.getItemStack();
                     ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
                     
-                    // Add properties in the specified order: GUID, ItemID, componentData, count, quantity, buyPrice, sellPrice, order
-                    itemJson.addProperty("guid", guid);
+                    // Add properties in the specified order: marketListingId, ItemID, componentData, stackSize, totalStockAvailable, buyPrice, sellPrice, order
+                    itemJson.addProperty("marketListingId", marketListingId);
                     itemJson.addProperty("itemId", itemId.toString());
                     itemJson.addProperty("componentData", item.getComponentData());
-                    itemJson.addProperty("count", itemStack.getCount());
-                    itemJson.addProperty("quantity", item.getQuantity());
+                    itemJson.addProperty("stackSize", item.getStackSize());
+                    if (item.getTotalStockAvailable() != null) {
+                        itemJson.addProperty("totalStockAvailable", item.getTotalStockAvailable());
+                    }
                     itemJson.addProperty("buyPrice", item.getBuyPrice());
                     itemJson.addProperty("sellPrice", item.getSellPrice());
                     itemJson.addProperty("order", item.getOrder());
                     
                     // Write to file
-                    File jsonFile = marketDir.resolve(guid + ".json").toFile();
+                    File jsonFile = marketDir.resolve(marketListingId + ".json").toFile();
                     try (FileWriter writer = new FileWriter(jsonFile)) {
                         GSON.toJson(itemJson, writer);
                     }
                     
                     dumpedCount++;
                 } catch (Exception e) {
-                    FreeMarket.LOGGER.error("Failed to dump marketplace item with GUID {}: {}", item.getGuid(), e.getMessage());
+                    FreeMarket.LOGGER.error("Failed to dump marketplace item with market listing ID {}: {}", item.getMarketListingId(), e.getMessage());
                 }
             }
             
@@ -355,11 +354,11 @@ public class FreeMarketDataManager {
             
             // Get current marketplace items
             List<FreeMarketItem> currentItems = loadFreeMarketItems(level);
-            Map<String, Integer> guidToIndex = new HashMap<>();
+            Map<String, Integer> marketListingIdToIndex = new HashMap<>();
             for (int i = 0; i < currentItems.size(); i++) {
-                String guid = currentItems.get(i).getGuid();
-                if (guid != null && !guid.isEmpty()) {
-                    guidToIndex.put(guid, i);
+                String marketListingId = currentItems.get(i).getMarketListingId();
+                if (marketListingId != null && !marketListingId.isEmpty()) {
+                    marketListingIdToIndex.put(marketListingId, i);
                 }
             }
             
@@ -367,9 +366,9 @@ public class FreeMarketDataManager {
             int updatedCount = 0;
             int addedCount = 0;
             
-            // Scan directory for JSON files, excluding sample files
+            // Scan directory for JSON files, excluding sample files (.txt and sample.json)
             File[] jsonFiles = marketDir.toFile().listFiles((dir, name) -> 
-                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME));
+                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME) && !name.equals("sample.json"));
             if (jsonFiles == null) {
                 return new LoadResult(0, 0, 0);
             }
@@ -385,11 +384,30 @@ public class FreeMarketDataManager {
                     
                     // Deserialize item
                     String itemIdStr = itemJson.get("itemId").getAsString();
-                    int count = itemJson.has("count") ? itemJson.get("count").getAsInt() : 1;
+                    // Support both old "count" and new "stackSize" for backward compatibility
+                    int stackSize = itemJson.has("stackSize") ? itemJson.get("stackSize").getAsInt() : 
+                                   (itemJson.has("count") ? itemJson.get("count").getAsInt() : 1);
                     long buyPrice = itemJson.has("buyPrice") ? itemJson.get("buyPrice").getAsLong() : 0;
                     long sellPrice = itemJson.has("sellPrice") ? itemJson.get("sellPrice").getAsLong() : 0;
-                    int quantity = itemJson.has("quantity") ? itemJson.get("quantity").getAsInt() : 1;
-                    String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
+                    // Support both old "quantity" and new "totalStockAvailable" for backward compatibility
+                    Integer totalStockAvailable = null;
+                    if (itemJson.has("totalStockAvailable") && !itemJson.get("totalStockAvailable").isJsonNull()) {
+                        totalStockAvailable = itemJson.get("totalStockAvailable").getAsInt();
+                    } else if (itemJson.has("quantity") && !itemJson.get("quantity").isJsonNull()) {
+                        // Legacy support: old "quantity" field was used for stack size, so ignore it
+                        // Only use it if it's not the same as stackSize (which would indicate it was actually totalStockAvailable)
+                        int oldQuantity = itemJson.get("quantity").getAsInt();
+                        if (oldQuantity != stackSize) {
+                            totalStockAvailable = oldQuantity;
+                        }
+                    }
+                    // Support both old "guid" and new "marketListingId" for backward compatibility
+                    String marketListingId = null;
+                    if (itemJson.has("marketListingId") && !itemJson.get("marketListingId").isJsonNull()) {
+                        marketListingId = itemJson.get("marketListingId").getAsString();
+                    } else if (itemJson.has("guid") && !itemJson.get("guid").isJsonNull()) {
+                        marketListingId = itemJson.get("guid").getAsString();
+                    }
                     String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
                     // Order will be set after all items are loaded to assign last position to items without order
                     int order = itemJson.has("order") ? itemJson.get("order").getAsInt() : Integer.MAX_VALUE;
@@ -403,7 +421,7 @@ public class FreeMarketDataManager {
                     
                     // Create ItemStack
                     Item item = BuiltInRegistries.ITEM.get(itemId);
-                    ItemStack itemStack = new ItemStack(item, count);
+                    ItemStack itemStack = new ItemStack(item, stackSize);
                     
                     // Apply component data if present
                     if (componentData != null && !componentData.isEmpty() && !componentData.equals("{}")) {
@@ -415,26 +433,26 @@ public class FreeMarketDataManager {
                         }
                     }
                     
-                    // Generate GUID if missing
-                    if (guid == null || guid.isEmpty()) {
-                        guid = java.util.UUID.randomUUID().toString();
-                        FreeMarket.LOGGER.info("Generated new GUID for item from file {}: {}", jsonFile.getName(), guid);
+                    // Generate market listing ID if missing
+                    if (marketListingId == null || marketListingId.isEmpty()) {
+                        marketListingId = java.util.UUID.randomUUID().toString();
+                        FreeMarket.LOGGER.info("Generated new market listing ID for item from file {}: {}", jsonFile.getName(), marketListingId);
                     }
                     
                     // Create FreeMarketItem
                     FreeMarketItem freeMarketItem = new FreeMarketItem(
-                        itemStack, buyPrice, sellPrice, quantity, guid, componentData, order);
+                        itemStack, buyPrice, sellPrice, stackSize, totalStockAvailable, marketListingId, componentData, order);
                     
-                    // Check if GUID exists in current items
-                    if (guidToIndex.containsKey(guid)) {
+                    // Check if market listing ID exists in current items
+                    if (marketListingIdToIndex.containsKey(marketListingId)) {
                         // Update existing item
-                        int index = guidToIndex.get(guid);
+                        int index = marketListingIdToIndex.get(marketListingId);
                         currentItems.set(index, freeMarketItem);
                         updatedCount++;
                     } else {
                         // Add as new item
                         currentItems.add(freeMarketItem);
-                        guidToIndex.put(guid, currentItems.size() - 1);
+                        marketListingIdToIndex.put(marketListingId, currentItems.size() - 1);
                         addedCount++;
                     }
                     
@@ -519,7 +537,7 @@ public class FreeMarketDataManager {
                 ItemStack itemStack = item.getItemStack();
                 ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
                 itemTag.putString("itemId", itemId.toString());
-                itemTag.putInt("count", itemStack.getCount());
+                itemTag.putInt("stackSize", item.getStackSize());
                 
                 // Save ItemStack with component data to NBT
                 CompoundTag itemStackTag = new CompoundTag();
@@ -529,8 +547,10 @@ public class FreeMarketDataManager {
                 // Serialize marketplace data
                 itemTag.putLong("buyPrice", item.getBuyPrice());
                 itemTag.putLong("sellPrice", item.getSellPrice());
-                itemTag.putInt("quantity", item.getQuantity());
-                itemTag.putString("guid", item.getGuid());
+                if (item.getTotalStockAvailable() != null) {
+                    itemTag.putInt("totalStockAvailable", item.getTotalStockAvailable());
+                }
+                itemTag.putString("marketListingId", item.getMarketListingId());
                 itemTag.putString("componentData", item.getComponentData());
                 itemTag.putInt("order", item.getOrder());
                 
@@ -570,15 +590,17 @@ public class FreeMarketDataManager {
                             }
                         }
                         
-                        // Fallback to legacy format (itemId + count) if itemStack is null
+                        // Fallback to legacy format (itemId + count/stackSize) if itemStack is null
                         if (itemStack == null && itemTag.contains("itemId")) {
                             String itemIdStr = itemTag.getString("itemId");
-                            int count = itemTag.contains("count") ? itemTag.getInt("count") : 1;
+                            // Support both old "count" and new "stackSize" for backward compatibility
+                            int stackSize = itemTag.contains("stackSize") ? itemTag.getInt("stackSize") : 
+                                           (itemTag.contains("count") ? itemTag.getInt("count") : 1);
                             
                             ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
                             if (BuiltInRegistries.ITEM.containsKey(itemId)) {
                                 Item item = BuiltInRegistries.ITEM.get(itemId);
-                                itemStack = new ItemStack(item, count);
+                                itemStack = new ItemStack(item, stackSize);
                             } else {
                                 FreeMarket.LOGGER.warn("Unknown item ID in marketplace data: {}", itemIdStr);
                                 continue;
@@ -593,21 +615,37 @@ public class FreeMarketDataManager {
                         // Deserialize marketplace data
                         long buyPrice = itemTag.contains("buyPrice") ? itemTag.getLong("buyPrice") : itemTag.getInt("buyPrice");
                         long sellPrice = itemTag.contains("sellPrice") ? itemTag.getLong("sellPrice") : itemTag.getInt("sellPrice");
-                        int quantity = itemTag.getInt("quantity");
-                        String guid = itemTag.contains("guid") ? itemTag.getString("guid") : null;
+                        // Support both old "quantity" and new "stackSize" for backward compatibility
+                        int stackSize = itemTag.contains("stackSize") ? itemTag.getInt("stackSize") : 
+                                       (itemTag.contains("count") ? itemTag.getInt("count") : itemStack.getCount());
+                        Integer totalStockAvailable = itemTag.contains("totalStockAvailable") ? itemTag.getInt("totalStockAvailable") : null;
+                        // Legacy support: if old "quantity" exists and differs from stackSize, use it as totalStockAvailable
+                        if (totalStockAvailable == null && itemTag.contains("quantity")) {
+                            int oldQuantity = itemTag.getInt("quantity");
+                            if (oldQuantity != stackSize) {
+                                totalStockAvailable = oldQuantity;
+                            }
+                        }
+                        // Support both old "guid" and new "marketListingId" for backward compatibility
+                        String marketListingId = null;
+                        if (itemTag.contains("marketListingId")) {
+                            marketListingId = itemTag.getString("marketListingId");
+                        } else if (itemTag.contains("guid")) {
+                            marketListingId = itemTag.getString("guid");
+                        }
                         String componentData = itemTag.contains("componentData") ? itemTag.getString("componentData") : "{}";
                         int order = itemTag.contains("order") ? itemTag.getInt("order") : Integer.MAX_VALUE;
                         
-                        // If GUID is missing or empty, generate a random one
-                        if (guid == null || guid.isEmpty()) {
-                            guid = java.util.UUID.randomUUID().toString();
+                        // If market listing ID is missing or empty, generate a random one
+                        if (marketListingId == null || marketListingId.isEmpty()) {
+                            marketListingId = java.util.UUID.randomUUID().toString();
                         }
                         
                         // Note: Component data is already in the ItemStack when loaded from NBT,
                         // but we keep the componentData string for reference/display purposes
                         
                         FreeMarketItem freeMarketItem = new FreeMarketItem(
-                            itemStack, buyPrice, sellPrice, quantity, guid, componentData, order);
+                            itemStack, buyPrice, sellPrice, stackSize, totalStockAvailable, marketListingId, componentData, order);
                         data.items.add(freeMarketItem);
                         
                     } catch (Exception e) {

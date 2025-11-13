@@ -8,8 +8,9 @@ public class FreeMarketItemDTO {
     private String itemId;
     private long buyPrice;
     private long sellPrice;
-    private int quantity;
-    private String guid;
+    private int stackSize;
+    private Integer totalStockAvailable;
+    private String marketListingId;
     private String componentData;
     private int order;
     
@@ -20,8 +21,9 @@ public class FreeMarketItemDTO {
         this.itemId = "";
         this.buyPrice = 0;
         this.sellPrice = 0;
-        this.quantity = 1;
-        this.guid = "";
+        this.stackSize = 1;
+        this.totalStockAvailable = null;
+        this.marketListingId = "";
         this.componentData = "{}";
         this.order = Integer.MAX_VALUE;
     }
@@ -33,8 +35,9 @@ public class FreeMarketItemDTO {
         this.itemId = item.getItemStack().getItem().toString();
         this.buyPrice = item.getBuyPrice();
         this.sellPrice = item.getSellPrice();
-        this.quantity = item.getQuantity();
-        this.guid = item.getGuid();
+        this.stackSize = item.getStackSize();
+        this.totalStockAvailable = item.getTotalStockAvailable();
+        this.marketListingId = item.getMarketListingId();
         this.componentData = item.getComponentData();
         this.order = item.getOrder();
     }
@@ -64,20 +67,28 @@ public class FreeMarketItemDTO {
         this.sellPrice = sellPrice;
     }
     
-    public int getQuantity() {
-        return quantity;
+    public int getStackSize() {
+        return stackSize;
     }
     
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
+    public void setStackSize(int stackSize) {
+        this.stackSize = stackSize;
     }
     
-    public String getGuid() {
-        return guid;
+    public Integer getTotalStockAvailable() {
+        return totalStockAvailable;
     }
     
-    public void setGuid(String guid) {
-        this.guid = guid;
+    public void setTotalStockAvailable(Integer totalStockAvailable) {
+        this.totalStockAvailable = totalStockAvailable;
+    }
+    
+    public String getMarketListingId() {
+        return marketListingId;
+    }
+    
+    public void setMarketListingId(String marketListingId) {
+        this.marketListingId = marketListingId;
     }
     
     public String getComponentData() {

@@ -8,7 +8,7 @@ public class FreeMarketAuctionDTO {
     private String auctionId;
     private String itemId;
     private String componentData;
-    private int quantity;
+    private int stackSize;
     private long startingPrice;
     private long currentBid;
     private String sellerUuid;
@@ -26,7 +26,7 @@ public class FreeMarketAuctionDTO {
         this.auctionId = "";
         this.itemId = "";
         this.componentData = "{}";
-        this.quantity = 1;
+        this.stackSize = 1;
         this.startingPrice = 0;
         this.currentBid = 0;
         this.sellerUuid = "";
@@ -45,7 +45,7 @@ public class FreeMarketAuctionDTO {
         this.auctionId = auction.getAuctionId();
         this.itemId = auction.getItemId();
         this.componentData = auction.getComponentData();
-        this.quantity = auction.getQuantity();
+        this.stackSize = auction.getStackSize();
         this.startingPrice = auction.getStartingPrice();
         this.currentBid = auction.getCurrentBid();
         this.sellerUuid = auction.getSellerUuid();
@@ -83,12 +83,12 @@ public class FreeMarketAuctionDTO {
         this.componentData = componentData;
     }
     
-    public int getQuantity() {
-        return quantity;
+    public int getStackSize() {
+        return stackSize;
     }
     
-    public void setQuantity(int quantity) {
-        this.quantity = quantity;
+    public void setStackSize(int stackSize) {
+        this.stackSize = stackSize;
     }
     
     public long getStartingPrice() {
@@ -171,7 +171,7 @@ public class FreeMarketAuctionDTO {
             auctionId,
             itemId,
             componentData,
-            quantity,
+            stackSize,
             startingPrice,
             currentBid,
             sellerUuid,

@@ -239,7 +239,7 @@ public class ItemCategoryManager {
                 // Create ItemStack from auction data
                 ResourceLocation itemId = ResourceLocation.parse(auction.getItemId());
                 Item item = BuiltInRegistries.ITEM.get(itemId);
-                ItemStack itemStack = new ItemStack(item, auction.getQuantity());
+                ItemStack itemStack = new ItemStack(item, auction.getStackSize());
                 
                 // Apply component data if present
                 String componentData = auction.getComponentData();

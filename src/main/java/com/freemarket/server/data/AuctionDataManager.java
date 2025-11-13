@@ -34,7 +34,7 @@ public class AuctionDataManager {
     private static final String AUCTIONS_LIST_KEY = "auctions";
     private static final String VERSION_KEY = "version";
     private static final String LAST_UPDATED_KEY = "lastUpdated";
-    private static final String SAMPLE_FILE_NAME = "sample.json";
+    private static final String SAMPLE_FILE_NAME = "sample.txt";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -163,25 +163,23 @@ public class AuctionDataManager {
                 return;
             }
             
-            // Create sample JSON object
-            JsonObject sampleJson = new JsonObject();
-            sampleJson.addProperty("auctionId", ""); // optional, if not provided, a random auctionId will be generated
-            sampleJson.addProperty("itemId", "minecraft:diamond");
-            sampleJson.addProperty("componentData", "{}"); // optional, if not provided, the component data will be an empty string
-            sampleJson.addProperty("quantity", 1); // required
-            sampleJson.addProperty("startingPrice", 100); // required
-            sampleJson.addProperty("currentBid", 0); // required, initial bid is typically 0 or equal to startingPrice
-            sampleJson.addProperty("order", 1); // optional, if not provided, the order will be set to last position
-            sampleJson.addProperty("sellerUuid", ""); // optional, if not provided, will default to empty string
-            sampleJson.addProperty("sellerName", "Admin"); // optional, if not provided, will default to "Admin"
-            sampleJson.addProperty("expiryTime", System.currentTimeMillis() + (24 * 60 * 60 * 1000L)); // optional, if not provided, will default to 24 hours from now
-            sampleJson.addProperty("createdTime", System.currentTimeMillis()); // optional, if not provided, will default to current time
-            sampleJson.add("bidderUuid", null); // optional, null if no bids
-            sampleJson.add("bidderName", null); // optional, null if no bids
-            
-            // Write sample file with pretty printing
+            // Write sample file as .txt with comments - manually formatted to include comments
             try (FileWriter writer = new FileWriter(sampleFile.toFile())) {
-                GSON.toJson(sampleJson, writer);
+                writer.write("{\n");
+                writer.write("  \"auctionId\": \"\", //optional, if not provided, a random auctionId will be generated\n");
+                writer.write("  \"itemId\": \"minecraft:diamond\", //required\n");
+                writer.write("  \"componentData\": \"{}\", //optional, if not provided, the component data will be an empty JSON object \"{}\"\n");
+                writer.write("  \"stackSize\": 1, //required\n");
+                writer.write("  \"startingPrice\": 100, //required\n");
+                writer.write("  \"currentBid\": 0, //required, initial bid is typically 0 or equal to startingPrice\n");
+                writer.write("  \"sellerUuid\": \"\", //optional, if not provided, will default to empty string\n");
+                writer.write("  \"sellerName\": \"Admin\", //optional, if not provided, will default to \"Admin\"\n");
+                writer.write("  \"expiryTime\": " + (System.currentTimeMillis() + (24 * 60 * 60 * 1000L)) + ", //optional, if not provided, will default to 24 hours from now\n");
+                writer.write("  \"createdTime\": " + System.currentTimeMillis() + ", //optional, if not provided, will default to current time\n");
+                writer.write("  \"bidderUuid\": null, //optional, null if no bids\n");
+                writer.write("  \"bidderName\": null, //optional, null if no bids\n");
+                writer.write("  \"order\": 1 //optional, if not provided, the order will be set to last position; Items with the same order will be sorted alphabetically by item name\n");
+                writer.write("}\n");
             }
             
             FreeMarket.LOGGER.info("Created sample auction file at {}", sampleFile);
@@ -222,15 +220,13 @@ public class AuctionDataManager {
                     
                     // Create JSON object
                     JsonObject auctionJson = new JsonObject();
-                    // Add properties in the specified order: auctionId (like GUID), itemId, componentData, quantity, startingPrice, currentBid, order
+                    // Add properties in the specified order: auctionId, itemId, componentData, stackSize, startingPrice, currentBid, sellerUuid, sellerName, expiryTime, createdTime, bidderUuid, bidderName, order (at bottom)
                     auctionJson.addProperty("auctionId", auctionId);
                     auctionJson.addProperty("itemId", auction.getItemId());
                     auctionJson.addProperty("componentData", auction.getComponentData());
-                    auctionJson.addProperty("quantity", auction.getQuantity());
+                    auctionJson.addProperty("stackSize", auction.getStackSize());
                     auctionJson.addProperty("startingPrice", auction.getStartingPrice());
                     auctionJson.addProperty("currentBid", auction.getCurrentBid());
-                    auctionJson.addProperty("order", auction.getOrder());
-                    // Then add remaining fields
                     auctionJson.addProperty("sellerUuid", auction.getSellerUuid());
                     auctionJson.addProperty("sellerName", auction.getSellerName());
                     auctionJson.addProperty("expiryTime", auction.getExpiryTime());
@@ -247,6 +243,8 @@ public class AuctionDataManager {
                     } else {
                         auctionJson.add("bidderName", null);
                     }
+                    
+                    auctionJson.addProperty("order", auction.getOrder());
                     
                     // Write to file
                     File jsonFile = auctionsDir.resolve(auctionId + ".json").toFile();
@@ -302,9 +300,9 @@ public class AuctionDataManager {
             int updatedCount = 0;
             int addedCount = 0;
             
-            // Scan directory for JSON files, excluding sample files
+            // Scan directory for JSON files, excluding sample files (.txt and sample.json)
             File[] jsonFiles = auctionsDir.toFile().listFiles((dir, name) -> 
-                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME));
+                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME) && !name.equals("sample.json"));
             if (jsonFiles == null) {
                 return new LoadResult(0, 0, 0);
             }
@@ -323,8 +321,9 @@ public class AuctionDataManager {
                         FreeMarket.LOGGER.warn("Missing required field 'itemId' in file: {}", jsonFile.getName());
                         continue;
                     }
-                    if (!auctionJson.has("quantity")) {
-                        FreeMarket.LOGGER.warn("Missing required field 'quantity' in file: {}", jsonFile.getName());
+                    // Support both old "quantity" and new "stackSize" for backward compatibility
+                    if (!auctionJson.has("stackSize") && !auctionJson.has("quantity")) {
+                        FreeMarket.LOGGER.warn("Missing required field 'stackSize' (or 'quantity') in file: {}", jsonFile.getName());
                         continue;
                     }
                     if (!auctionJson.has("startingPrice")) {
@@ -338,7 +337,9 @@ public class AuctionDataManager {
                     
                     // Required fields
                     String itemId = auctionJson.get("itemId").getAsString();
-                    int quantity = auctionJson.get("quantity").getAsInt();
+                    // Support both old "quantity" and new "stackSize" for backward compatibility
+                    int stackSize = auctionJson.has("stackSize") ? auctionJson.get("stackSize").getAsInt() : 
+                                   auctionJson.get("quantity").getAsInt();
                     long startingPrice = auctionJson.get("startingPrice").getAsLong();
                     long currentBid = auctionJson.get("currentBid").getAsLong();
                     
@@ -386,7 +387,7 @@ public class AuctionDataManager {
                     
                     // Create PlayerAuction
                     PlayerAuction playerAuction = new PlayerAuction(
-                        auctionId, itemId, componentData, quantity,
+                        auctionId, itemId, componentData, stackSize,
                         startingPrice, currentBid, sellerUuid, sellerName,
                         expiryTime, bidderUuid, bidderName, createdTime, order);
                     
@@ -481,7 +482,7 @@ public class AuctionDataManager {
                 auctionTag.putString("auctionId", auction.getAuctionId());
                 auctionTag.putString("itemId", auction.getItemId());
                 auctionTag.putString("componentData", auction.getComponentData());
-                auctionTag.putInt("quantity", auction.getQuantity());
+                auctionTag.putInt("stackSize", auction.getStackSize());
                 auctionTag.putLong("startingPrice", auction.getStartingPrice());
                 auctionTag.putLong("currentBid", auction.getCurrentBid());
                 auctionTag.putString("sellerUuid", auction.getSellerUuid());
@@ -520,7 +521,14 @@ public class AuctionDataManager {
                     auction.setAuctionId(auctionTag.getString("auctionId"));
                     auction.setItemId(auctionTag.getString("itemId"));
                     auction.setComponentData(auctionTag.getString("componentData"));
-                    auction.setQuantity(auctionTag.getInt("quantity"));
+                    // Support both old "quantity" and new "stackSize" for backward compatibility
+                    if (auctionTag.contains("stackSize")) {
+                        auction.setStackSize(auctionTag.getInt("stackSize"));
+                    } else if (auctionTag.contains("quantity")) {
+                        auction.setStackSize(auctionTag.getInt("quantity"));
+                    } else {
+                        auction.setStackSize(1);
+                    }
                     auction.setStartingPrice(auctionTag.getLong("startingPrice"));
                     auction.setCurrentBid(auctionTag.getLong("currentBid"));
                     auction.setSellerUuid(auctionTag.getString("sellerUuid"));

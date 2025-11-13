@@ -96,13 +96,13 @@ public class FreeMarketPacketHandler {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             
-            String itemGuid = packet.data();
+            String itemMarketListingId = packet.data();
             ServerLevel level = player.serverLevel();
             
             // SECURITY: Load item from server DataManager (server-authoritative)
             List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
             FreeMarketItem itemToBuy = items.stream()
-                .filter(item -> item.getGuid().equals(itemGuid))
+                .filter(item -> item.getMarketListingId().equals(itemMarketListingId))
                 .findFirst()
                 .orElse(null);
             
@@ -136,13 +136,13 @@ public class FreeMarketPacketHandler {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
             
-            String itemGuid = packet.data();
+            String itemMarketListingId = packet.data();
             ServerLevel level = player.serverLevel();
             
             // SECURITY: Load item from server DataManager
             List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
             FreeMarketItem itemToSell = items.stream()
-                .filter(item -> item.getGuid().equals(itemGuid))
+                .filter(item -> item.getMarketListingId().equals(itemMarketListingId))
                 .findFirst()
                 .orElse(null);
             
@@ -279,19 +279,23 @@ public class FreeMarketPacketHandler {
                 String componentData = jsonData.get("componentData").getAsString();
                 long buyPrice = jsonData.get("buyPrice").getAsLong();
                 long sellPrice = jsonData.get("sellPrice").getAsLong();
-                int quantity = jsonData.get("quantity").getAsInt();
+                // Support both old "quantity" and new "stackSize" for backward compatibility
+                int stackSize = jsonData.has("stackSize") ? jsonData.get("stackSize").getAsInt() : 
+                               (jsonData.has("quantity") ? jsonData.get("quantity").getAsInt() : 1);
                 
-                // Create ItemStack from itemId with the correct count
-                ItemStack itemStack = createItemStackFromId(itemId, componentData, quantity);
+                // Create ItemStack from itemId with the correct stack size
+                ItemStack itemStack = createItemStackFromId(itemId, componentData, stackSize);
                 
-                // Create FreeMarketItem
+                // Create FreeMarketItem (totalStockAvailable is null by default, not yet implemented)
                 FreeMarketItem item = new FreeMarketItem(
                     itemStack,
                     buyPrice,
                     sellPrice,
-                    quantity,
-                    null, // GUID will be generated
-                    componentData
+                    stackSize,
+                    null, // totalStockAvailable - not yet implemented
+                    null, // market listing ID will be generated
+                    componentData,
+                    Integer.MAX_VALUE // order - default to last position
                 );
                 
                 ServerLevel level = player.serverLevel();
@@ -319,11 +323,11 @@ public class FreeMarketPacketHandler {
                 return;
             }
             
-            String itemGuid = packet.data();
+            String itemMarketListingId = packet.data();
             ServerLevel level = player.serverLevel();
             List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
             
-            boolean removed = items.removeIf(item -> item.getGuid().equals(itemGuid));
+            boolean removed = items.removeIf(item -> item.getMarketListingId().equals(itemMarketListingId));
             if (removed) {
                 FreeMarketDataManager.saveFreeMarketItems(level, items);
                 ServerMarketplaceSync.syncToAllPlayers(level, items);
@@ -440,8 +444,9 @@ public class FreeMarketPacketHandler {
                         itemStack,
                         dto.getBuyPrice(),
                         dto.getSellPrice(),
-                        dto.getQuantity(),
-                        dto.getGuid(),
+                        dto.getStackSize(),
+                        dto.getTotalStockAvailable(),
+                        dto.getMarketListingId(),
                         dto.getComponentData(),
                         dto.getOrder() // Include order field
                     );

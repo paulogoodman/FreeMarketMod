@@ -321,7 +321,7 @@ public class ServerAuctionHandler {
             }
             
             // Create ItemStack from auction data
-            ItemStack itemStack = createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity(), level.getServer());
+            ItemStack itemStack = createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getStackSize(), level.getServer());
             if (itemStack == null) {
                 player.sendSystemMessage(Component.literal("Failed to restore item!"));
                 return false;
@@ -550,7 +550,7 @@ public class ServerAuctionHandler {
      * Creates an ItemStack from auction data.
      */
     private static ItemStack createItemFromAuction(PlayerAuction auction, net.minecraft.server.MinecraftServer server) {
-        return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getQuantity(), server);
+        return createItemStackFromId(auction.getItemId(), auction.getComponentData(), auction.getStackSize(), server);
     }
     
     /**

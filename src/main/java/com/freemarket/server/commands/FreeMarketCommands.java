@@ -685,7 +685,7 @@ public class FreeMarketCommands {
         String itemId = StringArgumentType.getString(context, "item");
         long buyPrice = LongArgumentType.getLong(context, "buyPrice");
         long sellPrice = LongArgumentType.getLong(context, "sellPrice");
-        int quantity = IntegerArgumentType.getInteger(context, "quantity");
+        int stackSize = IntegerArgumentType.getInteger(context, "quantity"); // Command argument name kept as "quantity" for backward compatibility
         CommandSourceStack source = context.getSource();
         ServerLevel level = source.getLevel();
         
@@ -706,11 +706,11 @@ public class FreeMarketCommands {
             }
             
             // Create ItemStack
-            ItemStack itemStack = new ItemStack(BuiltInRegistries.ITEM.get(itemLocation), quantity);
+            ItemStack itemStack = new ItemStack(BuiltInRegistries.ITEM.get(itemLocation), stackSize);
             
-            // Create FreeMarketItem
-            String guid = java.util.UUID.randomUUID().toString();
-            FreeMarketItem FreeMarketItem = new FreeMarketItem(itemStack, buyPrice, sellPrice, quantity, guid, "{}");
+            // Create FreeMarketItem (totalStockAvailable is null by default, not yet implemented)
+            String marketListingId = java.util.UUID.randomUUID().toString();
+            FreeMarketItem FreeMarketItem = new FreeMarketItem(itemStack, buyPrice, sellPrice, stackSize, null, marketListingId, "{}", Integer.MAX_VALUE);
             
             // Add item using JSON system
             List<FreeMarketItem> existingItems = FreeMarketDataManager.loadFreeMarketItems(level);
@@ -721,7 +721,7 @@ public class FreeMarketCommands {
             com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, existingItems);
             
             Component message = Component.translatable("command.FreeMarket.freemarket.additem.success", 
-                itemId, quantity, buyPrice, sellPrice);
+                itemId, stackSize, buyPrice, sellPrice);
             source.sendSuccess(() -> message, true);
             
         } catch (Exception e) {
@@ -1016,19 +1016,21 @@ public class FreeMarketCommands {
             ItemStack itemToSell = heldItem.copy();
             
             // Create FreeMarketItem with the exact item data (including NBT)
-            String guid = java.util.UUID.randomUUID().toString();
+            String marketListingId = java.util.UUID.randomUUID().toString();
             
             // Serialize the item with all NBT data
             String itemData = ItemComponentHandler.getComponentData(itemToSell);
             
-            // Create marketplace item with provided prices
+            // Create marketplace item with provided prices (totalStockAvailable is null by default, not yet implemented)
             FreeMarketItem marketplaceItem = new FreeMarketItem(
                 itemToSell, 
                 buyPrice,  // Buy price from argument
                 sellPrice, // Sell price from argument
                 itemToSell.getCount(), 
-                guid, 
-                itemData
+                null, // totalStockAvailable - not yet implemented
+                marketListingId, 
+                itemData,
+                Integer.MAX_VALUE // order
             );
             
             // Add to marketplace

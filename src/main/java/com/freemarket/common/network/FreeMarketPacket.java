@@ -104,7 +104,7 @@ public record FreeMarketPacket(PacketType packetType, String data) implements Cu
     
     /**
      * Creates a packet with a simple string parameter.
-     * Used for item GUID-based operations like buy/sell.
+     * Used for item market listing ID-based operations like buy/sell.
      */
     public static FreeMarketPacket withString(PacketType packetType, String value) {
         return new FreeMarketPacket(packetType, value);

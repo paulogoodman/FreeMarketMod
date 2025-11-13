@@ -75,7 +75,7 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
     
     @Override
     protected List<com.freemarket.common.data.PlayerAuction> getAllData() {
-        // Return only active (non-expired) auctions for display, sorted by order
+        // Return only active (non-expired) auctions for display (ordering is applied after filtering)
         List<com.freemarket.common.data.PlayerAuction> allAuctions = getCachedAuctionData();
         if (allAuctions == null) {
             return new ArrayList<>();
@@ -86,32 +86,67 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 activeAuctions.add(auction);
             }
         }
-        // Sort by order attribute (lower numbers appear first)
-        // If order is the same, sort alphabetically by item name (part after colon in item ID)
-        // Performance optimization: Cache extracted names to avoid repeated string operations
-        if (activeAuctions.isEmpty()) {
-            return activeAuctions;
+        return activeAuctions;
+    }
+
+    /**
+     * Orders a list of auctions by order attribute first, then alphabetically by item name.
+     * Applied after filtering to ensure consistent ordering within categories/search results.
+     */
+    private List<com.freemarket.common.data.PlayerAuction> orderAuctions(List<com.freemarket.common.data.PlayerAuction> auctions) {
+        if (auctions.isEmpty()) {
+            return auctions;
         }
         
         // Cache extracted item names to avoid repeated extraction during sorting
-        // Only create cache if we have auctions (avoid unnecessary allocation for empty lists)
-        java.util.Map<com.freemarket.common.data.PlayerAuction, String> nameCache = new java.util.HashMap<>(activeAuctions.size());
-        for (com.freemarket.common.data.PlayerAuction auction : activeAuctions) {
+        java.util.Map<com.freemarket.common.data.PlayerAuction, String> nameCache = new java.util.HashMap<>(auctions.size());
+        for (com.freemarket.common.data.PlayerAuction auction : auctions) {
             nameCache.put(auction, extractItemName(auction.getItemId()));
         }
         
-        activeAuctions.sort((a, b) -> {
-            // First compare by order (fast integer comparison)
+        List<com.freemarket.common.data.PlayerAuction> ordered = new ArrayList<>(auctions);
+        ordered.sort((a, b) -> {
             int orderCompare = Integer.compare(a.getOrder(), b.getOrder());
             if (orderCompare != 0) {
                 return orderCompare;
             }
-            // If order is the same, compare alphabetically by item name (use cached names)
             String nameA = nameCache.get(a);
             String nameB = nameCache.get(b);
+            if (nameA == null) nameA = "";
+            if (nameB == null) nameB = "";
             return nameA.compareToIgnoreCase(nameB);
         });
-        return activeAuctions;
+        return ordered;
+    }
+
+    @Override
+    protected List<com.freemarket.common.data.PlayerAuction> getFilteredData() {
+        long currentTime = System.currentTimeMillis();
+        String currentSearchText = searchBox != null ? searchBox.getValue() : "";
+        
+        if (cachedFilteredData == null ||
+            lastFilteredCategory != selectedCategory ||
+            !currentSearchText.equals(lastSearchText) ||
+            (currentTime - lastDataCacheUpdate) > DATA_CACHE_DURATION) {
+            
+            // Filter by category first
+            List<com.freemarket.common.data.PlayerAuction> categoryFiltered = filterByCategory(getAllData(), selectedCategory);
+            
+            // Then filter by search text
+            if (!currentSearchText.isEmpty()) {
+                categoryFiltered = filterBySearch(categoryFiltered, currentSearchText);
+            }
+            
+            // Finally, order the filtered auctions
+            categoryFiltered = orderAuctions(categoryFiltered);
+            
+            cachedFilteredData = categoryFiltered;
+            lastFilteredCategory = selectedCategory;
+            lastSearchText = currentSearchText;
+            lastDataCacheUpdate = currentTime;
+        }
+        
+        return cachedFilteredData;
     }
     
     /**
@@ -138,9 +173,10 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
             return data;
         }
         String searchLower = searchText.toLowerCase();
+        // Use Collectors.toList() to ensure order is preserved from the input stream
         return data.stream()
             .filter(auction -> auction.getItemId().toLowerCase().contains(searchLower))
-            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            .collect(java.util.stream.Collectors.toList());
     }
     
     @Override

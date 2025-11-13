@@ -193,9 +193,10 @@ public class ItemCategoryManager {
             return new ArrayList<>(items);
         }
         
+        // Use Collectors.toList() to ensure order is preserved from the input stream
         return items.stream()
             .filter(item -> getCategoryForItem(item.getItemStack()) == category)
-            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            .collect(java.util.stream.Collectors.toList());
     }
     
     /**
@@ -232,6 +233,7 @@ public class ItemCategoryManager {
             return new ArrayList<>(auctions);
         }
         
+        // Use Collectors.toList() to ensure order is preserved from the input stream
         return auctions.stream()
             .filter(auction -> {
                 // Create ItemStack from auction data
@@ -248,6 +250,6 @@ public class ItemCategoryManager {
                 
                 return getCategoryForItem(itemStack) == category;
             })
-            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            .collect(java.util.stream.Collectors.toList());
     }
 }

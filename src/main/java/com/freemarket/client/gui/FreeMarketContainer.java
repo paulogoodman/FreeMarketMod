@@ -65,6 +65,10 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
      */
     public void updateFreeMarketItems(List<FreeMarketItem> newItems, boolean preserveScrollPosition) {
         this.allItems = new ArrayList<>(newItems);
+        // Invalidate caches to ensure new data (including order) is used
+        invalidateDataCache();
+        clearProcessedItemCache();
+        updateButtonStates(); // Update button states when items change
         if (!preserveScrollPosition) {
             // Reset scroll position when items change (default behavior)
             this.scrollOffset = 0;
@@ -158,34 +162,48 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     
     @Override
     protected List<FreeMarketItem> getAllData() {
-        // Sort by order attribute (lower numbers appear first)
-        // If order is the same, sort alphabetically by item name (part after colon in item ID)
-        // Performance optimization: Cache extracted names to avoid repeated string operations
-        List<FreeMarketItem> result = new ArrayList<>(allItems);
-        if (result.isEmpty()) {
-            return result;
+        // Return all items without sorting - sorting happens after filtering in getFilteredData()
+        return new ArrayList<>(allItems);
+    }
+    
+    /**
+     * Orders a list of items by order attribute first, then alphabetically.
+     * This is called after filtering to ensure correct display order.
+     */
+    private List<FreeMarketItem> orderItems(List<FreeMarketItem> items) {
+        if (items.isEmpty()) {
+            return items;
         }
         
         // Cache extracted item names to avoid repeated extraction during sorting
-        // Only create cache if we have items (avoid unnecessary allocation for empty lists)
-        java.util.Map<FreeMarketItem, String> nameCache = new java.util.HashMap<>(result.size());
-        for (FreeMarketItem item : result) {
+        java.util.Map<FreeMarketItem, String> nameCache = new java.util.HashMap<>(items.size());
+        for (FreeMarketItem item : items) {
             String itemId = item.getItemStack().getItem().toString();
             nameCache.put(item, extractItemName(itemId));
         }
         
-        result.sort((a, b) -> {
+        // Create a new list to avoid modifying the input
+        List<FreeMarketItem> ordered = new ArrayList<>(items);
+        
+        // Sort by order attribute first (lower numbers appear first)
+        // If order is the same, sort alphabetically by item name
+        ordered.sort((a, b) -> {
             // First compare by order (fast integer comparison)
-            int orderCompare = Integer.compare(a.getOrder(), b.getOrder());
+            int orderA = a.getOrder();
+            int orderB = b.getOrder();
+            int orderCompare = Integer.compare(orderA, orderB);
             if (orderCompare != 0) {
                 return orderCompare;
             }
             // If order is the same, compare alphabetically by item name (use cached names)
             String nameA = nameCache.get(a);
             String nameB = nameCache.get(b);
+            if (nameA == null) nameA = "";
+            if (nameB == null) nameB = "";
             return nameA.compareToIgnoreCase(nameB);
         });
-        return result;
+        
+        return ordered;
     }
     
     /**
@@ -202,6 +220,38 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     }
     
     @Override
+    protected List<FreeMarketItem> getFilteredData() {
+        long currentTime = System.currentTimeMillis();
+        String currentSearchText = searchBox != null ? searchBox.getValue() : "";
+        
+        // Check if cache is valid
+        if (cachedFilteredData == null || 
+            lastFilteredCategory != selectedCategory ||
+            !currentSearchText.equals(lastSearchText) ||
+            (currentTime - lastDataCacheUpdate) > DATA_CACHE_DURATION) {
+            
+            // First filter by category
+            List<FreeMarketItem> categoryFiltered = filterByCategory(getAllData(), selectedCategory);
+            
+            // Then filter by search text
+            if (!currentSearchText.isEmpty()) {
+                categoryFiltered = filterBySearch(categoryFiltered, currentSearchText);
+            }
+            
+            // Finally, ORDER the filtered results by order attribute, then alphabetically
+            // This ensures items are displayed in the correct order within each category/search result
+            categoryFiltered = orderItems(categoryFiltered);
+            
+            cachedFilteredData = categoryFiltered;
+            lastFilteredCategory = selectedCategory;
+            lastSearchText = currentSearchText;
+            lastDataCacheUpdate = currentTime;
+        }
+        
+        return cachedFilteredData;
+    }
+    
+    @Override
     protected List<FreeMarketItem> filterByCategory(List<FreeMarketItem> data, ItemCategoryManager.Category category) {
         return ItemCategoryManager.filterItemsByCategory(data, category);
     }
@@ -212,14 +262,16 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
             return data;
         }
         String searchLower = searchText.toLowerCase();
+        // Use Collectors.toList() to ensure order is preserved from the input stream
         return data.stream()
             .filter(item -> item.getItemName().toLowerCase().contains(searchLower))
-            .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            .collect(java.util.stream.Collectors.toList());
     }
     
     @Override
     protected Map<ItemCategoryManager.Category, Integer> getCategoryCounts() {
-        return ItemCategoryManager.getCategoryCounts(allItems);
+        // Use getAllData() to ensure we're counting sorted items
+        return ItemCategoryManager.getCategoryCounts(getAllData());
     }
     
     @Override
@@ -404,36 +456,8 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     }
     
     private List<FreeMarketItem> getItemsToRender() {
-        long currentTime = System.currentTimeMillis();
-        String currentSearchText = (searchBox != null) ? searchBox.getValue() : "";
-        
-        // Check if cache is valid
-        if (cachedFilteredData == null || 
-            lastFilteredCategory != selectedCategory ||
-            !currentSearchText.equals(lastSearchText) ||
-            (currentTime - lastDataCacheUpdate) > DATA_CACHE_DURATION) {
-            
-            // Update cache
-            // First filter by category
-            List<FreeMarketItem> categoryFiltered = ItemCategoryManager.filterItemsByCategory(allItems, selectedCategory);
-            
-            // Then filter by search text
-            if (searchBox != null && !searchBox.getValue().isEmpty()) {
-                String searchText = searchBox.getValue().toLowerCase();
-                categoryFiltered = categoryFiltered.stream()
-                    .filter(item -> item.getItemName().toLowerCase().contains(searchText))
-                    .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
-            }
-            
-            // No longer adding add item entry to the list - it's now a button in the top-right
-            
-            cachedFilteredData = categoryFiltered;
-            lastFilteredCategory = selectedCategory;
-            lastSearchText = currentSearchText;
-            lastDataCacheUpdate = currentTime;
-        }
-        
-        return cachedFilteredData;
+        // Use the unified filtering + ordering pipeline
+        return getFilteredData();
     }
     
     

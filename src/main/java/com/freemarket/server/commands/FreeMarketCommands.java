@@ -789,6 +789,10 @@ public class FreeMarketCommands {
             FreeMarketDataManager.LoadResult result = FreeMarketDataManager.loadMarketplaceFromJson(level, configDir);
             
             if (result.loaded > 0) {
+                // Sync updated marketplace data to all clients
+                List<FreeMarketItem> updatedItems = FreeMarketDataManager.loadFreeMarketItems(level);
+                com.freemarket.server.network.ServerMarketplaceSync.syncToAllPlayers(level, updatedItems);
+                
                 Component message = Component.literal("§aSuccessfully loaded §e" + result.loaded + "§a marketplace items (§e" + result.updated + "§a updated, §e" + result.added + "§a added)");
                 source.sendSuccess(() -> message, true);
             } else {
@@ -861,6 +865,10 @@ public class FreeMarketCommands {
             AuctionDataManager.LoadResult result = AuctionDataManager.loadAuctionsFromJson(level, configDir);
             
             if (result.loaded > 0) {
+                // Sync updated auction data to all clients
+                List<com.freemarket.common.data.PlayerAuction> updatedAuctions = AuctionDataManager.loadAuctions(level);
+                com.freemarket.server.network.ServerAuctionSync.syncToAllPlayers(level, updatedAuctions);
+                
                 Component message = Component.literal("§aSuccessfully loaded §e" + result.loaded + "§a auctions (§e" + result.updated + "§a updated, §e" + result.added + "§a added)");
                 source.sendSuccess(() -> message, true);
             } else {

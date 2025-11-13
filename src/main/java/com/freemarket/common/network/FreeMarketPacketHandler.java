@@ -442,7 +442,8 @@ public class FreeMarketPacketHandler {
                         dto.getSellPrice(),
                         dto.getQuantity(),
                         dto.getGuid(),
-                        dto.getComponentData()
+                        dto.getComponentData(),
+                        dto.getOrder() // Include order field
                     );
                 })
                 .collect(java.util.stream.Collectors.toList());

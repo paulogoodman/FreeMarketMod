@@ -39,6 +39,7 @@ public class FreeMarketDataManager {
     private static final String VERSION_KEY = "version";
     private static final String LAST_UPDATED_KEY = "lastUpdated";
     private static final String INITIALIZED_KEY = "initialized";
+    private static final String SAMPLE_FILE_NAME = "sample.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -227,8 +228,51 @@ public class FreeMarketDataManager {
     }
     
     /**
+     * Creates a sample marketplace JSON file in the config directory.
+     * This file serves as a template for users to understand the format.
+     * 
+     * @param level The server level
+     * @param configDir The config directory path
+     */
+    public static void createSampleMarketplaceFile(ServerLevel level, Path configDir) {
+        try {
+            Path marketDir = configDir.resolve("freemarket").resolve("market");
+            Files.createDirectories(marketDir);
+            
+            Path sampleFile = marketDir.resolve(SAMPLE_FILE_NAME);
+            
+            // Only create if it doesn't exist
+            if (Files.exists(sampleFile)) {
+                return;
+            }
+            
+            // Create sample JSON object matching the format from the user's example
+            JsonObject sampleJson = new JsonObject();
+            sampleJson.addProperty("guid", ""); // optional, if not provided, a random GUID will be generated
+            sampleJson.addProperty("itemId", "minecraft:dirt");
+            sampleJson.addProperty("componentData", "{}"); // optional, if not provided, the component data will be an empty string
+            sampleJson.addProperty("count", 1); // optional, if not provided, the count will be 1
+            sampleJson.addProperty("quantity", 1); // not yet implemented
+            sampleJson.addProperty("buyPrice", 3); // optional, if not provided, the buy price will be 0
+            sampleJson.addProperty("sellPrice", 2); // optional, if not provided, the sell price will be 0
+            sampleJson.addProperty("order", 1); // optional, if not provided, the order will be 1. listings with the same order will be sorted by GUID
+            
+            // Write sample file with pretty printing
+            try (FileWriter writer = new FileWriter(sampleFile.toFile())) {
+                GSON.toJson(sampleJson, writer);
+            }
+            
+            FreeMarket.LOGGER.info("Created sample marketplace file at {}", sampleFile);
+            
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to create sample marketplace file: {}", e.getMessage());
+        }
+    }
+    
+    /**
      * Dumps all marketplace items to JSON files in the config directory.
      * Each item is written to a separate file named {guid}.json in config/freemarket/market/
+     * Sample files are excluded from dumping.
      * 
      * @param level The server level
      * @param configDir The config directory path
@@ -259,13 +303,14 @@ public class FreeMarketDataManager {
                     ItemStack itemStack = item.getItemStack();
                     ResourceLocation itemId = BuiltInRegistries.ITEM.getKey(itemStack.getItem());
                     
+                    // Add properties in the specified order: GUID, ItemID, componentData, count, quantity, buyPrice, sellPrice, order
+                    itemJson.addProperty("guid", guid);
                     itemJson.addProperty("itemId", itemId.toString());
+                    itemJson.addProperty("componentData", item.getComponentData());
                     itemJson.addProperty("count", itemStack.getCount());
+                    itemJson.addProperty("quantity", item.getQuantity());
                     itemJson.addProperty("buyPrice", item.getBuyPrice());
                     itemJson.addProperty("sellPrice", item.getSellPrice());
-                    itemJson.addProperty("quantity", item.getQuantity());
-                    itemJson.addProperty("guid", guid);
-                    itemJson.addProperty("componentData", item.getComponentData());
                     itemJson.addProperty("order", item.getOrder());
                     
                     // Write to file
@@ -322,8 +367,9 @@ public class FreeMarketDataManager {
             int updatedCount = 0;
             int addedCount = 0;
             
-            // Scan directory for JSON files
-            File[] jsonFiles = marketDir.toFile().listFiles((dir, name) -> name.endsWith(".json"));
+            // Scan directory for JSON files, excluding sample files
+            File[] jsonFiles = marketDir.toFile().listFiles((dir, name) -> 
+                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME));
             if (jsonFiles == null) {
                 return new LoadResult(0, 0, 0);
             }

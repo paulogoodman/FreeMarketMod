@@ -34,6 +34,7 @@ public class AuctionDataManager {
     private static final String AUCTIONS_LIST_KEY = "auctions";
     private static final String VERSION_KEY = "version";
     private static final String LAST_UPDATED_KEY = "lastUpdated";
+    private static final String SAMPLE_FILE_NAME = "sample.json";
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     
     /**
@@ -144,8 +145,56 @@ public class AuctionDataManager {
     }
     
     /**
+     * Creates a sample auction JSON file in the config directory.
+     * This file serves as a template for users to understand the format.
+     * 
+     * @param level The server level
+     * @param configDir The config directory path
+     */
+    public static void createSampleAuctionFile(ServerLevel level, Path configDir) {
+        try {
+            Path auctionsDir = configDir.resolve("freemarket").resolve("auctions");
+            Files.createDirectories(auctionsDir);
+            
+            Path sampleFile = auctionsDir.resolve(SAMPLE_FILE_NAME);
+            
+            // Only create if it doesn't exist
+            if (Files.exists(sampleFile)) {
+                return;
+            }
+            
+            // Create sample JSON object
+            JsonObject sampleJson = new JsonObject();
+            sampleJson.addProperty("auctionId", ""); // optional, if not provided, a random auctionId will be generated
+            sampleJson.addProperty("itemId", "minecraft:diamond");
+            sampleJson.addProperty("componentData", "{}"); // optional, if not provided, the component data will be an empty string
+            sampleJson.addProperty("quantity", 1); // required
+            sampleJson.addProperty("startingPrice", 100); // required
+            sampleJson.addProperty("currentBid", 0); // required, initial bid is typically 0 or equal to startingPrice
+            sampleJson.addProperty("order", 1); // optional, if not provided, the order will be set to last position
+            sampleJson.addProperty("sellerUuid", ""); // optional, if not provided, will default to empty string
+            sampleJson.addProperty("sellerName", "Admin"); // optional, if not provided, will default to "Admin"
+            sampleJson.addProperty("expiryTime", System.currentTimeMillis() + (24 * 60 * 60 * 1000L)); // optional, if not provided, will default to 24 hours from now
+            sampleJson.addProperty("createdTime", System.currentTimeMillis()); // optional, if not provided, will default to current time
+            sampleJson.add("bidderUuid", null); // optional, null if no bids
+            sampleJson.add("bidderName", null); // optional, null if no bids
+            
+            // Write sample file with pretty printing
+            try (FileWriter writer = new FileWriter(sampleFile.toFile())) {
+                GSON.toJson(sampleJson, writer);
+            }
+            
+            FreeMarket.LOGGER.info("Created sample auction file at {}", sampleFile);
+            
+        } catch (Exception e) {
+            FreeMarket.LOGGER.error("Failed to create sample auction file: {}", e.getMessage());
+        }
+    }
+    
+    /**
      * Dumps all auctions to JSON files in the config directory.
      * Each auction is written to a separate file named {auctionId}.json in config/freemarket/auctions/
+     * Sample files are excluded from dumping.
      * 
      * @param level The server level
      * @param configDir The config directory path
@@ -173,17 +222,19 @@ public class AuctionDataManager {
                     
                     // Create JSON object
                     JsonObject auctionJson = new JsonObject();
+                    // Add properties in the specified order: auctionId (like GUID), itemId, componentData, quantity, startingPrice, currentBid, order
                     auctionJson.addProperty("auctionId", auctionId);
                     auctionJson.addProperty("itemId", auction.getItemId());
                     auctionJson.addProperty("componentData", auction.getComponentData());
                     auctionJson.addProperty("quantity", auction.getQuantity());
                     auctionJson.addProperty("startingPrice", auction.getStartingPrice());
                     auctionJson.addProperty("currentBid", auction.getCurrentBid());
+                    auctionJson.addProperty("order", auction.getOrder());
+                    // Then add remaining fields
                     auctionJson.addProperty("sellerUuid", auction.getSellerUuid());
                     auctionJson.addProperty("sellerName", auction.getSellerName());
                     auctionJson.addProperty("expiryTime", auction.getExpiryTime());
                     auctionJson.addProperty("createdTime", auction.getCreatedTime());
-                    auctionJson.addProperty("order", auction.getOrder());
                     
                     if (auction.getBidderUuid() != null) {
                         auctionJson.addProperty("bidderUuid", auction.getBidderUuid());
@@ -251,8 +302,9 @@ public class AuctionDataManager {
             int updatedCount = 0;
             int addedCount = 0;
             
-            // Scan directory for JSON files
-            File[] jsonFiles = auctionsDir.toFile().listFiles((dir, name) -> name.endsWith(".json"));
+            // Scan directory for JSON files, excluding sample files
+            File[] jsonFiles = auctionsDir.toFile().listFiles((dir, name) -> 
+                name.endsWith(".json") && !name.equals(SAMPLE_FILE_NAME));
             if (jsonFiles == null) {
                 return new LoadResult(0, 0, 0);
             }

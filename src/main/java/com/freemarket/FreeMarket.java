@@ -26,6 +26,8 @@ import com.freemarket.server.events.ServerMarketplaceEventHandler;
 import com.freemarket.server.events.LeaderboardEventHandler;
 import com.freemarket.server.events.PendingRewardsHandler;
 
+import java.nio.file.Path;
+
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
 @Mod(FreeMarket.MODID)
 public class FreeMarket {
@@ -82,6 +84,13 @@ public class FreeMarket {
         if (event.getLevel() instanceof net.minecraft.server.level.ServerLevel serverLevel) {
             if (!FreeMarketDataManager.marketplaceFileExists(serverLevel)) {
                 FreeMarketDataManager.createEmptyMarketplaceFile(serverLevel);
+            }
+            
+            // Create sample files when world is first initialized (only for Overworld to avoid duplicates)
+            if (serverLevel.dimension() == net.minecraft.world.level.Level.OVERWORLD) {
+                Path configDir = serverLevel.getServer().getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT);
+                FreeMarketDataManager.createSampleMarketplaceFile(serverLevel, configDir);
+                com.freemarket.server.data.AuctionDataManager.createSampleAuctionFile(serverLevel, configDir);
             }
             
             // Load leaderboard data into cache on world load

@@ -177,7 +177,13 @@ public class FreeMarketPacketHandler {
             
             ServerLevel level = player.serverLevel();
             var auctions = AuctionDataManager.loadAuctions(level);
-            String jsonData = GSON.toJson(auctions);
+            
+            // Convert PlayerAuction objects to DTOs for serialization
+            List<com.freemarket.common.data.FreeMarketAuctionDTO> dtos = auctions.stream()
+                .map(com.freemarket.common.data.FreeMarketAuctionDTO::new)
+                .collect(java.util.stream.Collectors.toList());
+            
+            String jsonData = GSON.toJson(dtos);
             
             PacketChunking.sendToPlayerWithChunking(player, PacketType.AUCTION_SYNC, jsonData);
         });
@@ -371,8 +377,15 @@ public class FreeMarketPacketHandler {
     
     private static void handleAuctionSync(FreeMarketPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
-            List<PlayerAuction> auctions = GSON.fromJson(packet.data(), 
-                com.google.gson.reflect.TypeToken.getParameterized(List.class, PlayerAuction.class).getType());
+            // Deserialize DTOs from JSON
+            List<com.freemarket.common.data.FreeMarketAuctionDTO> dtos = GSON.fromJson(packet.data(), 
+                com.google.gson.reflect.TypeToken.getParameterized(List.class, com.freemarket.common.data.FreeMarketAuctionDTO.class).getType());
+            
+            // Convert DTOs to PlayerAuction objects
+            List<PlayerAuction> auctions = dtos.stream()
+                .map(com.freemarket.common.data.FreeMarketAuctionDTO::toPlayerAuction)
+                .collect(java.util.stream.Collectors.toList());
+            
             FreeMarket.LOGGER.info("Client received {} auctions from server", auctions.size());
             
             // Update the cache first - this ensures data is available before invalidating container cache

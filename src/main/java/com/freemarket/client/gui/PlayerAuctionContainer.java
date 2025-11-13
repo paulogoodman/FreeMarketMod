@@ -75,7 +75,7 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
     
     @Override
     protected List<com.freemarket.common.data.PlayerAuction> getAllData() {
-        // Return only active (non-expired) auctions for display
+        // Return only active (non-expired) auctions for display, sorted by order
         List<com.freemarket.common.data.PlayerAuction> allAuctions = getCachedAuctionData();
         if (allAuctions == null) {
             return new ArrayList<>();
@@ -86,7 +86,45 @@ public class PlayerAuctionContainer extends BaseGridContainer<com.freemarket.com
                 activeAuctions.add(auction);
             }
         }
+        // Sort by order attribute (lower numbers appear first)
+        // If order is the same, sort alphabetically by item name (part after colon in item ID)
+        // Performance optimization: Cache extracted names to avoid repeated string operations
+        if (activeAuctions.isEmpty()) {
+            return activeAuctions;
+        }
+        
+        // Cache extracted item names to avoid repeated extraction during sorting
+        // Only create cache if we have auctions (avoid unnecessary allocation for empty lists)
+        java.util.Map<com.freemarket.common.data.PlayerAuction, String> nameCache = new java.util.HashMap<>(activeAuctions.size());
+        for (com.freemarket.common.data.PlayerAuction auction : activeAuctions) {
+            nameCache.put(auction, extractItemName(auction.getItemId()));
+        }
+        
+        activeAuctions.sort((a, b) -> {
+            // First compare by order (fast integer comparison)
+            int orderCompare = Integer.compare(a.getOrder(), b.getOrder());
+            if (orderCompare != 0) {
+                return orderCompare;
+            }
+            // If order is the same, compare alphabetically by item name (use cached names)
+            String nameA = nameCache.get(a);
+            String nameB = nameCache.get(b);
+            return nameA.compareToIgnoreCase(nameB);
+        });
         return activeAuctions;
+    }
+    
+    /**
+     * Extracts the item name from an item ID (e.g., "minecraft:dirt" -> "dirt").
+     * Returns the full ID if no colon is found.
+     * Optimized to minimize string allocations.
+     */
+    private String extractItemName(String itemId) {
+        int colonIndex = itemId.indexOf(':');
+        if (colonIndex >= 0 && colonIndex < itemId.length() - 1) {
+            return itemId.substring(colonIndex + 1);
+        }
+        return itemId;
     }
     
     @Override

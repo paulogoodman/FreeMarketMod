@@ -67,6 +67,17 @@ public class AuctionDataManager {
      */
     public static void addAuction(ServerLevel level, PlayerAuction auction) {
         List<PlayerAuction> auctions = loadAuctions(level);
+        
+        // Assign order to new auction (last position)
+        if (auction.getOrder() == Integer.MAX_VALUE) {
+            int maxOrder = auctions.stream()
+                .filter(a -> a.getOrder() != Integer.MAX_VALUE)
+                .mapToInt(PlayerAuction::getOrder)
+                .max()
+                .orElse(-1);
+            auction.setOrder(maxOrder + 1);
+        }
+        
         auctions.add(auction);
         saveAuctions(level, auctions);
     }
@@ -172,6 +183,7 @@ public class AuctionDataManager {
                     auctionJson.addProperty("sellerName", auction.getSellerName());
                     auctionJson.addProperty("expiryTime", auction.getExpiryTime());
                     auctionJson.addProperty("createdTime", auction.getCreatedTime());
+                    auctionJson.addProperty("order", auction.getOrder());
                     
                     if (auction.getBidderUuid() != null) {
                         auctionJson.addProperty("bidderUuid", auction.getBidderUuid());
@@ -311,6 +323,9 @@ public class AuctionDataManager {
                         bidderName = auctionJson.get("bidderName").getAsString();
                     }
                     
+                    // Order will be set after all auctions are loaded to assign last position to auctions without order
+                    int order = auctionJson.has("order") ? auctionJson.get("order").getAsInt() : Integer.MAX_VALUE;
+                    
                     // Generate auctionId if missing
                     if (auctionId == null || auctionId.isEmpty()) {
                         auctionId = generateAuctionId();
@@ -321,7 +336,7 @@ public class AuctionDataManager {
                     PlayerAuction playerAuction = new PlayerAuction(
                         auctionId, itemId, componentData, quantity,
                         startingPrice, currentBid, sellerUuid, sellerName,
-                        expiryTime, bidderUuid, bidderName, createdTime);
+                        expiryTime, bidderUuid, bidderName, createdTime, order);
                     
                     // Check if auctionId exists in current auctions
                     if (auctionIdToIndex.containsKey(auctionId)) {
@@ -340,6 +355,22 @@ public class AuctionDataManager {
                     
                 } catch (Exception e) {
                     FreeMarket.LOGGER.error("Failed to load auction from file {}: {}", jsonFile.getName(), e.getMessage());
+                }
+            }
+            
+            // Assign order to auctions that don't have one (set to last position)
+            // Find the maximum order value among auctions that have an order
+            int maxOrder = currentAuctions.stream()
+                .filter(auction -> auction.getOrder() != Integer.MAX_VALUE)
+                .mapToInt(PlayerAuction::getOrder)
+                .max()
+                .orElse(-1);
+            
+            // Assign order to auctions without one (starting from maxOrder + 1)
+            int nextOrder = maxOrder + 1;
+            for (PlayerAuction auction : currentAuctions) {
+                if (auction.getOrder() == Integer.MAX_VALUE) {
+                    auction.setOrder(nextOrder++);
                 }
             }
             
@@ -413,6 +444,7 @@ public class AuctionDataManager {
                 }
                 
                 auctionTag.putLong("createdTime", auction.getCreatedTime());
+                auctionTag.putInt("order", auction.getOrder());
                 auctionsList.add(auctionTag);
             }
             
@@ -451,6 +483,11 @@ public class AuctionDataManager {
                     }
                     
                     auction.setCreatedTime(auctionTag.getLong("createdTime"));
+                    if (auctionTag.contains("order")) {
+                        auction.setOrder(auctionTag.getInt("order"));
+                    } else {
+                        auction.setOrder(Integer.MAX_VALUE); // Default to last position if missing
+                    }
                     data.auctions.add(auction);
                 }
             }

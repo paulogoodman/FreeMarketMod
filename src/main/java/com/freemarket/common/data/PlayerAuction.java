@@ -20,6 +20,7 @@ public class PlayerAuction {
     private String bidderUuid; // UUID of the current highest bidder (null if no bids)
     private String bidderName; // Display name of the current highest bidder (null if no bids)
     private long createdTime; // Timestamp when auction was created
+    private int order; // Display order for sorting (lower numbers appear first)
     
     /**
      * Creates a new PlayerAuction instance.
@@ -39,6 +40,25 @@ public class PlayerAuction {
         this.bidderUuid = bidderUuid;
         this.bidderName = bidderName;
         this.createdTime = createdTime;
+        this.order = Integer.MAX_VALUE; // Default to last position
+    }
+    
+    public PlayerAuction(String auctionId, String itemId, String componentData, int quantity,
+                        long startingPrice, long currentBid, String sellerUuid, String sellerName,
+                        long expiryTime, String bidderUuid, String bidderName, long createdTime, int order) {
+        this.auctionId = auctionId;
+        this.itemId = itemId;
+        this.componentData = componentData;
+        this.quantity = quantity;
+        this.startingPrice = startingPrice;
+        this.currentBid = currentBid;
+        this.sellerUuid = sellerUuid;
+        this.sellerName = sellerName;
+        this.expiryTime = expiryTime;
+        this.bidderUuid = bidderUuid;
+        this.bidderName = bidderName;
+        this.createdTime = createdTime;
+        this.order = order;
     }
     
     /**
@@ -57,6 +77,7 @@ public class PlayerAuction {
         this.bidderUuid = null;
         this.bidderName = null;
         this.createdTime = System.currentTimeMillis();
+        this.order = Integer.MAX_VALUE; // Default to last position
     }
     
     // Getters and setters
@@ -157,6 +178,14 @@ public class PlayerAuction {
         this.createdTime = createdTime;
     }
     
+    public int getOrder() {
+        return order;
+    }
+    
+    public void setOrder(int order) {
+        this.order = order;
+    }
+    
     /**
      * Calculates the minimum bid amount.
      * For auctions with no bids, the minimum bid is the starting price.
@@ -224,6 +253,8 @@ public class PlayerAuction {
             tag.putString("bidderName", bidderName);
         }
         
+        tag.putInt("order", order);
+        
         return tag;
     }
     
@@ -251,6 +282,12 @@ public class PlayerAuction {
         }
         if (tag.contains("bidderName")) {
             auction.setBidderName(tag.getString("bidderName"));
+        }
+        
+        if (tag.contains("order")) {
+            auction.setOrder(tag.getInt("order"));
+        } else {
+            auction.setOrder(Integer.MAX_VALUE); // Default to last position if missing
         }
         
         return auction;

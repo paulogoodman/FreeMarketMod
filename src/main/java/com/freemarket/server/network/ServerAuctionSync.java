@@ -1,15 +1,18 @@
 package com.freemarket.server.network;
 
 import com.freemarket.FreeMarket;
+import com.freemarket.common.data.FreeMarketAuctionDTO;
 import com.freemarket.common.data.PlayerAuction;
 import com.freemarket.common.network.PacketChunking;
 import com.freemarket.common.network.PacketType;
 import com.freemarket.server.data.AuctionDataManager;
 import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Server-side utility for sending auction data to clients.
@@ -18,7 +21,7 @@ import java.util.List;
  */
 public class ServerAuctionSync {
     
-    private static final Gson GSON = new Gson();
+    private static final Gson GSON = new GsonBuilder().create();
     
     /**
      * Sends auction data to all players on the server.
@@ -29,7 +32,12 @@ public class ServerAuctionSync {
      */
     public static void syncToAllPlayers(ServerLevel level, List<PlayerAuction> auctions) {
         try {
-            String jsonData = GSON.toJson(auctions);
+            // Convert PlayerAuction objects to DTOs for serialization
+            List<FreeMarketAuctionDTO> dtos = auctions.stream()
+                .map(FreeMarketAuctionDTO::new)
+                .collect(Collectors.toList());
+            
+            String jsonData = GSON.toJson(dtos);
             
             // Get server and iterate through all players for reliable delivery
             List<ServerPlayer> players = level.getServer().getPlayerList().getPlayers();
@@ -50,7 +58,12 @@ public class ServerAuctionSync {
      */
     public static void syncToPlayer(ServerPlayer player, List<PlayerAuction> auctions) {
         try {
-            String jsonData = GSON.toJson(auctions);
+            // Convert PlayerAuction objects to DTOs for serialization
+            List<FreeMarketAuctionDTO> dtos = auctions.stream()
+                .map(FreeMarketAuctionDTO::new)
+                .collect(Collectors.toList());
+            
+            String jsonData = GSON.toJson(dtos);
             PacketChunking.sendToPlayerWithChunking(player, PacketType.AUCTION_SYNC, jsonData);
             FreeMarket.LOGGER.info("Sent {} auctions to player {}", auctions.size(), player.getName().getString());
         } catch (Exception e) {

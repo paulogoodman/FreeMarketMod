@@ -86,6 +86,22 @@ public class FreeMarketDataManager {
             overworldLevel = level;
         }
         
+        // Assign order to items that don't have one (set to last position)
+        // Find the maximum order value among items that have an order
+        int maxOrder = items.stream()
+            .filter(item -> item.getOrder() != Integer.MAX_VALUE)
+            .mapToInt(FreeMarketItem::getOrder)
+            .max()
+            .orElse(-1);
+        
+        // Assign order to items without one (starting from maxOrder + 1)
+        int nextOrder = maxOrder + 1;
+        for (FreeMarketItem item : items) {
+            if (item.getOrder() == Integer.MAX_VALUE) {
+                item.setOrder(nextOrder++);
+            }
+        }
+        
         MarketplaceSavedData savedData = overworldLevel.getDataStorage().computeIfAbsent(
             new SavedData.Factory<>(MarketplaceSavedData::new, MarketplaceSavedData::load),
             MARKETPLACE_DATA_KEY
@@ -250,6 +266,7 @@ public class FreeMarketDataManager {
                     itemJson.addProperty("quantity", item.getQuantity());
                     itemJson.addProperty("guid", guid);
                     itemJson.addProperty("componentData", item.getComponentData());
+                    itemJson.addProperty("order", item.getOrder());
                     
                     // Write to file
                     File jsonFile = marketDir.resolve(guid + ".json").toFile();
@@ -328,6 +345,8 @@ public class FreeMarketDataManager {
                     int quantity = itemJson.has("quantity") ? itemJson.get("quantity").getAsInt() : 1;
                     String guid = itemJson.has("guid") ? itemJson.get("guid").getAsString() : null;
                     String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
+                    // Order will be set after all items are loaded to assign last position to items without order
+                    int order = itemJson.has("order") ? itemJson.get("order").getAsInt() : Integer.MAX_VALUE;
                     
                     // Validate item ID
                     ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
@@ -356,9 +375,9 @@ public class FreeMarketDataManager {
                         FreeMarket.LOGGER.info("Generated new GUID for item from file {}: {}", jsonFile.getName(), guid);
                     }
                     
-                        // Create FreeMarketItem
-                        FreeMarketItem freeMarketItem = new FreeMarketItem(
-                            itemStack, buyPrice, sellPrice, quantity, guid, componentData);
+                    // Create FreeMarketItem
+                    FreeMarketItem freeMarketItem = new FreeMarketItem(
+                        itemStack, buyPrice, sellPrice, quantity, guid, componentData, order);
                     
                     // Check if GUID exists in current items
                     if (guidToIndex.containsKey(guid)) {
@@ -377,6 +396,22 @@ public class FreeMarketDataManager {
                     
                 } catch (Exception e) {
                     FreeMarket.LOGGER.error("Failed to load marketplace item from file {}: {}", jsonFile.getName(), e.getMessage());
+                }
+            }
+            
+            // Assign order to items that don't have one (set to last position)
+            // Find the maximum order value among items that have an order
+            int maxOrder = currentItems.stream()
+                .filter(item -> item.getOrder() != Integer.MAX_VALUE)
+                .mapToInt(FreeMarketItem::getOrder)
+                .max()
+                .orElse(-1);
+            
+            // Assign order to items without one (starting from maxOrder + 1)
+            int nextOrder = maxOrder + 1;
+            for (FreeMarketItem item : currentItems) {
+                if (item.getOrder() == Integer.MAX_VALUE) {
+                    item.setOrder(nextOrder++);
                 }
             }
             
@@ -451,6 +486,7 @@ public class FreeMarketDataManager {
                 itemTag.putInt("quantity", item.getQuantity());
                 itemTag.putString("guid", item.getGuid());
                 itemTag.putString("componentData", item.getComponentData());
+                itemTag.putInt("order", item.getOrder());
                 
                 itemsList.add(itemTag);
             }
@@ -514,6 +550,7 @@ public class FreeMarketDataManager {
                         int quantity = itemTag.getInt("quantity");
                         String guid = itemTag.contains("guid") ? itemTag.getString("guid") : null;
                         String componentData = itemTag.contains("componentData") ? itemTag.getString("componentData") : "{}";
+                        int order = itemTag.contains("order") ? itemTag.getInt("order") : Integer.MAX_VALUE;
                         
                         // If GUID is missing or empty, generate a random one
                         if (guid == null || guid.isEmpty()) {
@@ -524,7 +561,7 @@ public class FreeMarketDataManager {
                         // but we keep the componentData string for reference/display purposes
                         
                         FreeMarketItem freeMarketItem = new FreeMarketItem(
-                            itemStack, buyPrice, sellPrice, quantity, guid, componentData);
+                            itemStack, buyPrice, sellPrice, quantity, guid, componentData, order);
                         data.items.add(freeMarketItem);
                         
                     } catch (Exception e) {

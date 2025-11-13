@@ -11,6 +11,7 @@ public class FreeMarketItemDTO {
     private int quantity;
     private String guid;
     private String componentData;
+    private int order;
     
     /**
      * Default constructor for JSON deserialization.
@@ -22,6 +23,7 @@ public class FreeMarketItemDTO {
         this.quantity = 1;
         this.guid = "";
         this.componentData = "{}";
+        this.order = Integer.MAX_VALUE;
     }
     
     /**
@@ -34,6 +36,7 @@ public class FreeMarketItemDTO {
         this.quantity = item.getQuantity();
         this.guid = item.getGuid();
         this.componentData = item.getComponentData();
+        this.order = item.getOrder();
     }
     
     // Getters and setters
@@ -83,6 +86,14 @@ public class FreeMarketItemDTO {
     
     public void setComponentData(String componentData) {
         this.componentData = componentData;
+    }
+    
+    public int getOrder() {
+        return order;
+    }
+    
+    public void setOrder(int order) {
+        this.order = order;
     }
     
     /**

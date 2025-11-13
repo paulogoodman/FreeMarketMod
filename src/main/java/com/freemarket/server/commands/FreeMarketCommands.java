@@ -24,8 +24,6 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import java.nio.file.Path;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
@@ -1130,13 +1128,8 @@ public class FreeMarketCommands {
                 level, player, slotIndex, heldItem.getCount(), startingPrice, durationMinutes);
             
             if (success) {
-                // Sync auction list to all players
-                var auctions = com.freemarket.server.data.AuctionDataManager.loadAuctions(level);
-                Gson gson = new GsonBuilder().create();
-                net.neoforged.neoforge.network.PacketDistributor.sendToAllPlayers(
-                    com.freemarket.common.network.FreeMarketPacket.withJson(
-                        com.freemarket.common.network.PacketType.AUCTION_SYNC, 
-                        gson.toJson(auctions)));
+                // Sync auction list to all players using ServerAuctionSync (handles DTOs and chunking)
+                com.freemarket.server.network.ServerAuctionSync.syncAuctionData(level);
                 
                 String itemName = heldItem.getDisplayName().getString();
                 Component message = Component.literal("§aSuccessfully created auction for §e" + itemName + 

@@ -1,4 +1,4 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.commonUI;
 
 /**
  * Configuration for buttons displayed on a card.

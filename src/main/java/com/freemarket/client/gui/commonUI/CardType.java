@@ -1,4 +1,4 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.commonUI;
 
 /**
  * Enum representing the type of card being rendered.

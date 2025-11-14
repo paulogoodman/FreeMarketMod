@@ -1,5 +1,9 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.marketUI;
 
+import com.freemarket.client.gui.commonUI.ButtonType;
+import com.freemarket.client.gui.commonUI.CardButtonConfig;
+import com.freemarket.client.gui.commonUI.CardType;
+import com.freemarket.client.gui.commonUI.GuiScalingHelper;
 import com.freemarket.common.handlers.AdminModeHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;

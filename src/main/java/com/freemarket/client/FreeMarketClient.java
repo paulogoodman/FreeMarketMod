@@ -16,8 +16,8 @@ import net.neoforged.neoforge.client.event.InputEvent;
 import org.lwjgl.glfw.GLFW;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.client.gui.FreeMarketGuiScreen;
 import com.freemarket.client.data.ClientWalletCache;
+import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
 
 // This class will not load on dedicated servers. Accessing client side code from here is safe.
 @Mod(value = FreeMarket.MODID, dist = Dist.CLIENT)

@@ -95,78 +95,166 @@ public class FreeMarketPacketHandler {
     private static void handleBuyItemRequest(FreeMarketPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
-            
-            String itemMarketListingId = packet.data();
+
+            String packetData = packet.data();
+            String parsedListingId = packetData;
+            int quantity = 1;
+
+            try {
+                JsonObject json = JsonParser.parseString(packetData).getAsJsonObject();
+                parsedListingId = json.get("marketListingId").getAsString();
+                if (json.has("quantity")) {
+                    quantity = Math.max(1, json.get("quantity").getAsInt());
+                }
+            } catch (Exception e) {
+                parsedListingId = packetData;
+            }
+
+            final String itemMarketListingId = parsedListingId;
+
+            if (quantity <= 0) {
+                sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, "Invalid quantity");
+                return;
+            }
+
             ServerLevel level = player.serverLevel();
-            
+
             // SECURITY: Load item from server DataManager (server-authoritative)
             List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
             FreeMarketItem itemToBuy = items.stream()
                 .filter(item -> item.getMarketListingId().equals(itemMarketListingId))
                 .findFirst()
                 .orElse(null);
-            
+
             if (itemToBuy == null) {
                 sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, "Item not found");
                 return;
             }
-            
+
+            long pricePerOrder = itemToBuy.getBuyPrice();
+            if (pricePerOrder <= 0) {
+                sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, "Invalid item price");
+                return;
+            }
+
+            long totalCost;
+            try {
+                totalCost = Math.multiplyExact(pricePerOrder, (long) quantity);
+            } catch (ArithmeticException ex) {
+                sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, "Requested quantity too large");
+                return;
+            }
+
             // SECURITY: Validate wallet balance server-side
-            if (!ServerWalletHandler.hasEnoughMoney(player, itemToBuy.getBuyPrice())) {
+            if (!ServerWalletHandler.hasEnoughMoney(player, totalCost)) {
                 sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, "Insufficient funds");
                 return;
             }
-            
-            // Create item and add to inventory
-            ItemStack itemStack = ServerItemHandler.createItemWithComponentData(
+
+            // Create item template for orders
+            ItemStack itemStackTemplate = ServerItemHandler.createItemWithComponentData(
                 itemToBuy.getItemStack(), itemToBuy.getComponentData(), level.getServer());
-            
-            if (!addItemToInventory(player, itemStack)) {
-                player.drop(itemStack, false); // Drop if inventory full
+
+            for (int i = 0; i < quantity; i++) {
+                ItemStack orderStack = itemStackTemplate.copy();
+                if (!addItemToInventory(player, orderStack)) {
+                    player.drop(orderStack, false); // Drop if inventory full
+                }
             }
-            
+
             // Deduct money (server-authoritative price)
-            ServerWalletHandler.removeMoney(player, itemToBuy.getBuyPrice());
-            
+            ServerWalletHandler.removeMoney(player, totalCost);
+
             sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, true, "Purchase successful");
         });
     }
-    
+
     private static void handleSellItemRequest(FreeMarketPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) return;
-            
-            String itemMarketListingId = packet.data();
+
+            String packetData = packet.data();
+            String parsedListingId = packetData;
+            int quantity = 1;
+
+            try {
+                JsonObject json = JsonParser.parseString(packetData).getAsJsonObject();
+                parsedListingId = json.get("marketListingId").getAsString();
+                if (json.has("quantity")) {
+                    quantity = Math.max(1, json.get("quantity").getAsInt());
+                }
+            } catch (Exception e) {
+                parsedListingId = packetData;
+            }
+
+            final String itemMarketListingId = parsedListingId;
+
+            if (quantity <= 0) {
+                sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Invalid quantity");
+                return;
+            }
+
             ServerLevel level = player.serverLevel();
-            
+
             // SECURITY: Load item from server DataManager
             List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
             FreeMarketItem itemToSell = items.stream()
                 .filter(item -> item.getMarketListingId().equals(itemMarketListingId))
                 .findFirst()
                 .orElse(null);
-            
+
             if (itemToSell == null) {
                 sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Item not found");
                 return;
             }
-            
-            ItemStack itemStack = ServerItemHandler.createItemWithComponentData(
+
+            long pricePerOrder = itemToSell.getSellPrice();
+            if (pricePerOrder <= 0) {
+                sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Item cannot be sold");
+                return;
+            }
+
+            ItemStack itemStackTemplate = ServerItemHandler.createItemWithComponentData(
                 itemToSell.getItemStack(), itemToSell.getComponentData(), level.getServer());
-            
-            if (!hasItemInInventory(player, itemStack)) {
+
+            int perOrderCount = Math.max(1, itemStackTemplate.getCount());
+            long requiredTotalLong;
+            try {
+                requiredTotalLong = Math.multiplyExact((long) perOrderCount, (long) quantity);
+            } catch (ArithmeticException ex) {
+                sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Requested quantity too large");
+                return;
+            }
+
+            if (requiredTotalLong > Integer.MAX_VALUE) {
+                sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Requested quantity too large");
+                return;
+            }
+
+            ItemStack requiredStack = itemStackTemplate.copy();
+            requiredStack.setCount((int) requiredTotalLong);
+
+            if (!hasItemInInventory(player, requiredStack)) {
                 sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "You don't have this item");
                 return;
             }
-            
-            if (!removeItemFromInventory(player, itemStack)) {
+
+            if (!removeItemFromInventory(player, requiredStack)) {
                 sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Failed to remove item");
                 return;
             }
-            
+
+            long totalPayout;
+            try {
+                totalPayout = Math.multiplyExact(pricePerOrder, (long) quantity);
+            } catch (ArithmeticException ex) {
+                sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, false, "Requested quantity too large");
+                return;
+            }
+
             // Add money (server-authoritative price)
-            ServerWalletHandler.addMoney(player, itemToSell.getSellPrice());
-            
+            ServerWalletHandler.addMoney(player, totalPayout);
+
             sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, true, "Sale successful");
         });
     }
@@ -343,7 +431,7 @@ public class FreeMarketPacketHandler {
             ClientWalletCache.updateBalance(data.playerUuid, data.balance);
             
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
+            if (minecraft.screen instanceof com.freemarket.client.gui.commonUI.FreeMarketGuiScreen screen) {
                 screen.updateWalletBalance(data.balance);
             }
         });
@@ -370,7 +458,7 @@ public class FreeMarketPacketHandler {
         var player = Objects.requireNonNull(minecraft.player);
         ClientWalletCache.updateBalance(player.getUUID().toString(), response.newBalance);
         
-        if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
+        if (minecraft.screen instanceof com.freemarket.client.gui.commonUI.FreeMarketGuiScreen screen) {
             screen.updateWalletBalanceAndRefreshButtons(response.newBalance);
             
             if (response.success) {
@@ -398,7 +486,7 @@ public class FreeMarketPacketHandler {
             // Invalidate the auction container's cache so it picks up the new data
             // This will cause the container to refresh from ClientAuctionCache on next render
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
+            if (minecraft.screen instanceof com.freemarket.client.gui.commonUI.FreeMarketGuiScreen screen) {
                 screen.invalidateAuctionContainerCache();
             }
         });
@@ -456,7 +544,7 @@ public class FreeMarketPacketHandler {
             ClientMarketplaceCache.updateCache(items);
             
             Minecraft minecraft = Minecraft.getInstance();
-            if (minecraft.screen instanceof com.freemarket.client.gui.FreeMarketGuiScreen screen) {
+            if (minecraft.screen instanceof com.freemarket.client.gui.commonUI.FreeMarketGuiScreen screen) {
                 screen.updateMarketplaceData(items);
             }
         });

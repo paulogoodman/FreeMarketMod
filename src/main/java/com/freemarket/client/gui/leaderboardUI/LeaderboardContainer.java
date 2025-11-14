@@ -1,6 +1,7 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.leaderboardUI;
 
 import com.freemarket.client.data.ClientLeaderboardCache;
+import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
 import com.freemarket.common.data.PlayerBalanceData;
 import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;

@@ -1,4 +1,4 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.commonUI;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;

@@ -1,8 +1,15 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.auctionUI;
 
 import com.freemarket.client.data.ClientAuctionCache;
 import com.freemarket.client.data.ClientAuctionTimingCache;
 import com.freemarket.client.handlers.ClientWalletHandler;
+import com.freemarket.client.gui.commonUI.BaseGridContainer;
+import com.freemarket.client.gui.commonUI.ButtonType;
+import com.freemarket.client.gui.commonUI.CardButtonConfig;
+import com.freemarket.client.gui.commonUI.CardType;
+import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
+import com.freemarket.client.gui.commonUI.GuiScalingHelper;
+import com.freemarket.client.gui.marketUI.UnifiedItemCardRenderer;
 import com.freemarket.common.attachments.ItemComponentHandler;
 import com.freemarket.common.data.PlayerAuction;
 import com.freemarket.common.managers.ItemCategoryManager;

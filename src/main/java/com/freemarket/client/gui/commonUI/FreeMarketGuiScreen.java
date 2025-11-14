@@ -1,4 +1,4 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.commonUI;
 
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -15,10 +15,18 @@ import com.freemarket.Config;
 import com.freemarket.FreeMarket;
 import com.freemarket.client.data.ClientFreeMarketDataManager;
 import com.freemarket.client.data.ClientMarketplaceCache;
+import com.freemarket.client.handlers.ClientWalletHandler;
+import com.freemarket.client.gui.auctionUI.CancelAuctionConfirmationPopup;
+import com.freemarket.client.gui.auctionUI.CreateAuctionPopupScreen;
+import com.freemarket.client.gui.auctionUI.PlaceBidPopupOverlay;
+import com.freemarket.client.gui.auctionUI.PlayerAuctionContainer;
+import com.freemarket.client.gui.leaderboardUI.LeaderboardContainer;
+import com.freemarket.client.gui.marketUI.BuyConfirmationPopupOverlay;
+import com.freemarket.client.gui.marketUI.FreeMarketContainer;
+import com.freemarket.client.gui.marketUI.SellConfirmationPopupOverlay;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
-import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.server.data.FreeMarketDataManager;
 
 /**
@@ -45,6 +53,8 @@ public class FreeMarketGuiScreen extends Screen {
     
     private PlaceBidPopupOverlay placeBidPopup;
     private CancelAuctionConfirmationPopup cancelAuctionPopup;
+    private BuyConfirmationPopupOverlay buyConfirmationPopup;
+    private SellConfirmationPopupOverlay sellConfirmationPopup;
     
     // Cache wallet balance to avoid retrieving it every frame
     private long cachedBalance = 0;
@@ -129,6 +139,22 @@ public class FreeMarketGuiScreen extends Screen {
     }
     
     /**
+     * Shows the buy confirmation popup for the given marketplace item.
+     */
+    public void showBuyConfirmationPopup(FreeMarketItem item, FreeMarketContainer sourceContainer) {
+        buyConfirmationPopup = new BuyConfirmationPopupOverlay(item, this, sourceContainer);
+        buyConfirmationPopup.show();
+    }
+    
+    /**
+     * Shows the sell confirmation popup for the given marketplace item.
+     */
+    public void showSellConfirmationPopup(FreeMarketItem item, FreeMarketContainer sourceContainer) {
+        sellConfirmationPopup = new SellConfirmationPopupOverlay(item, sourceContainer);
+        sellConfirmationPopup.show();
+    }
+    
+    /**
      * Hides all popup overlays.
      */
     public void hideAllPopups() {
@@ -137,6 +163,12 @@ public class FreeMarketGuiScreen extends Screen {
         }
         if (cancelAuctionPopup != null) {
             cancelAuctionPopup.hide();
+        }
+        if (buyConfirmationPopup != null) {
+            buyConfirmationPopup.hide();
+        }
+        if (sellConfirmationPopup != null) {
+            sellConfirmationPopup.hide();
         }
     }
     
@@ -147,7 +179,9 @@ public class FreeMarketGuiScreen extends Screen {
      */
     public boolean isAnyPopupVisible() {
         return (placeBidPopup != null && placeBidPopup.isVisible()) ||
-               (cancelAuctionPopup != null && cancelAuctionPopup.isVisible());
+               (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) ||
+               (buyConfirmationPopup != null && buyConfirmationPopup.isVisible()) ||
+               (sellConfirmationPopup != null && sellConfirmationPopup.isVisible());
     }
     
     /**
@@ -456,6 +490,12 @@ public class FreeMarketGuiScreen extends Screen {
         if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
             cancelAuctionPopup.render(guiGraphics, mouseX, mouseY, partialTick);
         }
+        if (buyConfirmationPopup != null && buyConfirmationPopup.isVisible()) {
+            buyConfirmationPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
+        if (sellConfirmationPopup != null && sellConfirmationPopup.isVisible()) {
+            sellConfirmationPopup.render(guiGraphics, mouseX, mouseY, partialTick);
+        }
     }
     
     /**
@@ -683,6 +723,18 @@ public class FreeMarketGuiScreen extends Screen {
             }
         }
         
+        if (buyConfirmationPopup != null && buyConfirmationPopup.isVisible()) {
+            if (buyConfirmationPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
+        if (sellConfirmationPopup != null && sellConfirmationPopup.isVisible()) {
+            if (sellConfirmationPopup.mouseClicked(mouseX, mouseY, button)) {
+                return true;
+            }
+        }
+        
         // Don't process tab clicks or container clicks if popup is visible
         if (isAnyPopupVisible()) {
             return false; // Let popup handle all clicks
@@ -770,6 +822,18 @@ public class FreeMarketGuiScreen extends Screen {
             }
         }
         
+        if (buyConfirmationPopup != null && buyConfirmationPopup.isVisible()) {
+            if (buyConfirmationPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (sellConfirmationPopup != null && sellConfirmationPopup.isVisible()) {
+            if (sellConfirmationPopup.keyPressed(keyCode, scanCode, modifiers)) {
+                return true;
+            }
+        }
+        
         // Route to appropriate container
         switch (currentScreen) {
             case MARKETPLACE:
@@ -802,6 +866,18 @@ public class FreeMarketGuiScreen extends Screen {
         
         if (cancelAuctionPopup != null && cancelAuctionPopup.isVisible()) {
             if (cancelAuctionPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (buyConfirmationPopup != null && buyConfirmationPopup.isVisible()) {
+            if (buyConfirmationPopup.charTyped(codePoint, modifiers)) {
+                return true;
+            }
+        }
+        
+        if (sellConfirmationPopup != null && sellConfirmationPopup.isVisible()) {
+            if (sellConfirmationPopup.charTyped(codePoint, modifiers)) {
                 return true;
             }
         }

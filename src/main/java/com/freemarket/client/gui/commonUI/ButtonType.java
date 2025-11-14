@@ -1,4 +1,4 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.commonUI;
 
 /**
  * Enum representing the type of button that was clicked on a card.

@@ -1,9 +1,25 @@
-package com.freemarket.client.gui;
+package com.freemarket.client.gui.marketUI;
 
+import com.freemarket.client.handlers.ClientWalletHandler;
+import com.freemarket.client.gui.commonUI.BaseGridContainer;
+import com.freemarket.client.gui.commonUI.ButtonType;
+import com.freemarket.client.gui.commonUI.CardButtonConfig;
+import com.freemarket.client.gui.commonUI.CardType;
+import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
+import com.freemarket.client.gui.commonUI.GuiScalingHelper;
+import com.freemarket.common.attachments.ItemComponentHandler;
+import com.freemarket.common.data.FreeMarketItem;
+import com.freemarket.common.handlers.AdminModeHandler;
+import com.freemarket.common.managers.ItemCategoryManager;
+import com.freemarket.common.network.FreeMarketPacket;
+import com.freemarket.common.network.PacketType;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 
 import javax.annotation.Nonnull;
 
@@ -11,18 +27,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-
-import com.freemarket.common.data.FreeMarketItem;
-import com.freemarket.common.network.FreeMarketPacket;
-import com.freemarket.common.network.PacketType;
-import com.freemarket.common.handlers.AdminModeHandler;
-import com.freemarket.client.handlers.ClientWalletHandler;
-import com.freemarket.common.managers.ItemCategoryManager;
-import com.freemarket.common.attachments.ItemComponentHandler;
-import net.minecraft.client.Minecraft;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ItemStack;
 
 /**
  * A scrollable container for displaying free market items with search functionality.
@@ -411,17 +415,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                         return true; // Consume click but don't process
                     }
                     
-                    // Set cooldown immediately to prevent spam clicking
-                    long currentTime = System.currentTimeMillis();
-                    buyButtonCooldowns.put(currentItem.getMarketListingId(), currentTime + BUY_COOLDOWN_MS);
-                    
-                    // Send buy request to server via network packet
-                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.BUY_ITEM_REQUEST, currentItem.getMarketListingId());
-                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-                    
-                    // Don't update button states here - wait for server response
-                    // Button states will be updated when server responds
-                    
+                    if (parentScreen != null) {
+                        parentScreen.showBuyConfirmationPopup(currentItem, this);
+                    }
                     return true; // Consume the click
                 } else if (buttonClicked == ButtonType.SELL) {
                     // Check if button is enabled before processing
@@ -434,17 +430,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
                         return true; // Consume click but don't process
                     }
                     
-                    // Set cooldown immediately to prevent spam clicking
-                    long currentTime = System.currentTimeMillis();
-                    sellButtonCooldowns.put(currentItem.getMarketListingId(), currentTime + SELL_COOLDOWN_MS);
-                    
-                    // Send sell request to server via network packet
-                    FreeMarketPacket packet = FreeMarketPacket.withString(PacketType.SELL_ITEM_REQUEST, currentItem.getMarketListingId());
-                    net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
-                    
-                    // Don't update button states here - wait for server response
-                    // Button states will be updated when server responds
-                    
+                    if (parentScreen != null) {
+                        parentScreen.showSellConfirmationPopup(currentItem, this);
+                    }
                     return true; // Consume the click
                 }
                 
@@ -681,6 +669,101 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
             }
         }
     }
+
+    /**
+     * Calculates the maximum number of marketplace orders the player can buy for the given item.
+     */
+    public int calculateMaxBuyable(FreeMarketItem item) {
+        if (item == null) {
+            return 0;
+        }
+
+        long pricePerOrder = item.getBuyPrice();
+        if (pricePerOrder <= 0) {
+            return 0;
+        }
+
+        long balance = parentScreen != null
+            ? parentScreen.getCachedBalance()
+            : ClientWalletHandler.getPlayerMoney();
+
+        if (balance <= 0) {
+            return 0;
+        }
+
+        long maxOrders = balance / pricePerOrder;
+        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, maxOrders));
+    }
+
+    /**
+     * Counts how many matching items the player currently has in their inventory.
+     */
+    public int getPlayerInventoryCount(FreeMarketItem item) {
+        if (item == null) {
+            return 0;
+        }
+
+        Minecraft minecraft = Minecraft.getInstance();
+        Player clientPlayer = minecraft.player;
+        if (clientPlayer == null) {
+            return 0;
+        }
+
+        Player playerForCheck = clientPlayer;
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                playerForCheck = serverPlayer;
+            }
+        }
+
+        ItemStack itemToCheck = item.getItemStack().copy();
+
+        String componentData = item.getComponentData();
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            if (singleplayerServer != null) {
+                itemToCheck = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    itemToCheck, componentData, singleplayerServer);
+            } else {
+                ItemComponentHandler.applyComponentData(itemToCheck, componentData);
+            }
+        }
+
+        var inventory = playerForCheck.getInventory();
+        int totalCount = 0;
+
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
+                totalCount += slotItem.getCount();
+            }
+        }
+
+        return totalCount;
+    }
+
+    /**
+     * Starts the cooldown timer for the buy button of the specified item.
+     */
+    public void startBuyCooldown(FreeMarketItem item) {
+        if (item == null) {
+            return;
+        }
+        long currentTime = System.currentTimeMillis();
+        buyButtonCooldowns.put(item.getMarketListingId(), currentTime + BUY_COOLDOWN_MS);
+    }
+
+    /**
+     * Starts the cooldown timer for the sell button of the specified item.
+     */
+    public void startSellCooldown(FreeMarketItem item) {
+        if (item == null) {
+            return;
+        }
+        long currentTime = System.currentTimeMillis();
+        sellButtonCooldowns.put(item.getMarketListingId(), currentTime + SELL_COOLDOWN_MS);
+    }
     
     /**
      * Clears the processed item cache. Should be called when marketplace data changes.
@@ -719,52 +802,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
             return false;
         }
         
-        Minecraft minecraft = Minecraft.getInstance();
-        Player clientPlayer = minecraft.player;
-        if (clientPlayer == null) {
-            return false;
-        }
-        
-        // Use server player for inventory check to ensure consistency
-        Player playerForCheck = clientPlayer;
-        var singleplayerServer = minecraft.getSingleplayerServer();
-        if (singleplayerServer != null) {
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForCheck = serverPlayer;
-            }
-        }
-        
-        // Create item with component data applied to ensure proper matching
-        ItemStack itemToCheck = item.getItemStack().copy();
-        
-        // Apply component data if present (same logic as createItemWithComponentData)
-        String componentData = item.getComponentData();
-        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
-            // Try to use server-side processing for proper registry access
-            if (singleplayerServer != null) {
-                // Use server-side handler with registry access
-                itemToCheck = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
-                    itemToCheck, componentData, singleplayerServer);
-            } else {
-                // Fallback to client-side processing
-                ItemComponentHandler.applyComponentData(itemToCheck, componentData);
-            }
-        }
-        
-        // Check if player has the item in inventory
-        var inventory = playerForCheck.getInventory();
-        int totalCount = 0;
-        
-        // Count all matching items across the entire inventory
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack slotItem = inventory.getItem(i);
-            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
-                totalCount += slotItem.getCount();
-            }
-        }
-        
-        return totalCount >= itemToCheck.getCount();
+        int perOrder = Math.max(1, item.getStackSize());
+        int totalCount = getPlayerInventoryCount(item);
+        return totalCount >= perOrder;
     }
     
     /**

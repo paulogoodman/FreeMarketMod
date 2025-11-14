@@ -382,45 +382,146 @@ public class FreeMarketDataManager {
                         continue;
                     }
                     
-                    // Deserialize item
-                    String itemIdStr = itemJson.get("itemId").getAsString();
-                    // Support both old "count" and new "stackSize" for backward compatibility
-                    int stackSize = itemJson.has("stackSize") ? itemJson.get("stackSize").getAsInt() : 
-                                   (itemJson.has("count") ? itemJson.get("count").getAsInt() : 1);
-                    long buyPrice = itemJson.has("buyPrice") ? itemJson.get("buyPrice").getAsLong() : 0;
-                    long sellPrice = itemJson.has("sellPrice") ? itemJson.get("sellPrice").getAsLong() : 0;
-                    // Support both old "quantity" and new "totalStockAvailable" for backward compatibility
-                    Integer totalStockAvailable = null;
-                    if (itemJson.has("totalStockAvailable") && !itemJson.get("totalStockAvailable").isJsonNull()) {
-                        totalStockAvailable = itemJson.get("totalStockAvailable").getAsInt();
-                    } else if (itemJson.has("quantity") && !itemJson.get("quantity").isJsonNull()) {
-                        // Legacy support: old "quantity" field was used for stack size, so ignore it
-                        // Only use it if it's not the same as stackSize (which would indicate it was actually totalStockAvailable)
-                        int oldQuantity = itemJson.get("quantity").getAsInt();
-                        if (oldQuantity != stackSize) {
-                            totalStockAvailable = oldQuantity;
-                        }
-                    }
-                    // Support both old "guid" and new "marketListingId" for backward compatibility
-                    String marketListingId = null;
-                    if (itemJson.has("marketListingId") && !itemJson.get("marketListingId").isJsonNull()) {
-                        marketListingId = itemJson.get("marketListingId").getAsString();
-                    } else if (itemJson.has("guid") && !itemJson.get("guid").isJsonNull()) {
-                        marketListingId = itemJson.get("guid").getAsString();
-                    }
-                    String componentData = itemJson.has("componentData") ? itemJson.get("componentData").getAsString() : "{}";
-                    // Order will be set after all items are loaded to assign last position to items without order
-                    int order = itemJson.has("order") ? itemJson.get("order").getAsInt() : Integer.MAX_VALUE;
-                    
-                    // Validate item ID
-                    ResourceLocation itemId = ResourceLocation.parse(itemIdStr);
-                    if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
-                        FreeMarket.LOGGER.warn("Unknown item ID in file {}: {}", jsonFile.getName(), itemIdStr);
+                    // Validate required field: itemId
+                    if (!itemJson.has("itemId") || itemJson.get("itemId").isJsonNull()) {
+                        FreeMarket.LOGGER.warn("Missing required field 'itemId' in file: {}", jsonFile.getName());
                         continue;
                     }
                     
-                    // Create ItemStack
+                    // Deserialize item with proper error handling
+                    String itemIdStr;
+                    try {
+                        itemIdStr = itemJson.get("itemId").getAsString();
+                        if (itemIdStr == null || itemIdStr.isEmpty()) {
+                            FreeMarket.LOGGER.warn("Empty 'itemId' in file: {}", jsonFile.getName());
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid 'itemId' type in file {}: {}", jsonFile.getName(), e.getMessage());
+                        continue;
+                    }
+                    
+                    // Support both old "count" and new "stackSize" for backward compatibility
+                    int stackSize = 1;
+                    try {
+                        if (itemJson.has("stackSize") && !itemJson.get("stackSize").isJsonNull()) {
+                            stackSize = itemJson.get("stackSize").getAsInt();
+                        } else if (itemJson.has("count") && !itemJson.get("count").isJsonNull()) {
+                            stackSize = itemJson.get("count").getAsInt();
+                        }
+                        // Validate stackSize range (1 to 64, or item's max stack size)
+                        if (stackSize < 1) {
+                            FreeMarket.LOGGER.warn("Invalid stackSize ({}) in file {}, using 1", stackSize, jsonFile.getName());
+                            stackSize = 1;
+                        } else if (stackSize > 64) {
+                            FreeMarket.LOGGER.warn("StackSize ({}) exceeds maximum (64) in file {}, capping to 64", stackSize, jsonFile.getName());
+                            stackSize = 64;
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid stackSize/count type in file {}: {}, using default 1", jsonFile.getName(), e.getMessage());
+                        stackSize = 1;
+                    }
+                    
+                    long buyPrice = 0;
+                    long sellPrice = 0;
+                    try {
+                        if (itemJson.has("buyPrice") && !itemJson.get("buyPrice").isJsonNull()) {
+                            buyPrice = itemJson.get("buyPrice").getAsLong();
+                            if (buyPrice < 0) {
+                                FreeMarket.LOGGER.warn("Negative buyPrice in file {}, setting to 0", jsonFile.getName());
+                                buyPrice = 0;
+                            }
+                        }
+                        if (itemJson.has("sellPrice") && !itemJson.get("sellPrice").isJsonNull()) {
+                            sellPrice = itemJson.get("sellPrice").getAsLong();
+                            if (sellPrice < 0) {
+                                FreeMarket.LOGGER.warn("Negative sellPrice in file {}, setting to 0", jsonFile.getName());
+                                sellPrice = 0;
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid buyPrice/sellPrice type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    // Support both old "quantity" and new "totalStockAvailable" for backward compatibility
+                    Integer totalStockAvailable = null;
+                    try {
+                        if (itemJson.has("totalStockAvailable") && !itemJson.get("totalStockAvailable").isJsonNull()) {
+                            totalStockAvailable = itemJson.get("totalStockAvailable").getAsInt();
+                            if (totalStockAvailable < 0) {
+                                FreeMarket.LOGGER.warn("Negative totalStockAvailable in file {}, ignoring", jsonFile.getName());
+                                totalStockAvailable = null;
+                            }
+                        } else if (itemJson.has("quantity") && !itemJson.get("quantity").isJsonNull()) {
+                            // Legacy support: old "quantity" field was used for stack size, so ignore it
+                            // Only use it if it's not the same as stackSize (which would indicate it was actually totalStockAvailable)
+                            int oldQuantity = itemJson.get("quantity").getAsInt();
+                            if (oldQuantity != stackSize && oldQuantity > 0) {
+                                totalStockAvailable = oldQuantity;
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid totalStockAvailable/quantity type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    // Support both old "guid" and new "marketListingId" for backward compatibility
+                    String marketListingId = null;
+                    try {
+                        if (itemJson.has("marketListingId") && !itemJson.get("marketListingId").isJsonNull()) {
+                            marketListingId = itemJson.get("marketListingId").getAsString();
+                        } else if (itemJson.has("guid") && !itemJson.get("guid").isJsonNull()) {
+                            marketListingId = itemJson.get("guid").getAsString();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid marketListingId/guid type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    String componentData = "{}";
+                    try {
+                        if (itemJson.has("componentData") && !itemJson.get("componentData").isJsonNull()) {
+                            componentData = itemJson.get("componentData").getAsString();
+                            if (componentData == null) {
+                                componentData = "{}";
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid componentData type in file {}: {}, using default", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    // Order will be set after all items are loaded to assign last position to items without order
+                    int order = Integer.MAX_VALUE;
+                    try {
+                        if (itemJson.has("order") && !itemJson.get("order").isJsonNull()) {
+                            order = itemJson.get("order").getAsInt();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid order type in file {}: {}, using default", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    // Validate item ID format and existence
+                    ResourceLocation itemId;
+                    try {
+                        itemId = ResourceLocation.parse(itemIdStr);
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid itemId format '{}' in file {}: {}", itemIdStr, jsonFile.getName(), e.getMessage());
+                        continue;
+                    }
+                    
+                    if (!BuiltInRegistries.ITEM.containsKey(itemId)) {
+                        FreeMarket.LOGGER.warn("Unknown item ID '{}' in file: {}", itemIdStr, jsonFile.getName());
+                        continue;
+                    }
+                    
+                    // Create ItemStack with validated stackSize
                     Item item = BuiltInRegistries.ITEM.get(itemId);
+                    // Clamp stackSize to item's max stack size
+                    ItemStack tempStack = new ItemStack(item, 1);
+                    int maxStackSize = tempStack.getMaxStackSize();
+                    if (stackSize > maxStackSize) {
+                        FreeMarket.LOGGER.warn("StackSize ({}) exceeds item's max stack size ({}) in file {}, capping to {}", 
+                            stackSize, maxStackSize, jsonFile.getName(), maxStackSize);
+                        stackSize = maxStackSize;
+                    }
                     ItemStack itemStack = new ItemStack(item, stackSize);
                     
                     // Apply component data if present

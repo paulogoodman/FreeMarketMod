@@ -145,6 +145,13 @@ public class PacketChunking {
     }
     
     /**
+     * Sends a chunked packet from client to server.
+     */
+    public static void sendToServerWithChunking(PacketType packetType, String jsonData) {
+        sendWithChunking(packetType, jsonData, PacketDistributor::sendToServer);
+    }
+    
+    /**
      * Helper class to store processed chunk information.
      */
     private static class ProcessedChunk {

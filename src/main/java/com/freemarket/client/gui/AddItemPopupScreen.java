@@ -2,7 +2,6 @@ package com.freemarket.client.gui;
 
 import com.freemarket.FreeMarket;
 import com.freemarket.common.attachments.ItemComponentHandler;
-import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -533,11 +532,10 @@ public class AddItemPopupScreen extends BasePopupScreen {
             .replace("\r", "\\r")   // Escape carriage returns
             .replace("\t", "\\t");  // Escape tabs
         
-        // Send add item packet to server
+        // Send add item packet to server (with chunking support for large component data)
         String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"buyPrice\":%d,\"sellPrice\":%d,\"stackSize\":%d}", 
             itemId, escapedComponentData, buyPrice, sellPrice, stackSize);
-        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+        com.freemarket.common.network.PacketChunking.sendToServerWithChunking(PacketType.MARKETPLACE_ADD_ITEM, jsonData);
         
         FreeMarket.LOGGER.info("Added item to marketplace: {} x{} - Buy: ${}, Sell: ${}", 
             itemId, stackSize, buyPrice, sellPrice);

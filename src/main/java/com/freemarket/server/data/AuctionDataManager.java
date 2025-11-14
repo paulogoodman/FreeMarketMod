@@ -9,6 +9,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import javax.annotation.Nonnull;
@@ -335,49 +336,177 @@ public class AuctionDataManager {
                         continue;
                     }
                     
-                    // Required fields
-                    String itemId = auctionJson.get("itemId").getAsString();
+                    // Required fields with proper error handling
+                    String itemId;
+                    try {
+                        itemId = auctionJson.get("itemId").getAsString();
+                        if (itemId == null || itemId.isEmpty()) {
+                            FreeMarket.LOGGER.warn("Empty 'itemId' in file: {}", jsonFile.getName());
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid 'itemId' type in file {}: {}", jsonFile.getName(), e.getMessage());
+                        continue;
+                    }
+                    
                     // Support both old "quantity" and new "stackSize" for backward compatibility
-                    int stackSize = auctionJson.has("stackSize") ? auctionJson.get("stackSize").getAsInt() : 
-                                   auctionJson.get("quantity").getAsInt();
-                    long startingPrice = auctionJson.get("startingPrice").getAsLong();
-                    long currentBid = auctionJson.get("currentBid").getAsLong();
+                    int stackSize = 1;
+                    try {
+                        if (auctionJson.has("stackSize") && !auctionJson.get("stackSize").isJsonNull()) {
+                            stackSize = auctionJson.get("stackSize").getAsInt();
+                        } else if (auctionJson.has("quantity") && !auctionJson.get("quantity").isJsonNull()) {
+                            stackSize = auctionJson.get("quantity").getAsInt();
+                        }
+                        // Validate stackSize range
+                        if (stackSize < 1) {
+                            FreeMarket.LOGGER.warn("Invalid stackSize ({}) in file {}, using 1", stackSize, jsonFile.getName());
+                            stackSize = 1;
+                        } else if (stackSize > 64) {
+                            FreeMarket.LOGGER.warn("StackSize ({}) exceeds maximum (64) in file {}, capping to 64", stackSize, jsonFile.getName());
+                            stackSize = 64;
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid stackSize/quantity type in file {}: {}, using default 1", jsonFile.getName(), e.getMessage());
+                        stackSize = 1;
+                    }
+                    
+                    long startingPrice = 0;
+                    long currentBid = 0;
+                    try {
+                        if (auctionJson.has("startingPrice") && !auctionJson.get("startingPrice").isJsonNull()) {
+                            startingPrice = auctionJson.get("startingPrice").getAsLong();
+                            if (startingPrice < 0) {
+                                FreeMarket.LOGGER.warn("Negative startingPrice in file {}, setting to 0", jsonFile.getName());
+                                startingPrice = 0;
+                            }
+                        }
+                        if (auctionJson.has("currentBid") && !auctionJson.get("currentBid").isJsonNull()) {
+                            currentBid = auctionJson.get("currentBid").getAsLong();
+                            if (currentBid < 0) {
+                                FreeMarket.LOGGER.warn("Negative currentBid in file {}, setting to 0", jsonFile.getName());
+                                currentBid = 0;
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid startingPrice/currentBid type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
                     
                     // Optional fields with defaults
-                    String auctionId = auctionJson.has("auctionId") && !auctionJson.get("auctionId").isJsonNull() 
-                        ? auctionJson.get("auctionId").getAsString() : null;
-                    String componentData = auctionJson.has("componentData") && !auctionJson.get("componentData").isJsonNull()
-                        ? auctionJson.get("componentData").getAsString() : "{}";
-                    String sellerUuid = auctionJson.has("sellerUuid") && !auctionJson.get("sellerUuid").isJsonNull()
-                        ? auctionJson.get("sellerUuid").getAsString() : "";
-                    String sellerName = auctionJson.has("sellerName") && !auctionJson.get("sellerName").isJsonNull()
-                        ? auctionJson.get("sellerName").getAsString() : "Admin";
+                    String auctionId = null;
+                    try {
+                        if (auctionJson.has("auctionId") && !auctionJson.get("auctionId").isJsonNull()) {
+                            auctionId = auctionJson.get("auctionId").getAsString();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid auctionId type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    String componentData = "{}";
+                    try {
+                        if (auctionJson.has("componentData") && !auctionJson.get("componentData").isJsonNull()) {
+                            componentData = auctionJson.get("componentData").getAsString();
+                            if (componentData == null) {
+                                componentData = "{}";
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid componentData type in file {}: {}, using default", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    String sellerUuid = "";
+                    try {
+                        if (auctionJson.has("sellerUuid") && !auctionJson.get("sellerUuid").isJsonNull()) {
+                            sellerUuid = auctionJson.get("sellerUuid").getAsString();
+                            if (sellerUuid == null) {
+                                sellerUuid = "";
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid sellerUuid type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    String sellerName = "Admin";
+                    try {
+                        if (auctionJson.has("sellerName") && !auctionJson.get("sellerName").isJsonNull()) {
+                            sellerName = auctionJson.get("sellerName").getAsString();
+                            if (sellerName == null) {
+                                sellerName = "Admin";
+                            }
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid sellerName type in file {}: {}", jsonFile.getName(), e.getMessage());
+                    }
                     
                     // Default expiryTime to 24 hours from now if not specified
                     long expiryTime;
-                    if (auctionJson.has("expiryTime") && !auctionJson.get("expiryTime").isJsonNull()) {
-                        expiryTime = auctionJson.get("expiryTime").getAsLong();
-                    } else {
-                        expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L); // 24 hours
+                    try {
+                        if (auctionJson.has("expiryTime") && !auctionJson.get("expiryTime").isJsonNull()) {
+                            expiryTime = auctionJson.get("expiryTime").getAsLong();
+                            if (expiryTime < 0) {
+                                FreeMarket.LOGGER.warn("Negative expiryTime in file {}, using default", jsonFile.getName());
+                                expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L);
+                            }
+                        } else {
+                            expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L); // 24 hours
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid expiryTime type in file {}: {}, using default", jsonFile.getName(), e.getMessage());
+                        expiryTime = System.currentTimeMillis() + (24 * 60 * 60 * 1000L);
                     }
                     
                     // Default createdTime to current time if not specified
-                    long createdTime = auctionJson.has("createdTime") && !auctionJson.get("createdTime").isJsonNull()
-                        ? auctionJson.get("createdTime").getAsLong() : System.currentTimeMillis();
+                    long createdTime;
+                    try {
+                        if (auctionJson.has("createdTime") && !auctionJson.get("createdTime").isJsonNull()) {
+                            createdTime = auctionJson.get("createdTime").getAsLong();
+                            if (createdTime < 0) {
+                                FreeMarket.LOGGER.warn("Negative createdTime in file {}, using current time", jsonFile.getName());
+                                createdTime = System.currentTimeMillis();
+                            }
+                        } else {
+                            createdTime = System.currentTimeMillis();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid createdTime type in file {}: {}, using current time", jsonFile.getName(), e.getMessage());
+                        createdTime = System.currentTimeMillis();
+                    }
                     
                     // Bidder fields default to null
                     String bidderUuid = null;
-                    if (auctionJson.has("bidderUuid") && !auctionJson.get("bidderUuid").isJsonNull()) {
-                        bidderUuid = auctionJson.get("bidderUuid").getAsString();
+                    try {
+                        if (auctionJson.has("bidderUuid") && !auctionJson.get("bidderUuid").isJsonNull()) {
+                            bidderUuid = auctionJson.get("bidderUuid").getAsString();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid bidderUuid type in file {}: {}", jsonFile.getName(), e.getMessage());
                     }
                     
                     String bidderName = null;
-                    if (auctionJson.has("bidderName") && !auctionJson.get("bidderName").isJsonNull()) {
-                        bidderName = auctionJson.get("bidderName").getAsString();
+                    try {
+                        if (auctionJson.has("bidderName") && !auctionJson.get("bidderName").isJsonNull()) {
+                            bidderName = auctionJson.get("bidderName").getAsString();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid bidderName type in file {}: {}", jsonFile.getName(), e.getMessage());
                     }
                     
                     // Order will be set after all auctions are loaded to assign last position to auctions without order
-                    int order = auctionJson.has("order") ? auctionJson.get("order").getAsInt() : Integer.MAX_VALUE;
+                    int order = Integer.MAX_VALUE;
+                    try {
+                        if (auctionJson.has("order") && !auctionJson.get("order").isJsonNull()) {
+                            order = auctionJson.get("order").getAsInt();
+                        }
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid order type in file {}: {}, using default", jsonFile.getName(), e.getMessage());
+                    }
+                    
+                    // Validate itemId format
+                    try {
+                        ResourceLocation.parse(itemId);
+                    } catch (Exception e) {
+                        FreeMarket.LOGGER.warn("Invalid itemId format '{}' in file {}: {}", itemId, jsonFile.getName(), e.getMessage());
+                        continue;
+                    }
                     
                     // Generate auctionId if missing
                     if (auctionId == null || auctionId.isEmpty()) {

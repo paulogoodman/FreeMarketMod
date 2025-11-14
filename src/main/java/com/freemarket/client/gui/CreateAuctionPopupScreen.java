@@ -1,7 +1,6 @@
 package com.freemarket.client.gui;
 
 import com.freemarket.FreeMarket;
-import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -577,11 +576,10 @@ public class CreateAuctionPopupScreen extends BasePopupScreen {
             .replace("\r", "\\r")   // Escape carriage returns
             .replace("\t", "\\t");  // Escape tabs
         
-        // Send auction create packet to server with slot index for server-side validation
+        // Send auction create packet to server with slot index for server-side validation (with chunking support for large component data)
         String jsonData = String.format("{\"itemId\":\"%s\",\"componentData\":\"%s\",\"quantity\":%d,\"startingPrice\":%d,\"durationMinutes\":%d,\"slotIndex\":%d}", 
             itemId, escapedComponentData, quantity, startingPrice, durationMinutes, selectedSlotIndex);
-        FreeMarketPacket packet = FreeMarketPacket.withJson(PacketType.AUCTION_CREATE, jsonData);
-        net.neoforged.neoforge.network.PacketDistributor.sendToServer(packet);
+        com.freemarket.common.network.PacketChunking.sendToServerWithChunking(PacketType.AUCTION_CREATE, jsonData);
         
         FreeMarket.LOGGER.info("Created auction for {} x{} starting at ${} for {} minutes", 
             itemId, quantity, startingPrice, durationMinutes);

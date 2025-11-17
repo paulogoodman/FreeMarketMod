@@ -1,6 +1,7 @@
 package com.freemarket.client.gui.marketUI;
 
 import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
+import com.freemarket.client.gui.commonUI.MoneyFormatter;
 import com.freemarket.client.gui.commonUI.PopupOverlay;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.network.FreeMarketPacket;
@@ -52,8 +53,10 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
     private void initializeQuantityBox() {
         Minecraft minecraft = Minecraft.getInstance();
 
-        int inputWidth = POPUP_WIDTH - 80;
-        int inputX = x + 40;
+        int plusMinusWidth = 24;
+        int spacing = 6;
+        int inputWidth = 100;
+        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
         int inputY = y + 170;
 
         this.quantityBox = new EditBox(
@@ -79,20 +82,26 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         if (parentScreen != null) {
             cachedBalance = parentScreen.getCachedBalance();
         }
-        renderItemInfo(guiGraphics);
+        renderItemInfo(guiGraphics, mouseX, mouseY);
         renderQuantitySection(guiGraphics, mouseX, mouseY);
         renderSummary(guiGraphics);
         renderButtons(guiGraphics, mouseX, mouseY);
     }
 
-    private void renderItemInfo(GuiGraphics guiGraphics) {
+    private void renderItemInfo(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         Minecraft minecraft = Minecraft.getInstance();
 
         int iconSize = 48;
         int iconX = x + (POPUP_WIDTH - iconSize) / 2;
         int iconY = y + 60;
 
-        ItemStack stack = marketItem.getItemStack();
+        // Create item stack with component data and set stack count
+        ItemStack stack = createItemWithComponentData(marketItem);
+        stack.setCount(marketItem.getStackSize());
+
+        // Check if mouse is hovering over the item icon for tooltip
+        boolean isHovered = mouseX >= iconX && mouseX <= iconX + iconSize &&
+                           mouseY >= iconY && mouseY <= iconY + iconSize;
 
         guiGraphics.pose().pushPose();
         guiGraphics.pose().translate(iconX + iconSize / 2F, iconY + iconSize / 2F, 0);
@@ -102,6 +111,11 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         guiGraphics.renderItemDecorations(minecraft.font, stack, -8, -8);
         guiGraphics.pose().popPose();
 
+        // Render tooltip if hovering
+        if (isHovered) {
+            guiGraphics.renderTooltip(minecraft.font, stack, mouseX, mouseY);
+        }
+
         Component itemName = stack.getHoverName();
         int nameWidth = minecraft.font.width(itemName);
         guiGraphics.drawString(minecraft.font, itemName, x + (POPUP_WIDTH - nameWidth) / 2, iconY + iconSize + 6, TEXT_PRIMARY);
@@ -109,6 +123,34 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         String priceText = "Price per order: $" + marketItem.getBuyPrice();
         int priceWidth = minecraft.font.width(priceText);
         guiGraphics.drawString(minecraft.font, priceText, x + (POPUP_WIDTH - priceWidth) / 2, iconY + iconSize + 22, SUCCESS_COLOR);
+    }
+    
+    /**
+     * Creates an ItemStack with component data applied from the marketplace item.
+     */
+    private ItemStack createItemWithComponentData(FreeMarketItem item) {
+        ItemStack baseItemStack = item.getItemStack().copy();
+        
+        // Apply component data if present
+        String componentData = item.getComponentData();
+        
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            // Try to use server-side processing for proper registry access
+            Minecraft minecraft = Minecraft.getInstance();
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            
+            if (singleplayerServer != null) {
+                // Use server-side handler with registry access
+                return com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    baseItemStack, componentData, singleplayerServer);
+            } else {
+                // Fallback to client-side processing
+                com.freemarket.common.attachments.ItemComponentHandler.applyComponentData(baseItemStack, componentData);
+                return baseItemStack;
+            }
+        }
+        
+        return baseItemStack;
     }
 
     private void renderQuantitySection(GuiGraphics guiGraphics, int mouseX, int mouseY) {
@@ -124,28 +166,30 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         String quantityLabel = "Quantity";
         guiGraphics.drawString(minecraft.font, quantityLabel, sectionX + 4, sectionY + 6, TEXT_PRIMARY);
 
+        int plusMinusWidth = 24;
+        int plusMinusHeight = 22;
+        int spacing = 6;
+        int inputWidth = 100;
+        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
+        int inputY = y + 170;
+        int buttonY = inputY;
+
+        // Update quantity box position if it exists
         if (quantityBox != null) {
+            quantityBox.setX(inputX);
+            quantityBox.setY(inputY);
+            quantityBox.setWidth(inputWidth);
             quantityBox.render(guiGraphics, mouseX, mouseY, 0);
         }
 
-        int buttonWidth = 90;
-        int buttonHeight = 20;
-        int buttonY = sectionY + sectionHeight - buttonHeight - 8;
-
-        int buyMaxX = sectionX + sectionWidth - buttonWidth - 6;
-        boolean buyMaxHovered = mouseX >= buyMaxX && mouseX <= buyMaxX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-        guiGraphics.fill(buyMaxX, buttonY, buyMaxX + buttonWidth, buttonY + buttonHeight, buyMaxHovered ? 0xCC4CAF50 : 0x994CAF50);
-        guiGraphics.drawString(minecraft.font, "Buy Max", buyMaxX + 14, buttonY + 6, TEXT_PRIMARY);
-
-        int plusMinusWidth = 24;
-        int plusMinusHeight = 20;
-        int minusX = sectionX + 6;
-        int plusX = minusX + plusMinusWidth + 6;
-
+        // Minus button on the left
+        int minusX = inputX - plusMinusWidth - spacing;
         boolean minusHovered = mouseX >= minusX && mouseX <= minusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight;
         guiGraphics.fill(minusX, buttonY, minusX + plusMinusWidth, buttonY + plusMinusHeight, minusHovered ? 0xCC505050 : 0x99505050);
         guiGraphics.drawString(minecraft.font, "-", minusX + 9, buttonY + 6, TEXT_PRIMARY);
 
+        // Plus button on the right
+        int plusX = inputX + inputWidth + spacing;
         boolean plusHovered = mouseX >= plusX && mouseX <= plusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight;
         guiGraphics.fill(plusX, buttonY, plusX + plusMinusWidth, buttonY + plusMinusHeight, plusHovered ? 0xCC505050 : 0x99505050);
         guiGraphics.drawString(minecraft.font, "+", plusX + 8, buttonY + 6, TEXT_PRIMARY);
@@ -157,14 +201,15 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         int summaryY = y + 250;
 
         long totalCost = getTotalCost();
-        String totalText = "Total: $" + totalCost;
+        String totalText = "Total: $" + MoneyFormatter.formatWithSuffix(totalCost);
         int totalWidth = minecraft.font.width(totalText);
         guiGraphics.drawString(minecraft.font, totalText, x + (POPUP_WIDTH - totalWidth) / 2, summaryY, SUCCESS_COLOR);
 
-        String balanceText = "Balance: $" + cachedBalance;
+        String balanceText = "Balance: $" + MoneyFormatter.formatWithSuffix(cachedBalance);
         int balanceWidth = minecraft.font.width(balanceText);
         guiGraphics.drawString(minecraft.font, balanceText, x + (POPUP_WIDTH - balanceWidth) / 2, summaryY + 14, TEXT_SECONDARY);
     }
+
 
     private void renderButtons(GuiGraphics guiGraphics, int mouseX, int mouseY) {
         Minecraft minecraft = Minecraft.getInstance();
@@ -173,15 +218,19 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         int buttonHeight = 26;
         int buttonY = y + POPUP_HEIGHT - 50;
 
-        int confirmX = x + 40;
-        boolean confirmHovered = mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
-        guiGraphics.fill(confirmX, buttonY, confirmX + buttonWidth, buttonY + buttonHeight, confirmHovered ? 0xCC4CAF50 : 0x994CAF50);
-        guiGraphics.drawString(minecraft.font, "Confirm Purchase", confirmX + 18, buttonY + 8, TEXT_PRIMARY);
-
-        int cancelX = x + POPUP_WIDTH - buttonWidth - 40;
+        int cancelX = x + 40;
         boolean cancelHovered = mouseX >= cancelX && mouseX <= cancelX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
         guiGraphics.fill(cancelX, buttonY, cancelX + buttonWidth, buttonY + buttonHeight, cancelHovered ? 0xCC666666 : 0x99666666);
-        guiGraphics.drawString(minecraft.font, "Cancel", cancelX + 48, buttonY + 8, TEXT_PRIMARY);
+        String cancelText = "Cancel";
+        int cancelTextWidth = minecraft.font.width(cancelText);
+        guiGraphics.drawString(minecraft.font, cancelText, cancelX + (buttonWidth - cancelTextWidth) / 2, buttonY + 8, TEXT_PRIMARY);
+
+        int confirmX = x + POPUP_WIDTH - buttonWidth - 40;
+        boolean confirmHovered = mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
+        guiGraphics.fill(confirmX, buttonY, confirmX + buttonWidth, buttonY + buttonHeight, confirmHovered ? 0xCC4CAF50 : 0x994CAF50);
+        String confirmText = "Confirm Purchase";
+        int confirmTextWidth = minecraft.font.width(confirmText);
+        guiGraphics.drawString(minecraft.font, confirmText, confirmX + (buttonWidth - confirmTextWidth) / 2, buttonY + 8, TEXT_PRIMARY);
     }
 
     @Override
@@ -195,34 +244,70 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
             return true;
         }
 
-        int sectionX = x + 40;
-        int sectionY = y + 150;
-        int sectionWidth = POPUP_WIDTH - 80;
-        int sectionHeight = 80;
-        int buttonY = sectionY + sectionHeight - 20 - 8;
-
-        int minusX = sectionX + 6;
         int plusMinusWidth = 24;
-        if (mouseX >= minusX && mouseX <= minusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + 20) {
-            adjustQuantity(-1);
-            playClickSound();
-            return true;
-        }
+        int plusMinusHeight = 22;
+        int spacing = 6;
+        int inputWidth = 100;
+        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
+        int inputY = y + 170;
+        int buttonY = inputY;
 
-        int plusX = minusX + plusMinusWidth + 6;
-        if (mouseX >= plusX && mouseX <= plusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + 20) {
-            adjustQuantity(1);
-            playClickSound();
-            return true;
-        }
+        // Check modifier keys
+        boolean isCtrlDown = com.mojang.blaze3d.platform.InputConstants.isKeyDown(
+            Minecraft.getInstance().getWindow().getWindow(),
+            org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_CONTROL
+        ) || com.mojang.blaze3d.platform.InputConstants.isKeyDown(
+            Minecraft.getInstance().getWindow().getWindow(),
+            org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_CONTROL
+        );
+        boolean isShiftDown = com.mojang.blaze3d.platform.InputConstants.isKeyDown(
+            Minecraft.getInstance().getWindow().getWindow(),
+            org.lwjgl.glfw.GLFW.GLFW_KEY_LEFT_SHIFT
+        ) || com.mojang.blaze3d.platform.InputConstants.isKeyDown(
+            Minecraft.getInstance().getWindow().getWindow(),
+            org.lwjgl.glfw.GLFW.GLFW_KEY_RIGHT_SHIFT
+        );
 
-        int buyMaxX = sectionX + sectionWidth - 90 - 6;
-        if (mouseX >= buyMaxX && mouseX <= buyMaxX + 90 && mouseY >= buttonY && mouseY <= buttonY + 20) {
-            int maxBuyable = getMaxBuyable();
-            if (maxBuyable > 0) {
-                setQuantity(maxBuyable);
-            } else {
+        // Minus button on the left
+        int minusX = inputX - plusMinusWidth - spacing;
+        if (mouseX >= minusX && mouseX <= minusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight) {
+            if (isCtrlDown && isShiftDown) {
+                // CTRL + SHIFT + click: set to 1
                 setQuantity(1);
+            } else if (isCtrlDown) {
+                // CTRL + click: minus 10
+                adjustQuantity(-10);
+            } else if (isShiftDown) {
+                // SHIFT + click: minus 100
+                adjustQuantity(-100);
+            } else {
+                // Normal click: minus 1
+                adjustQuantity(-1);
+            }
+            playClickSound();
+            return true;
+        }
+
+        // Plus button on the right
+        int plusX = inputX + inputWidth + spacing;
+        if (mouseX >= plusX && mouseX <= plusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight) {
+            if (isCtrlDown && isShiftDown) {
+                // CTRL + SHIFT + click: set to max
+                int maxBuyable = getMaxBuyable();
+                if (maxBuyable > 0) {
+                    setQuantity(maxBuyable);
+                } else {
+                    setQuantity(1);
+                }
+            } else if (isCtrlDown) {
+                // CTRL + click: plus 10
+                adjustQuantity(10);
+            } else if (isShiftDown) {
+                // SHIFT + click: plus 100
+                adjustQuantity(100);
+            } else {
+                // Normal click: plus 1
+                adjustQuantity(1);
             }
             playClickSound();
             return true;
@@ -230,18 +315,18 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
 
         int buttonWidth = 150;
         int buttonHeight = 26;
-        int confirmX = x + 40;
+        int cancelX = x + 40;
         int buttonBottom = y + POPUP_HEIGHT - 50 + buttonHeight;
-        if (mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= y + POPUP_HEIGHT - 50 && mouseY <= buttonBottom) {
-            playClickSound();
-            confirmPurchase();
-            return true;
-        }
-
-        int cancelX = x + POPUP_WIDTH - buttonWidth - 40;
         if (mouseX >= cancelX && mouseX <= cancelX + buttonWidth && mouseY >= y + POPUP_HEIGHT - 50 && mouseY <= buttonBottom) {
             playClickSound();
             hide();
+            return true;
+        }
+
+        int confirmX = x + POPUP_WIDTH - buttonWidth - 40;
+        if (mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= y + POPUP_HEIGHT - 50 && mouseY <= buttonBottom) {
+            playClickSound();
+            confirmPurchase();
             return true;
         }
 

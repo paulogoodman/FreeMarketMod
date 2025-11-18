@@ -1,10 +1,10 @@
 package com.freemarket.client.gui.marketUI;
 
+import com.freemarket.FreeMarket;
 import com.freemarket.client.handlers.ClientWalletHandler;
 import com.freemarket.client.gui.commonUI.BaseGridContainer;
 import com.freemarket.client.gui.commonUI.ButtonType;
 import com.freemarket.client.gui.commonUI.CardButtonConfig;
-import com.freemarket.client.gui.commonUI.CardType;
 import com.freemarket.client.gui.commonUI.FreeMarketGuiScreen;
 import com.freemarket.client.gui.commonUI.GuiScalingHelper;
 import com.freemarket.common.attachments.ItemComponentHandler;
@@ -16,10 +16,15 @@ import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.narration.NarrationElementOutput;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.component.ItemContainerContents;
 
 import javax.annotation.Nonnull;
 
@@ -27,6 +32,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
 
 /**
  * A scrollable container for displaying free market items with search functionality.
@@ -52,6 +59,9 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     // Sell button state tracking - per item
     private final java.util.Map<String, Long> sellButtonCooldowns = new java.util.HashMap<>();
     private static final long SELL_COOLDOWN_MS = 250; // 250ms cooldown
+
+    // Cached inventory counts (per tick) to avoid repeated shulker parsing
+    private Map<ItemSignature, Integer> inventoryCountCache = new HashMap<>();
     
     public FreeMarketContainer(int x, int y, int width, int height, List<FreeMarketItem> items, FreeMarketGuiScreen parentScreen) {
         super(x, y, width, height, parentScreen);
@@ -660,6 +670,7 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
     public void updateButtonStates() {
         cachedCanBuyStates.clear();
         cachedCanSellStates.clear();
+        refreshInventorySnapshot();
         
         // Pre-calculate states for all items
         if (allItems != null) {
@@ -704,24 +715,16 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         }
 
         Minecraft minecraft = Minecraft.getInstance();
-        Player clientPlayer = minecraft.player;
-        if (clientPlayer == null) {
+        Player playerForCheck = resolvePlayerForInventoryChecks(minecraft);
+        if (playerForCheck == null) {
             return 0;
-        }
-
-        Player playerForCheck = clientPlayer;
-        var singleplayerServer = minecraft.getSingleplayerServer();
-        if (singleplayerServer != null) {
-            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
-            if (serverPlayer != null) {
-                playerForCheck = serverPlayer;
-            }
         }
 
         ItemStack itemToCheck = item.getItemStack().copy();
 
         String componentData = item.getComponentData();
         if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            var singleplayerServer = minecraft.getSingleplayerServer();
             if (singleplayerServer != null) {
                 itemToCheck = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
                     itemToCheck, componentData, singleplayerServer);
@@ -730,17 +733,167 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
             }
         }
 
-        var inventory = playerForCheck.getInventory();
-        int totalCount = 0;
-
-        for (int i = 0; i < inventory.getContainerSize(); i++) {
-            ItemStack slotItem = inventory.getItem(i);
-            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
-                totalCount += slotItem.getCount();
+        Map<ItemSignature, Integer> counts = getInventoryCounts();
+        return counts.getOrDefault(ItemSignature.of(itemToCheck), 0);
+    }
+    
+    /**
+     * Checks if an item stack is a shulker box (client-side).
+     */
+    private boolean isShulkerBox(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        return stack.is(net.minecraft.world.item.Items.SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.WHITE_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.ORANGE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.MAGENTA_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.LIGHT_BLUE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.YELLOW_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.LIME_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.PINK_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.GRAY_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.LIGHT_GRAY_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.CYAN_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.PURPLE_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.BLUE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.BROWN_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.GREEN_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.RED_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.BLACK_SHULKER_BOX);
+    }
+    
+    private Map<ItemSignature, Integer> getInventoryCounts() {
+        if (inventoryCountCache.isEmpty()) {
+            refreshInventorySnapshot();
+        }
+        return inventoryCountCache;
+    }
+    
+    /**
+     * Refreshes the cached inventory snapshot.
+     * Should be called when opening market/auction or before confirmations.
+     */
+    public void refreshInventorySnapshot() {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player playerForCheck = resolvePlayerForInventoryChecks(minecraft);
+        if (playerForCheck == null) {
+            inventoryCountCache = new HashMap<>();
+            return;
+        }
+        inventoryCountCache = buildInventoryCountMap(playerForCheck, minecraft);
+    }
+    
+    private Player resolvePlayerForInventoryChecks(Minecraft minecraft) {
+        Player clientPlayer = minecraft.player;
+        if (clientPlayer == null) {
+            return null;
+        }
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            var serverPlayer = singleplayerServer.getPlayerList().getPlayer(clientPlayer.getUUID());
+            if (serverPlayer != null) {
+                return serverPlayer;
             }
         }
-
-        return totalCount;
+        return clientPlayer;
+    }
+    
+    private Map<ItemSignature, Integer> buildInventoryCountMap(Player player, Minecraft minecraft) {
+        Map<ItemSignature, Integer> counts = new HashMap<>();
+        var inventory = player.getInventory();
+        for (int i = 0; i < inventory.getContainerSize(); i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (slotItem.isEmpty()) {
+                continue;
+            }
+            addStackToCounts(counts, slotItem);
+            if (isShulkerBox(slotItem)) {
+                addShulkerContentsToCounts(counts, slotItem, minecraft);
+            }
+        }
+        return counts;
+    }
+    
+    private void addStackToCounts(Map<ItemSignature, Integer> counts, ItemStack stack) {
+        ItemSignature key = ItemSignature.of(stack);
+        counts.merge(key, stack.getCount(), Integer::sum);
+    }
+    
+    private void addShulkerContentsToCounts(Map<ItemSignature, Integer> counts, ItemStack shulkerBox, Minecraft minecraft) {
+        List<ItemStack> contents = readShulkerContents(shulkerBox, minecraft);
+        for (ItemStack content : contents) {
+            if (!content.isEmpty()) {
+                addStackToCounts(counts, content);
+            }
+        }
+    }
+    
+    private List<ItemStack> readShulkerContents(ItemStack shulkerBox, Minecraft minecraft) {
+        Optional<List<ItemStack>> fromComponent = readFromContainerComponent(shulkerBox);
+        if (fromComponent.isPresent()) {
+            return fromComponent.get();
+        }
+        return readFromLegacyBlockEntity(shulkerBox, minecraft);
+    }
+    
+    private Optional<List<ItemStack>> readFromContainerComponent(ItemStack shulkerBox) {
+        ItemContainerContents containerContents = shulkerBox.get(DataComponents.CONTAINER);
+        if (containerContents == null) {
+            return Optional.empty();
+        }
+        NonNullList<ItemStack> temp = NonNullList.withSize(27, ItemStack.EMPTY);
+        containerContents.copyInto(temp);
+        List<ItemStack> decodedItems = new ArrayList<>();
+        temp.stream().filter(stack -> !stack.isEmpty()).forEach(stack -> decodedItems.add(stack.copy()));
+        if (FreeMarket.LOGGER.isDebugEnabled()) {
+            FreeMarket.LOGGER.debug("Client snapshot read {} items from shulker via container component", decodedItems.size());
+        }
+        return Optional.of(decodedItems);
+    }
+    
+    private List<ItemStack> readFromLegacyBlockEntity(ItemStack shulkerBox, Minecraft minecraft) {
+        List<ItemStack> contents = new ArrayList<>();
+        if (!shulkerBox.has(DataComponents.BLOCK_ENTITY_DATA)) {
+            return contents;
+        }
+        try {
+            var blockEntityData = shulkerBox.get(DataComponents.BLOCK_ENTITY_DATA);
+            if (blockEntityData == null) {
+                return contents;
+            }
+            var tag = blockEntityData.copyTag();
+            if (tag == null || !tag.contains("Items", 9)) {
+                return contents;
+            }
+            var itemsList = tag.getList("Items", 10);
+            net.minecraft.core.RegistryAccess registryAccess = getRegistryAccess(minecraft);
+            if (registryAccess == null) {
+                return contents;
+            }
+            for (int i = 0; i < itemsList.size(); i++) {
+                var itemTag = itemsList.getCompound(i);
+                ItemStack shulkerItem = ItemStack.parseOptional(registryAccess, itemTag);
+                if (shulkerItem != null && !shulkerItem.isEmpty()) {
+                    contents.add(shulkerItem);
+                }
+            }
+            if (FreeMarket.LOGGER.isDebugEnabled()) {
+                FreeMarket.LOGGER.debug("Client snapshot read {} items from shulker via legacy block entity data", contents.size());
+            }
+        } catch (Exception e) {
+            FreeMarket.LOGGER.warn("Failed to read shulker box contents on client", e);
+        }
+        return contents;
+    }
+    
+    private net.minecraft.core.RegistryAccess getRegistryAccess(Minecraft minecraft) {
+        var singleplayerServer = minecraft.getSingleplayerServer();
+        if (singleplayerServer != null) {
+            return singleplayerServer.registryAccess();
+        }
+        if (minecraft.level != null) {
+            return minecraft.level.registryAccess();
+        }
+        return null;
     }
 
     /**
@@ -824,6 +977,38 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
         
         // Fallback to ClientWalletHandler if no parent screen
         return ClientWalletHandler.hasEnoughMoney(item.getBuyPrice());
+    }
+    
+    /**
+     * Signature for identifying unique item stacks (item + components) irrespective of count.
+     */
+    private static final class ItemSignature {
+        private final ItemStack stack;
+        private final ResourceLocation itemId;
+        
+        private ItemSignature(ItemStack stack, ResourceLocation itemId) {
+            this.stack = stack;
+            this.itemId = itemId;
+        }
+        
+        static ItemSignature of(ItemStack stack) {
+            ItemStack copy = stack.copy();
+            copy.setCount(1);
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(copy.getItem());
+            return new ItemSignature(copy, id);
+        }
+        
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) return true;
+            if (!(obj instanceof ItemSignature other)) return false;
+            return Objects.equals(itemId, other.itemId) && ItemStack.isSameItemSameComponents(this.stack, other.stack);
+        }
+        
+        @Override
+        public int hashCode() {
+            return Objects.hash(itemId, stack.getComponents());
+        }
     }
     
     

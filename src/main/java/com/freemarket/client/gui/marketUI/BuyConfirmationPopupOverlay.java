@@ -8,7 +8,6 @@ import com.freemarket.common.network.FreeMarketPacket;
 import com.freemarket.common.network.PacketType;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 
@@ -24,7 +23,7 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
     private final FreeMarketGuiScreen parentScreen;
     private final FreeMarketContainer sourceContainer;
 
-    private EditBox quantityBox;
+    private int currentQuantity = 1;
     
     private long cachedBalance;
     
@@ -46,30 +45,7 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
 
         this.x = (screenWidth - POPUP_WIDTH) / 2;
         this.y = (screenHeight - POPUP_HEIGHT) / 2;
-
-        initializeQuantityBox();
-    }
-
-    private void initializeQuantityBox() {
-        Minecraft minecraft = Minecraft.getInstance();
-
-        int plusMinusWidth = 24;
-        int spacing = 6;
-        int inputWidth = 100;
-        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
-        int inputY = y + 170;
-
-        this.quantityBox = new EditBox(
-            minecraft.font,
-            inputX,
-            inputY,
-            inputWidth,
-            22,
-            Component.literal("Quantity")
-        );
-        this.quantityBox.setBordered(true);
-        this.quantityBox.setFilter(text -> text.matches("\\d*"));
-        this.quantityBox.setValue("1");
+        this.currentQuantity = 1;
     }
 
     @Override
@@ -111,9 +87,12 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         guiGraphics.renderItemDecorations(minecraft.font, stack, -8, -8);
         guiGraphics.pose().popPose();
 
-        // Render tooltip if hovering
+        // Render tooltip if hovering (with higher z-level to appear above item decorations)
         if (isHovered) {
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0, 0, 6000); // Higher z-level than popup (5000) and item decorations
             guiGraphics.renderTooltip(minecraft.font, stack, mouseX, mouseY);
+            guiGraphics.pose().popPose();
         }
 
         Component itemName = stack.getHoverName();
@@ -159,37 +138,37 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         int sectionX = x + 40;
         int sectionY = y + 150;
         int sectionWidth = POPUP_WIDTH - 80;
-        int sectionHeight = 80;
+        int sectionHeight = 50;
 
         guiGraphics.fill(sectionX, sectionY, sectionX + sectionWidth, sectionY + sectionHeight, 0x99000000);
 
         String quantityLabel = "Quantity";
-        guiGraphics.drawString(minecraft.font, quantityLabel, sectionX + 4, sectionY + 6, TEXT_PRIMARY);
+        int labelWidth = minecraft.font.width(quantityLabel);
+        guiGraphics.drawString(minecraft.font, quantityLabel, x + (POPUP_WIDTH - labelWidth) / 2, sectionY + 6, TEXT_PRIMARY);
 
         int plusMinusWidth = 24;
         int plusMinusHeight = 22;
         int spacing = 6;
-        int inputWidth = 100;
-        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
-        int inputY = y + 170;
-        int buttonY = inputY;
+        int labelWidth_px = 80; // Width for the quantity label
+        int labelX = x + (POPUP_WIDTH - labelWidth_px - (plusMinusWidth * 2) - (spacing * 2)) / 2;
+        int labelY = y + 175;
+        int buttonY = labelY;
 
-        // Update quantity box position if it exists
-        if (quantityBox != null) {
-            quantityBox.setX(inputX);
-            quantityBox.setY(inputY);
-            quantityBox.setWidth(inputWidth);
-            quantityBox.render(guiGraphics, mouseX, mouseY, 0);
-        }
+        // Render quantity as a label (centered text in a box)
+        String quantityText = String.valueOf(currentQuantity);
+        int quantityTextWidth = minecraft.font.width(quantityText);
+        int quantityTextX = labelX + (labelWidth_px - quantityTextWidth) / 2;
+        guiGraphics.fill(labelX, labelY, labelX + labelWidth_px, labelY + plusMinusHeight, 0x99505050);
+        guiGraphics.drawString(minecraft.font, quantityText, quantityTextX, labelY + 6, TEXT_PRIMARY);
 
         // Minus button on the left
-        int minusX = inputX - plusMinusWidth - spacing;
+        int minusX = labelX - plusMinusWidth - spacing;
         boolean minusHovered = mouseX >= minusX && mouseX <= minusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight;
         guiGraphics.fill(minusX, buttonY, minusX + plusMinusWidth, buttonY + plusMinusHeight, minusHovered ? 0xCC505050 : 0x99505050);
         guiGraphics.drawString(minecraft.font, "-", minusX + 9, buttonY + 6, TEXT_PRIMARY);
 
         // Plus button on the right
-        int plusX = inputX + inputWidth + spacing;
+        int plusX = labelX + labelWidth_px + spacing;
         boolean plusHovered = mouseX >= plusX && mouseX <= plusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight;
         guiGraphics.fill(plusX, buttonY, plusX + plusMinusWidth, buttonY + plusMinusHeight, plusHovered ? 0xCC505050 : 0x99505050);
         guiGraphics.drawString(minecraft.font, "+", plusX + 8, buttonY + 6, TEXT_PRIMARY);
@@ -198,7 +177,8 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
     private void renderSummary(GuiGraphics guiGraphics) {
         Minecraft minecraft = Minecraft.getInstance();
 
-        int summaryY = y + 250;
+        // Position summary section with proper spacing from quantity section (ends at y + 200)
+        int summaryY = y + 210;
 
         long totalCost = getTotalCost();
         String totalText = "Total: $" + MoneyFormatter.formatWithSuffix(totalCost);
@@ -208,6 +188,111 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         String balanceText = "Balance: $" + MoneyFormatter.formatWithSuffix(cachedBalance);
         int balanceWidth = minecraft.font.width(balanceText);
         guiGraphics.drawString(minecraft.font, balanceText, x + (POPUP_WIDTH - balanceWidth) / 2, summaryY + 14, TEXT_SECONDARY);
+        
+        // Show inventory space warning if needed (positioned above buttons to avoid overlap)
+        // Buttons start at y + 275, so warning at y + 248 gives 27px gap
+        String inventoryWarning = getInventorySpaceWarning();
+        if (inventoryWarning != null) {
+            int warningY = summaryY + 28;
+            // Ensure warning doesn't overlap with buttons (buttons start at y + 275)
+            if (warningY + 14 > y + POPUP_HEIGHT - 45) {
+                warningY = y + POPUP_HEIGHT - 45 - 14; // Position just above buttons
+            }
+            int warningWidth = minecraft.font.width(inventoryWarning);
+            guiGraphics.drawString(minecraft.font, inventoryWarning, x + (POPUP_WIDTH - warningWidth) / 2, warningY, WARNING_COLOR);
+        }
+    }
+    
+    /**
+     * Calculates inventory space and returns a warning message if shulker boxes will be used.
+     * PERFORMANCE: Only checks shulker boxes if main inventory is insufficient.
+     */
+    private String getInventorySpaceWarning() {
+        Minecraft minecraft = Minecraft.getInstance();
+        net.minecraft.world.entity.player.Player player = minecraft.player;
+        if (player == null) {
+            return null;
+        }
+        
+        int quantity = getQuantity();
+        if (quantity <= 0) {
+            return null;
+        }
+        
+        // Calculate total items needed
+        int totalItemsNeeded = quantity * Math.max(1, marketItem.getStackSize());
+        
+        // Create item template for checking (only once)
+        ItemStack itemTemplate = createItemWithComponentData(marketItem);
+        itemTemplate.setCount(1);
+        
+        // Calculate available space in main inventory
+        var inventory = player.getInventory();
+        final int MAIN_INVENTORY_SIZE = 36;
+        int stackSize = itemTemplate.getMaxStackSize();
+        boolean isStackable = stackSize > 1;
+        
+        int mainInventorySpace = 0;
+        int emptySlots = 0;
+        
+        // PERFORMANCE: Single pass through inventory
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (slotItem.isEmpty()) {
+                emptySlots++;
+                if (isStackable) {
+                    mainInventorySpace += stackSize;
+                } else {
+                    mainInventorySpace += 1;
+                }
+            } else if (isStackable && ItemStack.isSameItemSameComponents(slotItem, itemTemplate)) {
+                mainInventorySpace += (stackSize - slotItem.getCount());
+            }
+        }
+        
+        if (!isStackable) {
+            mainInventorySpace = emptySlots;
+        }
+        
+        // Early exit: if main inventory has enough space, no warning needed
+        if (totalItemsNeeded <= mainInventorySpace) {
+            return null;
+        }
+        
+        // Only check for shulker boxes if we need more space
+        // PERFORMANCE: Early exit when first shulker box found
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (isShulkerBox(slotItem)) {
+                return "Items will be placed in boxes";
+            }
+        }
+        
+        return "Insufficient inventory space";
+    }
+    
+    /**
+     * Checks if an item stack is a shulker box.
+     */
+    private boolean isShulkerBox(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        return stack.is(net.minecraft.world.item.Items.SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.WHITE_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.ORANGE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.MAGENTA_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.LIGHT_BLUE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.YELLOW_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.LIME_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.PINK_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.GRAY_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.LIGHT_GRAY_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.CYAN_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.PURPLE_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.BLUE_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.BROWN_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.GREEN_SHULKER_BOX) ||
+               stack.is(net.minecraft.world.item.Items.RED_SHULKER_BOX) || 
+               stack.is(net.minecraft.world.item.Items.BLACK_SHULKER_BOX);
     }
 
 
@@ -216,16 +301,21 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
 
         int buttonWidth = 150;
         int buttonHeight = 26;
-        int buttonY = y + POPUP_HEIGHT - 50;
+        int buttonY = y + POPUP_HEIGHT - 45;
+        int buttonSpacing = 20;
 
-        int cancelX = x + 40;
+        // Center buttons with spacing between them
+        int totalButtonsWidth = (buttonWidth * 2) + buttonSpacing;
+        int buttonsStartX = x + (POPUP_WIDTH - totalButtonsWidth) / 2;
+
+        int cancelX = buttonsStartX;
         boolean cancelHovered = mouseX >= cancelX && mouseX <= cancelX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
         guiGraphics.fill(cancelX, buttonY, cancelX + buttonWidth, buttonY + buttonHeight, cancelHovered ? 0xCC666666 : 0x99666666);
         String cancelText = "Cancel";
         int cancelTextWidth = minecraft.font.width(cancelText);
         guiGraphics.drawString(minecraft.font, cancelText, cancelX + (buttonWidth - cancelTextWidth) / 2, buttonY + 8, TEXT_PRIMARY);
 
-        int confirmX = x + POPUP_WIDTH - buttonWidth - 40;
+        int confirmX = buttonsStartX + buttonWidth + buttonSpacing;
         boolean confirmHovered = mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= buttonY && mouseY <= buttonY + buttonHeight;
         guiGraphics.fill(confirmX, buttonY, confirmX + buttonWidth, buttonY + buttonHeight, confirmHovered ? 0xCC4CAF50 : 0x994CAF50);
         String confirmText = "Confirm Purchase";
@@ -239,18 +329,13 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
             return false;
         }
 
-        if (quantityBox != null && quantityBox.mouseClicked(mouseX, mouseY, button)) {
-            quantityBox.setFocused(true);
-            return true;
-        }
-
         int plusMinusWidth = 24;
         int plusMinusHeight = 22;
         int spacing = 6;
-        int inputWidth = 100;
-        int inputX = x + (POPUP_WIDTH - inputWidth - (plusMinusWidth * 2) - (spacing * 2)) / 2;
-        int inputY = y + 170;
-        int buttonY = inputY;
+        int labelWidth_px = 80;
+        int labelX = x + (POPUP_WIDTH - labelWidth_px - (plusMinusWidth * 2) - (spacing * 2)) / 2;
+        int labelY = y + 175;
+        int buttonY = labelY;
 
         // Check modifier keys
         boolean isCtrlDown = com.mojang.blaze3d.platform.InputConstants.isKeyDown(
@@ -269,7 +354,7 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         );
 
         // Minus button on the left
-        int minusX = inputX - plusMinusWidth - spacing;
+        int minusX = labelX - plusMinusWidth - spacing;
         if (mouseX >= minusX && mouseX <= minusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight) {
             if (isCtrlDown && isShiftDown) {
                 // CTRL + SHIFT + click: set to 1
@@ -289,7 +374,7 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
         }
 
         // Plus button on the right
-        int plusX = inputX + inputWidth + spacing;
+        int plusX = labelX + labelWidth_px + spacing;
         if (mouseX >= plusX && mouseX <= plusX + plusMinusWidth && mouseY >= buttonY && mouseY <= buttonY + plusMinusHeight) {
             if (isCtrlDown && isShiftDown) {
                 // CTRL + SHIFT + click: set to max
@@ -315,16 +400,20 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
 
         int buttonWidth = 150;
         int buttonHeight = 26;
-        int cancelX = x + 40;
-        int buttonBottom = y + POPUP_HEIGHT - 50 + buttonHeight;
-        if (mouseX >= cancelX && mouseX <= cancelX + buttonWidth && mouseY >= y + POPUP_HEIGHT - 50 && mouseY <= buttonBottom) {
+        int buttonY_click = y + POPUP_HEIGHT - 45;
+        int buttonSpacing = 20;
+        int totalButtonsWidth = (buttonWidth * 2) + buttonSpacing;
+        int buttonsStartX = x + (POPUP_WIDTH - totalButtonsWidth) / 2;
+        
+        int cancelX = buttonsStartX;
+        if (mouseX >= cancelX && mouseX <= cancelX + buttonWidth && mouseY >= buttonY_click && mouseY <= buttonY_click + buttonHeight) {
             playClickSound();
             hide();
             return true;
         }
 
-        int confirmX = x + POPUP_WIDTH - buttonWidth - 40;
-        if (mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= y + POPUP_HEIGHT - 50 && mouseY <= buttonBottom) {
+        int confirmX = buttonsStartX + buttonWidth + buttonSpacing;
+        if (mouseX >= confirmX && mouseX <= confirmX + buttonWidth && mouseY >= buttonY_click && mouseY <= buttonY_click + buttonHeight) {
             playClickSound();
             confirmPurchase();
             return true;
@@ -351,24 +440,11 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
     }
 
     private void setQuantity(int value) {
-        if (quantityBox != null) {
-            quantityBox.setValue(String.valueOf(value));
-        }
+        currentQuantity = value;
     }
 
     private int getQuantity() {
-        if (quantityBox == null) {
-            return 1;
-        }
-        String text = quantityBox.getValue();
-        if (text.isEmpty()) {
-            return 0;
-        }
-        try {
-            return Integer.parseInt(text);
-        } catch (NumberFormatException e) {
-            return 0;
-        }
+        return currentQuantity;
     }
 
     private int getMaxBuyable() {
@@ -423,17 +499,13 @@ public class BuyConfirmationPopupOverlay extends PopupOverlay {
 
     @Override
     protected boolean handlePopupKeyPress(int keyCode, int scanCode, int modifiers) {
-        if (quantityBox != null && quantityBox.keyPressed(keyCode, scanCode, modifiers)) {
-            return true;
-        }
+        // Quantity field is now read-only, no keyboard input needed
         return false;
     }
 
     @Override
     protected boolean handlePopupCharTyped(char codePoint, int modifiers) {
-        if (quantityBox != null && quantityBox.charTyped(codePoint, modifiers)) {
-            return true;
-        }
+        // Quantity field is now read-only, no keyboard input needed
         return false;
     }
 }

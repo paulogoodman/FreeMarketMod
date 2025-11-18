@@ -145,10 +145,19 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
         guiGraphics.fill(keepAuctionButtonX + 1, buttonY + buttonHeight - 1, keepAuctionButtonX + buttonWidth - 1, buttonY + buttonHeight, BORDER_COLOR); // Bottom
         
         String keepAuctionText = "Keep Auction";
-        int keepAuctionTextWidth = minecraft.font.width(keepAuctionText);
-        int keepAuctionTextX = keepAuctionButtonX + (buttonWidth - keepAuctionTextWidth) / 2;
-        int keepAuctionTextY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
-        guiGraphics.drawString(minecraft.font, keepAuctionText, keepAuctionTextX, keepAuctionTextY, TEXT_PRIMARY);
+        int keepHorizontalPadding = calculateOnePercentPadding(buttonWidth);
+        int keepVerticalPadding = calculateOnePercentPadding(buttonHeight);
+        int keepAvailableWidth = Math.max(1, buttonWidth - (keepHorizontalPadding * 2));
+        String keepAuctionDisplayText = minecraft.font.plainSubstrByWidth(keepAuctionText, keepAvailableWidth);
+        int keepAuctionTextWidth = minecraft.font.width(keepAuctionDisplayText);
+        int keepAuctionTextX = keepAuctionButtonX + keepHorizontalPadding +
+                               Math.max(0, (keepAvailableWidth - keepAuctionTextWidth) / 2);
+        int keepFontHeight = minecraft.font.lineHeight;
+        int keepCenteredY = buttonY + (buttonHeight - keepFontHeight) / 2;
+        int keepMinY = buttonY + keepVerticalPadding;
+        int keepMaxY = buttonY + buttonHeight - keepVerticalPadding - keepFontHeight;
+        int keepAuctionTextY = Math.max(keepMinY, Math.min(keepCenteredY, keepMaxY));
+        guiGraphics.drawString(minecraft.font, keepAuctionDisplayText, keepAuctionTextX, keepAuctionTextY, TEXT_PRIMARY);
         
         // Cancel Auction button (right, red)
         int cancelAuctionButtonX = startX + buttonWidth + buttonGap;
@@ -164,10 +173,19 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
         guiGraphics.fill(cancelAuctionButtonX + 1, buttonY + buttonHeight - 1, cancelAuctionButtonX + buttonWidth - 1, buttonY + buttonHeight, BORDER_COLOR); // Bottom
         
         String cancelAuctionText = "Cancel Auction";
-        int cancelAuctionTextWidth = minecraft.font.width(cancelAuctionText);
-        int cancelAuctionTextX = cancelAuctionButtonX + (buttonWidth - cancelAuctionTextWidth) / 2;
-        int cancelAuctionTextY = buttonY + (buttonHeight - minecraft.font.lineHeight) / 2;
-        guiGraphics.drawString(minecraft.font, cancelAuctionText, cancelAuctionTextX, cancelAuctionTextY, TEXT_PRIMARY);
+        int cancelHorizontalPadding = calculateOnePercentPadding(buttonWidth);
+        int cancelVerticalPadding = calculateOnePercentPadding(buttonHeight);
+        int cancelAvailableWidth = Math.max(1, buttonWidth - (cancelHorizontalPadding * 2));
+        String cancelAuctionDisplayText = minecraft.font.plainSubstrByWidth(cancelAuctionText, cancelAvailableWidth);
+        int cancelAuctionTextWidth = minecraft.font.width(cancelAuctionDisplayText);
+        int cancelAuctionTextX = cancelAuctionButtonX + cancelHorizontalPadding +
+                                 Math.max(0, (cancelAvailableWidth - cancelAuctionTextWidth) / 2);
+        int cancelFontHeight = minecraft.font.lineHeight;
+        int cancelCenteredY = buttonY + (buttonHeight - cancelFontHeight) / 2;
+        int cancelMinY = buttonY + cancelVerticalPadding;
+        int cancelMaxY = buttonY + buttonHeight - cancelVerticalPadding - cancelFontHeight;
+        int cancelAuctionTextY = Math.max(cancelMinY, Math.min(cancelCenteredY, cancelMaxY));
+        guiGraphics.drawString(minecraft.font, cancelAuctionDisplayText, cancelAuctionTextX, cancelAuctionTextY, TEXT_PRIMARY);
     }
     
     @Override
@@ -238,6 +256,10 @@ public class CancelAuctionConfirmationPopup extends PopupOverlay {
         
         // Hide popup
         hide();
+    }
+
+    private int calculateOnePercentPadding(int size) {
+        return Math.max(1, Math.round(size * 0.01f));
     }
 }
 

@@ -3,7 +3,6 @@ package com.freemarket.client.gui.marketUI;
 import com.freemarket.client.gui.commonUI.ButtonType;
 import com.freemarket.client.gui.commonUI.CardButtonConfig;
 import com.freemarket.client.gui.commonUI.CardType;
-import com.freemarket.client.gui.commonUI.GuiScalingHelper;
 import com.freemarket.common.handlers.AdminModeHandler;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -126,7 +125,7 @@ public class UnifiedItemCardRenderer {
         }
         
         // Render buttons based on config
-        renderButtons(guiGraphics, config, x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale);
+        renderButtons(guiGraphics, config, x, y, cardWidth, cardHeight, mouseX, mouseY, guiScale, popupVisible);
         
         return tooltipStack;
     }
@@ -285,7 +284,7 @@ public class UnifiedItemCardRenderer {
     }
     
     private void renderButtons(GuiGraphics guiGraphics, CardButtonConfig config, int x, int y,
-                              int cardWidth, int cardHeight, int mouseX, int mouseY, float guiScale) {
+                              int cardWidth, int cardHeight, int mouseX, int mouseY, float guiScale, boolean popupVisible) {
         CardLayout layout = getCachedCardLayout(x, y, cardWidth, cardHeight, guiScale, config.getButtonCount());
         
         int buttonIndex = 0;
@@ -293,7 +292,7 @@ public class UnifiedItemCardRenderer {
         // Render Buy button if configured
         if (config.showBuy && config.buyPrice > 0) {
             ButtonBounds bounds = layout.buttons.get(buttonIndex++);
-            boolean isHovered = bounds.contains(mouseX, mouseY);
+            boolean isHovered = !popupVisible && bounds.contains(mouseX, mouseY);
             String text = "Buy $" + formatPrice(config.buyPrice);
             boolean enabled = config.canBuy && !config.isBuyCooldown;
             renderButtonWithState(guiGraphics, text, bounds.x, bounds.y, bounds.width, bounds.height,
@@ -303,7 +302,7 @@ public class UnifiedItemCardRenderer {
         // Render Sell button if configured
         if (config.showSell && config.sellPrice > 0) {
             ButtonBounds bounds = layout.buttons.get(buttonIndex++);
-            boolean isHovered = bounds.contains(mouseX, mouseY);
+            boolean isHovered = !popupVisible && bounds.contains(mouseX, mouseY);
             String text = "Sell $" + formatPrice(config.sellPrice);
             boolean enabled = config.canSell && !config.isSellCooldown;
             renderButtonWithState(guiGraphics, text, bounds.x, bounds.y, bounds.width, bounds.height,
@@ -313,7 +312,7 @@ public class UnifiedItemCardRenderer {
         // Render Bid button if configured
         if (config.showBid) {
             ButtonBounds bounds = layout.buttons.get(buttonIndex++);
-            boolean isHovered = bounds.contains(mouseX, mouseY);
+            boolean isHovered = !popupVisible && bounds.contains(mouseX, mouseY);
             
             // Determine bid button text and color based on state
             String text;
@@ -341,7 +340,7 @@ public class UnifiedItemCardRenderer {
         // Render Cancel Auction button if configured
         if (config.showCancelAuction) {
             ButtonBounds bounds = layout.buttons.get(buttonIndex++);
-            boolean isHovered = bounds.contains(mouseX, mouseY);
+            boolean isHovered = !popupVisible && bounds.contains(mouseX, mouseY);
             
             // Cancel button is always red and enabled
             String text = "Cancel Auction";
@@ -391,17 +390,24 @@ public class UnifiedItemCardRenderer {
         
         Minecraft client = Minecraft.getInstance();
         int borderThickness = 1;
-        int horizontalPadding = 4; // Padding inside the border so text doesn't touch edges
+        int baseHorizontalPadding = 4; // Base padding inside the border
+        int innerX = x + borderThickness;
+        int innerY = y + borderThickness;
         int innerWidth = width - (borderThickness * 2);
         int innerHeight = height - (borderThickness * 2);
         
-        // Account for padding when truncating text
-        int availableTextWidth = innerWidth - (horizontalPadding * 2);
+        int dynamicHorizontalPadding = Math.max(1, Math.round(width * 0.01f));
+        int dynamicVerticalPadding = Math.max(1, Math.round(height * 0.01f));
+        
+        int totalHorizontalPadding = baseHorizontalPadding + dynamicHorizontalPadding;
+        int availableTextWidth = Math.max(1, innerWidth - (totalHorizontalPadding * 2));
         String displayText = truncateTextToWidth(text, availableTextWidth);
         int textWidth = client.font.width(displayText);
+        int textX = innerX + totalHorizontalPadding + Math.max(0, (availableTextWidth - textWidth) / 2);
+        
+        int availableTextHeight = Math.max(1, innerHeight - (dynamicVerticalPadding * 2));
         int textHeight = client.font.lineHeight;
-        int textX = x + borderThickness + (innerWidth - textWidth) / 2;
-        int textY = y + borderThickness + (innerHeight - textHeight) / 2;
+        int textY = innerY + dynamicVerticalPadding + Math.max(0, (availableTextHeight - textHeight) / 2);
         
         guiGraphics.drawString(client.font, displayText, textX, textY, textColor);
     }

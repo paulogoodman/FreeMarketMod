@@ -102,9 +102,12 @@ public class SellConfirmationPopupOverlay extends PopupOverlay {
         guiGraphics.renderItemDecorations(minecraft.font, stack, -8, -8);
         guiGraphics.pose().popPose();
 
-        // Render tooltip if hovering
+        // Render tooltip if hovering (with higher z-level to appear above item decorations)
         if (isHovered) {
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0, 0, 6000); // Higher z-level than popup (5000) and item decorations
             guiGraphics.renderTooltip(minecraft.font, stack, mouseX, mouseY);
+            guiGraphics.pose().popPose();
         }
 
         Component itemName = stack.getHoverName();
@@ -199,6 +202,11 @@ public class SellConfirmationPopupOverlay extends PopupOverlay {
         String availableText = "Orders available: " + getMaxSellable();
         int availableWidth = minecraft.font.width(availableText);
         guiGraphics.drawString(minecraft.font, availableText, x + (POPUP_WIDTH - availableWidth) / 2, summaryY + 14, TEXT_SECONDARY);
+        
+        // Show note about shulker boxes
+        String noteText = "Items will be taken from inventory and shulker boxes";
+        int noteWidth = minecraft.font.width(noteText);
+        guiGraphics.drawString(minecraft.font, noteText, x + (POPUP_WIDTH - noteWidth) / 2, summaryY + 28, TEXT_MUTED);
     }
 
 

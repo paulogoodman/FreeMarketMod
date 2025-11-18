@@ -116,6 +116,9 @@ public class FreeMarketGuiScreen extends Screen {
      * Shows the place bid popup overlay for the given auction.
      */
     public void showPlaceBidPopup(com.freemarket.common.data.PlayerAuction auction) {
+        if (freeMarketContainer != null) {
+            freeMarketContainer.refreshInventorySnapshot();
+        }
         if (placeBidPopup == null) {
             placeBidPopup = new PlaceBidPopupOverlay(auction);
         } else {
@@ -142,6 +145,9 @@ public class FreeMarketGuiScreen extends Screen {
      * Shows the buy confirmation popup for the given marketplace item.
      */
     public void showBuyConfirmationPopup(FreeMarketItem item, FreeMarketContainer sourceContainer) {
+        if (sourceContainer != null) {
+            sourceContainer.refreshInventorySnapshot();
+        }
         buyConfirmationPopup = new BuyConfirmationPopupOverlay(item, this, sourceContainer);
         buyConfirmationPopup.show();
     }
@@ -150,6 +156,9 @@ public class FreeMarketGuiScreen extends Screen {
      * Shows the sell confirmation popup for the given marketplace item.
      */
     public void showSellConfirmationPopup(FreeMarketItem item, FreeMarketContainer sourceContainer) {
+        if (sourceContainer != null) {
+            sourceContainer.refreshInventorySnapshot();
+        }
         sellConfirmationPopup = new SellConfirmationPopupOverlay(item, sourceContainer);
         sellConfirmationPopup.show();
     }
@@ -565,7 +574,7 @@ public class FreeMarketGuiScreen extends Screen {
     void renderWalletDisplay(GuiGraphics guiGraphics) {
         // Draw wallet display in top right corner with percentage-based positioning
         long money = cachedBalance; // Use only cached balance - no polling
-        String formattedMoney = "$" + formatPrice(money);
+        String formattedMoney = "$" + MoneyFormatter.formatWithSuffix(money);
         
         // Create title and money components
         Component titleText = Component.literal("Balance:");
@@ -618,68 +627,6 @@ public class FreeMarketGuiScreen extends Screen {
         guiGraphics.drawString(this.font, walletText, moneyX, moneyY, 0xFF4CAF50);
     }
     
-    /**
-     * Formats a price number to be shorter for display with intelligent decimal handling.
-     * Only abbreviates when there are trailing zeros, otherwise shows full number.
-     * Examples: 1000 -> 1K, 1001 -> 1001, 1100000 -> 1.1M, 1000001 -> 1000001
-     */
-    private String formatPrice(long price) {
-        if (price < 1000) {
-            return String.valueOf(price);
-        } else if (price < 1000000) {
-            // Thousands - only abbreviate if all trailing digits are zero
-            if (price % 1000 == 0) {
-                double thousands = price / 1000.0;
-                if (thousands == Math.floor(thousands)) {
-                    return String.format("%.0fK", thousands);
-                } else {
-                    return String.format("%.1fK", thousands);
-                }
-            } else {
-                // Has non-zero trailing digits, show full number
-                return String.valueOf(price);
-            }
-        } else if (price < 1000000000) {
-            // Millions - only abbreviate if all trailing digits are zero
-            if (price % 1000000 == 0) {
-                double millions = price / 1000000.0;
-                if (millions == Math.floor(millions)) {
-                    return String.format("%.0fM", millions);
-                } else {
-                    return String.format("%.1fM", millions);
-                }
-            } else {
-                // Has non-zero trailing digits, show full number
-                return String.valueOf(price);
-            }
-        } else if (price < 1000000000000L) {
-            // Billions - only abbreviate if all trailing digits are zero
-            if (price % 1000000000 == 0) {
-                double billions = price / 1000000000.0;
-                if (billions == Math.floor(billions)) {
-                    return String.format("%.0fB", billions);
-                } else {
-                    return String.format("%.1fB", billions);
-                }
-            } else {
-                // Has non-zero trailing digits, show full number
-                return String.valueOf(price);
-            }
-        } else {
-            // Trillions - only abbreviate if all trailing digits are zero
-            if (price % 1000000000000L == 0) {
-                double trillions = price / 1000000000000.0;
-                if (trillions == Math.floor(trillions)) {
-                    return String.format("%.0fT", trillions);
-                } else {
-                    return String.format("%.1fT", trillions);
-                }
-            } else {
-                // Has non-zero trailing digits, show full number
-                return String.valueOf(price);
-            }
-        }
-    }
     
     /**
      * Refreshes the GUI to update button visibility based on admin mode.

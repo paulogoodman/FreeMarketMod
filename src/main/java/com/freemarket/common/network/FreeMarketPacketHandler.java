@@ -5,9 +5,6 @@ import com.freemarket.client.data.*;
 import com.freemarket.common.data.FreeMarketItem;
 import com.freemarket.common.data.FreeMarketItemDTO;
 import com.freemarket.common.data.PlayerAuction;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
 import com.freemarket.common.data.PlayerBalanceData;
 import com.freemarket.common.handlers.AdminModeHandler;
 import com.freemarket.server.data.*;
@@ -18,14 +15,23 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import net.minecraft.client.Minecraft;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.neoforged.neoforge.network.PacketDistributor;
-import net.neoforged.neoforge.network.handling.IPayloadContext;
-
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import net.minecraft.client.Minecraft;
+import net.minecraft.core.NonNullList;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.Container;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
  * Unified packet handler for all FreeMarket network communication.
@@ -154,18 +160,42 @@ public class FreeMarketPacketHandler {
             // Create item template for orders
             ItemStack itemStackTemplate = ServerItemHandler.createItemWithComponentData(
                 itemToBuy.getItemStack(), itemToBuy.getComponentData(), level.getServer());
+            
+            // Calculate total items needed (quantity * stack size per order)
+            int totalItemsNeeded = quantity * Math.max(1, itemToBuy.getStackSize());
+            
+            // Check inventory space
+            InventorySpaceResult spaceResult = calculateInventorySpace(player, itemStackTemplate, totalItemsNeeded);
+            
+            // Check if we have enough space
+            if (spaceResult.totalSpace() < totalItemsNeeded) {
+                sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, false, 
+                    "Insufficient inventory space. Need " + totalItemsNeeded + " items, have space for " + spaceResult.totalSpace());
+                return;
+            }
 
+            // Add items to inventory (will use shulker boxes if needed)
             for (int i = 0; i < quantity; i++) {
                 ItemStack orderStack = itemStackTemplate.copy();
+                orderStack.setCount(itemToBuy.getStackSize());
                 if (!addItemToInventory(player, orderStack)) {
-                    player.drop(orderStack, false); // Drop if inventory full
+                    // If we can't add, drop it (shouldn't happen if space check passed)
+                    player.drop(orderStack, false);
                 }
             }
 
             // Deduct money (server-authoritative price)
             ServerWalletHandler.removeMoney(player, totalCost);
+            
+            // Build success message with inventory info
+            String successMessage = "Purchase successful";
+            if (spaceResult.willUseShulkers()) {
+                successMessage += ". Items placed in inventory and shulker boxes";
+            } else {
+                successMessage += ". Items placed in inventory";
+            }
 
-            sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, true, "Purchase successful");
+            sendOperationResponse(player, PacketType.BUY_ITEM_RESPONSE, true, successMessage);
         });
     }
 
@@ -722,6 +752,385 @@ public class FreeMarketPacketHandler {
         PacketDistributor.sendToPlayer(player, FreeMarketPacket.withJson(type, jsonData));
     }
     
+    /**
+     * Checks if an item stack is a shulker box.
+     */
+    private static boolean isShulkerBox(ItemStack stack) {
+        if (stack.isEmpty()) return false;
+        return stack.is(Items.SHULKER_BOX) || 
+               stack.is(Items.WHITE_SHULKER_BOX) || stack.is(Items.ORANGE_SHULKER_BOX) ||
+               stack.is(Items.MAGENTA_SHULKER_BOX) || stack.is(Items.LIGHT_BLUE_SHULKER_BOX) ||
+               stack.is(Items.YELLOW_SHULKER_BOX) || stack.is(Items.LIME_SHULKER_BOX) ||
+               stack.is(Items.PINK_SHULKER_BOX) || stack.is(Items.GRAY_SHULKER_BOX) ||
+               stack.is(Items.LIGHT_GRAY_SHULKER_BOX) || stack.is(Items.CYAN_SHULKER_BOX) ||
+               stack.is(Items.PURPLE_SHULKER_BOX) || stack.is(Items.BLUE_SHULKER_BOX) ||
+               stack.is(Items.BROWN_SHULKER_BOX) || stack.is(Items.GREEN_SHULKER_BOX) ||
+               stack.is(Items.RED_SHULKER_BOX) || stack.is(Items.BLACK_SHULKER_BOX);
+    }
+    
+    /**
+     * Container wrapper for shulker box items that reads/writes directly from BlockEntityData.
+     */
+    private static class ShulkerBoxContainerWrapper implements Container {
+        private final ItemStack shulkerBox;
+        private final ServerPlayer player;
+        private final ItemStack[] items = new ItemStack[27];
+        private boolean modified = false;
+        
+        public ShulkerBoxContainerWrapper(ItemStack shulkerBox, ServerPlayer player) {
+            this.shulkerBox = shulkerBox;
+            this.player = player;
+            // Initialize all slots to empty
+            for (int i = 0; i < 27; i++) {
+                items[i] = ItemStack.EMPTY;
+            }
+            // Load items from BlockEntityData
+            loadItems();
+        }
+        
+        private void loadItems() {
+            if (loadItemsFromContainerComponent()) {
+                return;
+            }
+            loadItemsFromLegacyData();
+        }
+        
+        private boolean loadItemsFromContainerComponent() {
+            ItemContainerContents containerContents = shulkerBox.get(DataComponents.CONTAINER);
+            if (containerContents == null) {
+                return false;
+            }
+            NonNullList<ItemStack> temp = NonNullList.withSize(27, ItemStack.EMPTY);
+            containerContents.copyInto(temp);
+            for (int i = 0; i < temp.size(); i++) {
+                items[i] = temp.get(i);
+            }
+            if (FreeMarket.LOGGER.isDebugEnabled()) {
+                FreeMarket.LOGGER.debug("Server loaded {} shulker items via container component", temp.stream().filter(stack -> !stack.isEmpty()).count());
+            }
+            return true;
+        }
+        
+        private void loadItemsFromLegacyData() {
+            if (!shulkerBox.has(DataComponents.BLOCK_ENTITY_DATA)) {
+                return;
+            }
+            var blockEntityData = shulkerBox.get(DataComponents.BLOCK_ENTITY_DATA);
+            if (blockEntityData == null) {
+                return;
+            }
+            try {
+                CompoundTag tag = blockEntityData.copyTag();
+                if (tag != null && tag.contains("Items", 9)) {
+                    var itemsList = tag.getList("Items", 10);
+                    int listSize = itemsList.size();
+                    var registryAccess = player.server.registryAccess();
+                    for (int i = 0; i < listSize; i++) {
+                        CompoundTag itemTag = itemsList.getCompound(i);
+                        byte slot = itemTag.getByte("Slot");
+                        if (slot >= 0 && slot < 27) {
+                            ItemStack parsed = ItemStack.parseOptional(registryAccess, itemTag);
+                            if (parsed != null) {
+                                items[slot] = parsed;
+                            }
+                        }
+                    }
+                    if (FreeMarket.LOGGER.isDebugEnabled()) {
+                        FreeMarket.LOGGER.debug("Server loaded {} shulker items via legacy block entity data", listSize);
+                    }
+                }
+            } catch (Exception e) {
+                FreeMarket.LOGGER.warn("Failed to load shulker box items: {}", e.getMessage());
+            }
+        }
+        
+        public void saveItems() {
+            if (!modified) return;
+            
+            NonNullList<ItemStack> temp = NonNullList.withSize(27, ItemStack.EMPTY);
+            for (int i = 0; i < 27; i++) {
+                temp.set(i, items[i]);
+            }
+            
+            List<ItemStack> copies = new ArrayList<>(temp.size());
+            for (ItemStack stack : temp) {
+                copies.add(stack == null ? ItemStack.EMPTY : stack.copy());
+            }
+            shulkerBox.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(copies));
+            if (FreeMarket.LOGGER.isDebugEnabled()) {
+                FreeMarket.LOGGER.debug("Server wrote {} shulker items to container component", copies.stream().filter(stack -> !stack.isEmpty()).count());
+            }
+        }
+        
+        @Override
+        public int getContainerSize() { return 27; }
+        
+        @Override
+        public boolean isEmpty() {
+            for (ItemStack stack : items) {
+                if (!stack.isEmpty()) return false;
+            }
+            return true;
+        }
+        
+        @Override
+        public ItemStack getItem(int slot) {
+            return slot >= 0 && slot < 27 ? items[slot] : ItemStack.EMPTY;
+        }
+        
+        @Override
+        public ItemStack removeItem(int slot, int amount) {
+            if (slot < 0 || slot >= 27) return ItemStack.EMPTY;
+            ItemStack stack = items[slot];
+            if (stack.isEmpty()) return ItemStack.EMPTY;
+            
+            ItemStack result = stack.split(amount);
+            if (stack.isEmpty()) {
+                items[slot] = ItemStack.EMPTY;
+            }
+            modified = true;
+            return result;
+        }
+        
+        @Override
+        public ItemStack removeItemNoUpdate(int slot) {
+            if (slot < 0 || slot >= 27) return ItemStack.EMPTY;
+            ItemStack stack = items[slot];
+            items[slot] = ItemStack.EMPTY;
+            modified = true;
+            return stack;
+        }
+        
+        @Override
+        public void setItem(int slot, @javax.annotation.Nonnull ItemStack stack) {
+            if (slot >= 0 && slot < 27) {
+                items[slot] = stack == null ? ItemStack.EMPTY : stack;
+                modified = true;
+            }
+        }
+        
+        @Override
+        public void setChanged() { modified = true; }
+        
+        @Override
+        public boolean stillValid(@javax.annotation.Nonnull net.minecraft.world.entity.player.Player player) { return true; }
+        
+        @Override
+        public void clearContent() {
+            for (int i = 0; i < 27; i++) {
+                items[i] = ItemStack.EMPTY;
+            }
+            modified = true;
+        }
+    }
+    
+    /**
+     * Gets the container from a shulker box item stack.
+     */
+    private static Container getShulkerBoxContainer(ItemStack shulkerBox, ServerPlayer player) {
+        if (!isShulkerBox(shulkerBox) || shulkerBox.isEmpty()) {
+            return null;
+        }
+        return new ShulkerBoxContainerWrapper(shulkerBox, player);
+    }
+    
+    /**
+     * Saves the shulker box container data back to the item stack.
+     */
+    private static void saveShulkerBoxContainer(ItemStack shulkerBox, Container container, ServerPlayer player) {
+        if (!isShulkerBox(shulkerBox) || !(container instanceof ShulkerBoxContainerWrapper wrapper)) {
+            return;
+        }
+        wrapper.saveItems();
+    }
+    
+    /**
+     * Adds an item to a shulker box container.
+     */
+    private static int addItemToShulkerBox(Container shulkerContainer, ItemStack itemToAdd) {
+        if (shulkerContainer == null) return 0;
+        
+        int remainingToAdd = itemToAdd.getCount();
+        final int SHULKER_SIZE = 27;
+        
+        // First, try to add to existing stacks
+        java.util.List<java.util.Map.Entry<Integer, ItemStack>> existingStacks = new java.util.ArrayList<>();
+        for (int i = 0; i < SHULKER_SIZE; i++) {
+            ItemStack slotItem = shulkerContainer.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToAdd)) {
+                existingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
+            }
+        }
+        
+        existingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        for (var entry : existingStacks) {
+            if (remainingToAdd <= 0) break;
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int canAdd = slotItem.getMaxStackSize() - slotItem.getCount();
+            
+            if (canAdd > 0) {
+                int addToSlot = Math.min(remainingToAdd, canAdd);
+                slotItem.grow(addToSlot);
+                remainingToAdd -= addToSlot;
+                shulkerContainer.setItem(slotIndex, slotItem);
+            }
+        }
+        
+        // Then, try empty slots
+        if (remainingToAdd > 0) {
+            for (int i = 0; i < SHULKER_SIZE && remainingToAdd > 0; i++) {
+                ItemStack slotItem = shulkerContainer.getItem(i);
+                if (slotItem.isEmpty()) {
+                    int addToSlot = Math.min(remainingToAdd, itemToAdd.getMaxStackSize());
+                    ItemStack newStack = itemToAdd.copy();
+                    newStack.setCount(addToSlot);
+                    shulkerContainer.setItem(i, newStack);
+                    remainingToAdd -= addToSlot;
+                }
+            }
+        }
+        
+        return itemToAdd.getCount() - remainingToAdd;
+    }
+    
+    /**
+     * Checks if a shulker box container has the specified item.
+     */
+    private static int getItemCountInShulkerBox(Container shulkerContainer, ItemStack itemToCheck) {
+        if (shulkerContainer == null) return 0;
+        
+        int totalCount = 0;
+        for (int i = 0; i < shulkerContainer.getContainerSize(); i++) {
+            ItemStack slotItem = shulkerContainer.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
+                totalCount += slotItem.getCount();
+            }
+        }
+        return totalCount;
+    }
+    
+    /**
+     * Removes items from a shulker box container.
+     */
+    private static int removeItemFromShulkerBox(Container shulkerContainer, ItemStack itemToRemove) {
+        if (shulkerContainer == null) return 0;
+        
+        int remainingToRemove = itemToRemove.getCount();
+        
+        java.util.List<java.util.Map.Entry<Integer, ItemStack>> matchingStacks = new java.util.ArrayList<>();
+        for (int i = 0; i < shulkerContainer.getContainerSize(); i++) {
+            ItemStack slotItem = shulkerContainer.getItem(i);
+            if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToRemove)) {
+                matchingStacks.add(new java.util.AbstractMap.SimpleEntry<>(i, slotItem));
+            }
+        }
+        
+        matchingStacks.sort((a, b) -> Integer.compare(a.getValue().getCount(), b.getValue().getCount()));
+        
+        for (var entry : matchingStacks) {
+            if (remainingToRemove <= 0) break;
+            int slotIndex = entry.getKey();
+            ItemStack slotItem = entry.getValue();
+            int removeFromSlot = Math.min(remainingToRemove, slotItem.getCount());
+            slotItem.shrink(removeFromSlot);
+            remainingToRemove -= removeFromSlot;
+            shulkerContainer.setItem(slotIndex, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
+        }
+        
+        return itemToRemove.getCount() - remainingToRemove;
+    }
+    
+    /**
+     * Calculates how many items can fit in the player's inventory (including shulker boxes).
+     * Returns a record with main inventory space and whether shulker boxes will be used.
+     * 
+     * PERFORMANCE: Only parses shulker boxes if main inventory is insufficient.
+     * Early exits when enough space is found.
+     */
+    private static InventorySpaceResult calculateInventorySpace(ServerPlayer player, ItemStack itemTemplate, int quantity) {
+        var inventory = player.getInventory();
+        final int MAIN_INVENTORY_SIZE = 36;
+        
+        int stackSize = itemTemplate.getMaxStackSize();
+        boolean isStackable = stackSize > 1;
+        
+        // Calculate space in main inventory
+        int mainInventorySpace = 0;
+        int emptySlots = 0;
+        
+        // Count existing matching stacks and empty slots
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (slotItem.isEmpty()) {
+                emptySlots++;
+                if (isStackable) {
+                    mainInventorySpace += stackSize;
+                } else {
+                    mainInventorySpace += 1;
+                }
+            } else if (isStackable && ItemStack.isSameItemSameComponents(slotItem, itemTemplate)) {
+                mainInventorySpace += (stackSize - slotItem.getCount());
+            }
+        }
+        
+        // If not stackable, each item needs its own slot
+        if (!isStackable) {
+            mainInventorySpace = emptySlots;
+        }
+        
+        // Early exit: if main inventory has enough space, don't check shulker boxes
+        if (mainInventorySpace >= quantity) {
+            return new InventorySpaceResult(mainInventorySpace, 0, mainInventorySpace, false);
+        }
+        
+        boolean willUseShulkers = true;
+        int shulkerSpace = 0;
+        int neededFromShulkers = quantity - mainInventorySpace;
+        
+        // Only check shulker boxes if we need more space
+        // Early exit when we've found enough space
+        for (int i = 0; i < MAIN_INVENTORY_SIZE && shulkerSpace < neededFromShulkers; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (isShulkerBox(slotItem)) {
+                // Create a copy to avoid modifying the original
+                ItemStack shulkerBoxCopy = slotItem.copy();
+                Container shulkerContainer = getShulkerBoxContainer(shulkerBoxCopy, player);
+                if (shulkerContainer != null) {
+                    int shulkerEmptySlots = 0;
+                    int shulkerMatchingSpace = 0;
+                    
+                    // Only iterate through shulker slots if we still need space
+                    for (int j = 0; j < shulkerContainer.getContainerSize() && shulkerMatchingSpace < neededFromShulkers; j++) {
+                        ItemStack shulkerSlot = shulkerContainer.getItem(j);
+                        if (shulkerSlot.isEmpty()) {
+                            shulkerEmptySlots++;
+                            if (isStackable) {
+                                shulkerMatchingSpace += stackSize;
+                            } else {
+                                shulkerMatchingSpace += 1;
+                            }
+                        } else if (isStackable && ItemStack.isSameItemSameComponents(shulkerSlot, itemTemplate)) {
+                            shulkerMatchingSpace += (stackSize - shulkerSlot.getCount());
+                        }
+                    }
+                    
+                    if (!isStackable) {
+                        shulkerMatchingSpace = shulkerEmptySlots;
+                    }
+                    
+                    shulkerSpace += shulkerMatchingSpace;
+                }
+            }
+        }
+        
+        int totalSpace = mainInventorySpace + shulkerSpace;
+        return new InventorySpaceResult(mainInventorySpace, shulkerSpace, totalSpace, willUseShulkers);
+    }
+    
+    private record InventorySpaceResult(int mainInventorySpace, int shulkerSpace, int totalSpace, boolean willUseShulkers) {}
+    
     private static boolean addItemToInventory(ServerPlayer player, ItemStack itemToAdd) {
         // Implementation from ShopPacketHandler
         var inventory = player.getInventory();
@@ -765,6 +1174,31 @@ public class FreeMarketPacketHandler {
             }
         }
         
+        // If still remaining, try to add to shulker boxes
+        // PERFORMANCE: Early exit when all items are added
+        if (remainingToAdd > 0) {
+            for (int i = 0; i < MAIN_INVENTORY_SIZE && remainingToAdd > 0; i++) {
+                ItemStack slotItem = inventory.getItem(i);
+                if (isShulkerBox(slotItem)) {
+                    Container shulkerContainer = getShulkerBoxContainer(slotItem, player);
+                    if (shulkerContainer != null) {
+                        // PERFORMANCE: Only copy item stack once, reuse for remaining count
+                        ItemStack remainingStack = itemToAdd.copy();
+                        remainingStack.setCount(remainingToAdd);
+                        int added = addItemToShulkerBox(shulkerContainer, remainingStack);
+                        if (added > 0) {
+                            saveShulkerBoxContainer(slotItem, shulkerContainer, player);
+                            // Update the inventory slot - ItemStack is modified in place via applyComponents
+                            inventory.setItem(i, slotItem);
+                            remainingToAdd -= added;
+                            // Early exit if all items added
+                            if (remainingToAdd <= 0) break;
+                        }
+                    }
+                }
+            }
+        }
+        
         return remainingToAdd == 0;
     }
     
@@ -772,10 +1206,38 @@ public class FreeMarketPacketHandler {
         var inventory = player.getInventory();
         int totalCount = 0;
         
+        // Check main inventory first (priority)
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack slotItem = inventory.getItem(i);
             if (!slotItem.isEmpty() && ItemStack.isSameItemSameComponents(slotItem, itemToCheck)) {
                 totalCount += slotItem.getCount();
+            }
+        }
+        
+        // If we have enough, return early
+        if (totalCount >= itemToCheck.getCount()) {
+            return true;
+        }
+        
+        // Check shulker boxes if needed
+        // PERFORMANCE: Early exit when we have enough items
+        final int MAIN_INVENTORY_SIZE = 36;
+        int needed = itemToCheck.getCount() - totalCount;
+        for (int i = 0; i < MAIN_INVENTORY_SIZE && needed > 0; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (isShulkerBox(slotItem)) {
+                // Create a copy to avoid modifying the original (read-only check)
+                ItemStack shulkerBoxCopy = slotItem.copy();
+                Container shulkerContainer = getShulkerBoxContainer(shulkerBoxCopy, player);
+                if (shulkerContainer != null) {
+                    int shulkerCount = getItemCountInShulkerBox(shulkerContainer, itemToCheck);
+                    totalCount += shulkerCount;
+                    needed -= shulkerCount;
+                    // Early exit when we have enough
+                    if (totalCount >= itemToCheck.getCount()) {
+                        return true;
+                    }
+                }
             }
         }
         
@@ -786,6 +1248,7 @@ public class FreeMarketPacketHandler {
         var inventory = player.getInventory();
         int remainingToRemove = itemToRemove.getCount();
         
+        // First, remove from main inventory (priority)
         java.util.List<java.util.Map.Entry<Integer, ItemStack>> matchingStacks = new java.util.ArrayList<>();
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack slotItem = inventory.getItem(i);
@@ -804,6 +1267,32 @@ public class FreeMarketPacketHandler {
             slotItem.shrink(removeFromSlot);
             remainingToRemove -= removeFromSlot;
             inventory.setItem(slotIndex, slotItem.isEmpty() ? ItemStack.EMPTY : slotItem);
+        }
+        
+        // If still need more, remove from shulker boxes
+        // PERFORMANCE: Early exit when all items removed
+        if (remainingToRemove > 0) {
+            final int MAIN_INVENTORY_SIZE = 36;
+            for (int i = 0; i < MAIN_INVENTORY_SIZE && remainingToRemove > 0; i++) {
+                ItemStack slotItem = inventory.getItem(i);
+                if (isShulkerBox(slotItem)) {
+                    Container shulkerContainer = getShulkerBoxContainer(slotItem, player);
+                    if (shulkerContainer != null) {
+                        // PERFORMANCE: Only copy item stack once, reuse for remaining count
+                        ItemStack remainingStack = itemToRemove.copy();
+                        remainingStack.setCount(remainingToRemove);
+                        int removed = removeItemFromShulkerBox(shulkerContainer, remainingStack);
+                        if (removed > 0) {
+                            saveShulkerBoxContainer(slotItem, shulkerContainer, player);
+                            // Update the inventory slot - ItemStack is modified in place via applyComponents
+                            inventory.setItem(i, slotItem);
+                            remainingToRemove -= removed;
+                            // Early exit if all items removed
+                            if (remainingToRemove <= 0) break;
+                        }
+                    }
+                }
+            }
         }
         
         return remainingToRemove == 0;

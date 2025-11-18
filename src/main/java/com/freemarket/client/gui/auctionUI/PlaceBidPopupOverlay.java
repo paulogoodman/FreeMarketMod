@@ -199,10 +199,19 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         guiGraphics.fill(placeBidButtonX + 1, buttonY + placeBidButtonHeight - 1, placeBidButtonX + placeBidButtonWidth - 1, buttonY + placeBidButtonHeight, BORDER_COLOR); // Bottom
         
         String placeBidText = "Place Bid";
-        int placeBidTextWidth = minecraft.font.width(placeBidText);
-        int placeBidTextX = placeBidButtonX + (placeBidButtonWidth - placeBidTextWidth) / 2;
-        int placeBidTextY = buttonY + (placeBidButtonHeight - minecraft.font.lineHeight) / 2;
-        guiGraphics.drawString(minecraft.font, placeBidText, placeBidTextX, placeBidTextY, TEXT_PRIMARY);
+        int placeBidHorizontalPadding = calculateOnePercentPadding(placeBidButtonWidth);
+        int placeBidVerticalPadding = calculateOnePercentPadding(placeBidButtonHeight);
+        int placeBidAvailableWidth = Math.max(1, placeBidButtonWidth - (placeBidHorizontalPadding * 2));
+        String placeBidDisplayText = minecraft.font.plainSubstrByWidth(placeBidText, placeBidAvailableWidth);
+        int placeBidTextWidth = minecraft.font.width(placeBidDisplayText);
+        int placeBidTextX = placeBidButtonX + placeBidHorizontalPadding +
+                            Math.max(0, (placeBidAvailableWidth - placeBidTextWidth) / 2);
+        int placeBidFontHeight = minecraft.font.lineHeight;
+        int placeBidCenteredY = buttonY + (placeBidButtonHeight - placeBidFontHeight) / 2;
+        int placeBidMinY = buttonY + placeBidVerticalPadding;
+        int placeBidMaxY = buttonY + placeBidButtonHeight - placeBidVerticalPadding - placeBidFontHeight;
+        int placeBidTextY = Math.max(placeBidMinY, Math.min(placeBidCenteredY, placeBidMaxY));
+        guiGraphics.drawString(minecraft.font, placeBidDisplayText, placeBidTextX, placeBidTextY, TEXT_PRIMARY);
         
         // Cancel button
         int cancelButtonX = x + 230;
@@ -221,10 +230,19 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         guiGraphics.fill(cancelButtonX + 1, buttonY + cancelButtonHeight - 1, cancelButtonX + cancelButtonWidth - 1, buttonY + cancelButtonHeight, BORDER_COLOR); // Bottom
         
         String cancelText = "Cancel";
-        int cancelTextWidth = minecraft.font.width(cancelText);
-        int cancelTextX = cancelButtonX + (cancelButtonWidth - cancelTextWidth) / 2;
-        int cancelTextY = buttonY + (cancelButtonHeight - minecraft.font.lineHeight) / 2;
-        guiGraphics.drawString(minecraft.font, cancelText, cancelTextX, cancelTextY, TEXT_PRIMARY);
+        int cancelHorizontalPadding = calculateOnePercentPadding(cancelButtonWidth);
+        int cancelVerticalPadding = calculateOnePercentPadding(cancelButtonHeight);
+        int cancelAvailableWidth = Math.max(1, cancelButtonWidth - (cancelHorizontalPadding * 2));
+        String cancelDisplayText = minecraft.font.plainSubstrByWidth(cancelText, cancelAvailableWidth);
+        int cancelTextWidth = minecraft.font.width(cancelDisplayText);
+        int cancelTextX = cancelButtonX + cancelHorizontalPadding +
+                          Math.max(0, (cancelAvailableWidth - cancelTextWidth) / 2);
+        int cancelFontHeight = minecraft.font.lineHeight;
+        int cancelCenteredY = buttonY + (cancelButtonHeight - cancelFontHeight) / 2;
+        int cancelMinY = buttonY + cancelVerticalPadding;
+        int cancelMaxY = buttonY + cancelButtonHeight - cancelVerticalPadding - cancelFontHeight;
+        int cancelTextY = Math.max(cancelMinY, Math.min(cancelCenteredY, cancelMaxY));
+        guiGraphics.drawString(minecraft.font, cancelDisplayText, cancelTextX, cancelTextY, TEXT_PRIMARY);
     }
     
     @Override
@@ -338,5 +356,9 @@ public class PlaceBidPopupOverlay extends PopupOverlay {
         
         // Hide popup
         hide();
+    }
+
+    private int calculateOnePercentPadding(int size) {
+        return Math.max(1, Math.round(size * 0.01f));
     }
 }

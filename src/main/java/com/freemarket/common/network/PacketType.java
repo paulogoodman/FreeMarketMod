@@ -18,6 +18,7 @@ public enum PacketType {
     // Shop operations (buy/sell)
     BUY_ITEM_REQUEST,
     SELL_ITEM_REQUEST,
+    INVENTORY_SPACE_REQUEST,
     
     // Auction operations
     AUCTION_REQUEST,
@@ -39,6 +40,7 @@ public enum PacketType {
     // Shop responses
     BUY_ITEM_RESPONSE,
     SELL_ITEM_RESPONSE,
+    INVENTORY_SPACE_RESPONSE,
     
     // Auction sync
     AUCTION_SYNC,
@@ -69,6 +71,7 @@ public enum PacketType {
     public boolean isClientToServer() {
         return switch (this) {
             case WALLET_REQUEST, BUY_ITEM_REQUEST, SELL_ITEM_REQUEST,
+                 INVENTORY_SPACE_REQUEST,
                  AUCTION_REQUEST, AUCTION_BID, AUCTION_CREATE, AUCTION_CANCEL,
                  LEADERBOARD_REQUEST, MARKETPLACE_ADD_ITEM, MARKETPLACE_REMOVE_ITEM -> true;
             // Chunk packets are bidirectional - direction determined from original packet type

@@ -683,27 +683,107 @@ public class FreeMarketContainer extends BaseGridContainer<FreeMarketItem> {
 
     /**
      * Calculates the maximum number of marketplace orders the player can buy for the given item.
+     * Considers both money and inventory space.
      */
     public int calculateMaxBuyable(FreeMarketItem item) {
         if (item == null) {
             return 0;
         }
 
+        // Calculate max based on money
         long pricePerOrder = item.getBuyPrice();
-        if (pricePerOrder <= 0) {
+        int maxByMoney = 0;
+        if (pricePerOrder > 0) {
+            long balance = parentScreen != null
+                ? parentScreen.getCachedBalance()
+                : ClientWalletHandler.getPlayerMoney();
+            if (balance > 0) {
+                maxByMoney = (int) Math.max(0, Math.min(Integer.MAX_VALUE, balance / pricePerOrder));
+            }
+        }
+
+        // Calculate max based on inventory space
+        int maxByInventory = calculateMaxInventorySpace(item);
+        int itemsPerOrder = Math.max(1, item.getStackSize());
+        int maxOrdersByInventory = maxByInventory / itemsPerOrder;
+
+        // Return the minimum of both constraints
+        if (maxByMoney == 0) {
+            return maxOrdersByInventory;
+        }
+        if (maxOrdersByInventory == 0) {
+            return maxByMoney;
+        }
+        return Math.min(maxByMoney, maxOrdersByInventory);
+    }
+    
+    /**
+     * Calculates the maximum number of items that can fit in the player's inventory (including shulker boxes).
+     */
+    private int calculateMaxInventorySpace(FreeMarketItem item) {
+        Minecraft minecraft = Minecraft.getInstance();
+        Player player = resolvePlayerForInventoryChecks(minecraft);
+        if (player == null) {
             return 0;
         }
 
-        long balance = parentScreen != null
-            ? parentScreen.getCachedBalance()
-            : ClientWalletHandler.getPlayerMoney();
+        // Create item template for checking
+        ItemStack itemTemplate = item.getItemStack().copy();
+        String componentData = item.getComponentData();
+        if (componentData != null && !componentData.trim().isEmpty() && !componentData.equals("{}")) {
+            var singleplayerServer = minecraft.getSingleplayerServer();
+            if (singleplayerServer != null) {
+                itemTemplate = com.freemarket.server.handlers.ServerItemHandler.createItemWithComponentData(
+                    itemTemplate, componentData, singleplayerServer);
+            } else {
+                com.freemarket.common.attachments.ItemComponentHandler.applyComponentData(itemTemplate, componentData);
+            }
+        }
+        itemTemplate.setCount(1);
 
-        if (balance <= 0) {
-            return 0;
+        var inventory = player.getInventory();
+        final int MAIN_INVENTORY_SIZE = 36;
+        int stackSize = itemTemplate.getMaxStackSize();
+        boolean isStackable = stackSize > 1;
+
+        // Calculate space in main inventory
+        int mainInventorySpace = 0;
+        int emptySlots = 0;
+
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (slotItem.isEmpty()) {
+                emptySlots++;
+                if (isStackable) {
+                    mainInventorySpace += stackSize;
+                } else {
+                    mainInventorySpace += 1;
+                }
+            } else if (isStackable && ItemStack.isSameItemSameComponents(slotItem, itemTemplate)) {
+                mainInventorySpace += (stackSize - slotItem.getCount());
+            }
         }
 
-        long maxOrders = balance / pricePerOrder;
-        return (int) Math.max(0, Math.min(Integer.MAX_VALUE, maxOrders));
+        if (!isStackable) {
+            mainInventorySpace = emptySlots;
+        }
+
+        // Estimate shulker box space (client-side can't easily access shulker contents)
+        int shulkerSpace = 0;
+        for (int i = 0; i < MAIN_INVENTORY_SIZE; i++) {
+            ItemStack slotItem = inventory.getItem(i);
+            if (isShulkerBox(slotItem)) {
+                // Estimate: each shulker box has 27 slots
+                final int SHULKER_SIZE = 27;
+                if (isStackable) {
+                    shulkerSpace += SHULKER_SIZE * stackSize;
+                } else {
+                    shulkerSpace += SHULKER_SIZE;
+                }
+            }
+        }
+
+        return mainInventorySpace + shulkerSpace;
     }
 
     /**

@@ -61,6 +61,7 @@ public class FreeMarketPacketHandler {
             case WALLET_REQUEST -> handleWalletRequest(packet, context);
             case BUY_ITEM_REQUEST -> handleBuyItemRequest(packet, context);
             case SELL_ITEM_REQUEST -> handleSellItemRequest(packet, context);
+            case INVENTORY_SPACE_REQUEST -> handleInventorySpaceRequest(packet, context);
             case AUCTION_REQUEST -> handleAuctionRequest(packet, context);
             case AUCTION_BID -> handleAuctionBid(packet, context);
             case AUCTION_CREATE -> handleAuctionCreate(packet, context);
@@ -73,6 +74,7 @@ public class FreeMarketPacketHandler {
             case WALLET_SYNC -> handleWalletSync(packet, context);
             case BUY_ITEM_RESPONSE -> handleBuyItemResponse(packet, context);
             case SELL_ITEM_RESPONSE -> handleSellItemResponse(packet, context);
+            case INVENTORY_SPACE_RESPONSE -> handleInventorySpaceResponse(packet, context);
             case AUCTION_SYNC -> handleAuctionSync(packet, context);
             case AUCTION_EXPIRY_SYNC -> handleAuctionExpirySync(packet, context);
             case LEADERBOARD_SYNC -> handleLeaderboardSync(packet, context);
@@ -288,6 +290,64 @@ public class FreeMarketPacketHandler {
             sendOperationResponse(player, PacketType.SELL_ITEM_RESPONSE, true, "Sale successful");
         });
     }
+
+    private static void handleInventorySpaceRequest(FreeMarketPacket packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (!(context.player() instanceof ServerPlayer player)) return;
+
+            String listingId = null;
+            try {
+                JsonObject json = JsonParser.parseString(packet.data()).getAsJsonObject();
+                if (json.has("marketListingId")) {
+                    listingId = json.get("marketListingId").getAsString();
+                }
+            } catch (Exception ignored) {
+                // Fall through to fallback handling below
+            }
+
+            if (listingId == null || listingId.isEmpty()) {
+                listingId = packet.data();
+            }
+
+            if (listingId == null || listingId.isEmpty()) {
+                sendInventorySpaceResponse(player, new InventorySpaceResponse("", 0, 0, 0, 0, 1, System.currentTimeMillis()));
+                return;
+            }
+
+            final String targetListingId = listingId;
+
+            ServerLevel level = player.serverLevel();
+            List<FreeMarketItem> items = FreeMarketDataManager.loadFreeMarketItems(level);
+            FreeMarketItem requestedItem = items.stream()
+                .filter(item -> targetListingId.equals(item.getMarketListingId()))
+                .findFirst()
+                .orElse(null);
+
+            if (requestedItem == null) {
+                sendInventorySpaceResponse(player, new InventorySpaceResponse(targetListingId, 0, 0, 0, 0, 1, System.currentTimeMillis()));
+                return;
+            }
+
+            ItemStack template = ServerItemHandler.createItemWithComponentData(
+                requestedItem.getItemStack(), requestedItem.getComponentData(), level.getServer());
+            int itemsPerOrder = Math.max(1, requestedItem.getStackSize());
+
+            InventorySpaceResult result = calculateInventorySpace(player, template, Integer.MAX_VALUE / 4);
+            int maxOrders = itemsPerOrder <= 0 ? 0 : result.totalSpace() / itemsPerOrder;
+
+            InventorySpaceResponse response = new InventorySpaceResponse(
+                targetListingId,
+                Math.max(0, maxOrders),
+                Math.max(0, result.totalSpace()),
+                Math.max(0, result.mainInventorySpace()),
+                Math.max(0, result.shulkerSpace()),
+                itemsPerOrder,
+                System.currentTimeMillis()
+            );
+
+            sendInventorySpaceResponse(player, response);
+        });
+    }
     
     private static void handleAuctionRequest(FreeMarketPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
@@ -476,6 +536,24 @@ public class FreeMarketPacketHandler {
     private static void handleSellItemResponse(FreeMarketPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             handleOperationResponse(packet, context, 0.5F);
+        });
+    }
+
+    private static void handleInventorySpaceResponse(FreeMarketPacket packet, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            InventorySpaceResponse response = GSON.fromJson(packet.data(), InventorySpaceResponse.class);
+            if (response == null || response.marketListingId() == null || response.marketListingId().isEmpty()) {
+                return;
+            }
+            ClientInventorySpaceCache.update(
+                response.marketListingId(),
+                response.maxOrders(),
+                response.totalItems(),
+                response.mainInventorySpace(),
+                response.shulkerSpace(),
+                response.itemsPerOrder(),
+                response.timestamp()
+            );
         });
     }
     
@@ -750,6 +828,11 @@ public class FreeMarketPacketHandler {
         long balance = ServerWalletHandler.getPlayerMoney(player);
         String jsonData = GSON.toJson(new OperationResponse(success, message, balance));
         PacketDistributor.sendToPlayer(player, FreeMarketPacket.withJson(type, jsonData));
+    }
+
+    private static void sendInventorySpaceResponse(ServerPlayer player, InventorySpaceResponse response) {
+        String jsonData = GSON.toJson(response);
+        PacketDistributor.sendToPlayer(player, FreeMarketPacket.withJson(PacketType.INVENTORY_SPACE_RESPONSE, jsonData));
     }
     
     /**
@@ -1182,9 +1265,11 @@ public class FreeMarketPacketHandler {
                 if (isShulkerBox(slotItem)) {
                     Container shulkerContainer = getShulkerBoxContainer(slotItem, player);
                     if (shulkerContainer != null) {
-                        // PERFORMANCE: Only copy item stack once, reuse for remaining count
+                        // Create a copy with component data preserved
+                        // The copy() method preserves all NBT data including components
                         ItemStack remainingStack = itemToAdd.copy();
                         remainingStack.setCount(remainingToAdd);
+                        // Component data is automatically preserved by copy()
                         int added = addItemToShulkerBox(shulkerContainer, remainingStack);
                         if (added > 0) {
                             saveShulkerBoxContainer(slotItem, shulkerContainer, player);
@@ -1301,6 +1386,15 @@ public class FreeMarketPacketHandler {
     // ===== DATA CLASSES =====
     
     private record WalletData(String playerUuid, long balance) {}
+    private record InventorySpaceResponse(
+        String marketListingId,
+        int maxOrders,
+        int totalItems,
+        int mainInventorySpace,
+        int shulkerSpace,
+        int itemsPerOrder,
+        long timestamp
+    ) {}
     private record OperationResponse(boolean success, String message, long newBalance) {}
 }
 

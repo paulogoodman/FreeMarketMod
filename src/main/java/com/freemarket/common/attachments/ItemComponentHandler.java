@@ -2,12 +2,16 @@ package com.freemarket.common.attachments;
 
 import com.freemarket.FreeMarket;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtOps;
+import net.minecraft.nbt.Tag;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.core.component.DataComponentMap;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.item.component.CustomData;
+import net.minecraft.world.item.component.ItemContainerContents;
+import net.minecraft.world.item.component.BundleContents;
 
 /**
  * Handles Data Components for marketplace items
@@ -309,6 +313,61 @@ public class ItemComponentHandler {
                 FreeMarket.LOGGER.warn("Failed to apply lore: {}", e.getMessage());
             }
         }
+        
+        applyContainerComponent(itemStack, componentTag);
+        applyBundleComponent(itemStack, componentTag);
+    }
+    
+    private static void serializeContainerComponent(ItemStack itemStack, CompoundTag resultTag) {
+        if (!itemStack.has(DataComponents.CONTAINER)) {
+            return;
+        }
+        ItemContainerContents contents = itemStack.get(DataComponents.CONTAINER);
+        if (contents == null || contents.stream().allMatch(ItemStack::isEmpty)) {
+            return;
+        }
+        ItemContainerContents.CODEC.encodeStart(NbtOps.INSTANCE, contents)
+            .resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to encode container component: {}", error))
+            .ifPresent(tag -> resultTag.put("minecraft:container", tag));
+    }
+    
+    private static void serializeBundleComponent(ItemStack itemStack, CompoundTag resultTag) {
+        if (!itemStack.has(DataComponents.BUNDLE_CONTENTS)) {
+            return;
+        }
+        BundleContents contents = itemStack.get(DataComponents.BUNDLE_CONTENTS);
+        if (contents == null) {
+            return;
+        }
+        BundleContents.CODEC.encodeStart(NbtOps.INSTANCE, contents)
+            .resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to encode bundle contents: {}", error))
+            .ifPresent(tag -> resultTag.put("minecraft:bundle_contents", tag));
+    }
+    
+    private static void applyContainerComponent(ItemStack itemStack, CompoundTag componentTag) {
+        if (!componentTag.contains("minecraft:container")) {
+            return;
+        }
+        Tag tag = componentTag.get("minecraft:container");
+        if (tag == null) {
+            return;
+        }
+        ItemContainerContents.CODEC.parse(NbtOps.INSTANCE, tag)
+            .resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to decode container component: {}", error))
+            .ifPresent(contents -> itemStack.set(DataComponents.CONTAINER, contents));
+    }
+    
+    private static void applyBundleComponent(ItemStack itemStack, CompoundTag componentTag) {
+        if (!componentTag.contains("minecraft:bundle_contents")) {
+            return;
+        }
+        Tag tag = componentTag.get("minecraft:bundle_contents");
+        if (tag == null) {
+            return;
+        }
+        BundleContents.CODEC.parse(NbtOps.INSTANCE, tag)
+            .resultOrPartial(error -> FreeMarket.LOGGER.warn("Failed to decode bundle contents: {}", error))
+            .ifPresent(contents -> itemStack.set(DataComponents.BUNDLE_CONTENTS, contents));
     }
     
     /**
@@ -523,6 +582,9 @@ public class ItemComponentHandler {
                 FreeMarket.LOGGER.warn("Failed to serialize lore: {}", e.getMessage());
             }
         }
+        
+        serializeContainerComponent(itemStack, resultTag);
+        serializeBundleComponent(itemStack, resultTag);
     }
     
     /**
@@ -550,6 +612,8 @@ public class ItemComponentHandler {
                itemStack.has(DataComponents.DAMAGE) ||
                itemStack.has(DataComponents.REPAIR_COST) ||
                itemStack.has(DataComponents.LORE) ||
-               itemStack.has(DataComponents.WRITTEN_BOOK_CONTENT);
+               itemStack.has(DataComponents.WRITTEN_BOOK_CONTENT) ||
+               itemStack.has(DataComponents.CONTAINER) ||
+               itemStack.has(DataComponents.BUNDLE_CONTENTS);
     }
 }
